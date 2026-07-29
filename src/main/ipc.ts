@@ -23,7 +23,7 @@ import {
   restoreFromQuarantine
 } from '@services/orphans/orphanFinder';
 import { generateExcelReport } from '@services/excel/reportGenerator';
-import { readReportPage } from '@services/excel/reportViewer';
+import { clearReportCache, readReportPage } from '@services/excel/reportViewer';
 import { findBrokenTracks, matchByFilename, RelocationMatch } from '@services/relocator/relocator';
 import { writeRekordboxXml } from '@adapters/rekordbox/xmlWriter';
 import { writeRelocationXml } from '@adapters/rekordbox/relocationXml';
@@ -59,6 +59,7 @@ import { writeInboxXml } from '@adapters/rekordbox/inboxXml';
 import { writeSetXml } from '@adapters/rekordbox/setXml';
 import type { TrackRow } from '@core/udm';
 import { ThrottledProgress } from './progress';
+import { networkPathWarning } from './networkPath';
 import { checkSidecar, runSidecar, SidecarEvent } from './sidecar';
 import { rekordboxDefaultPaths } from './rekordboxPaths';
 import { detectDjSoftware } from './djSoftwarePaths';
@@ -262,13 +263,21 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
         const result = importForeignLibrary(db, lib, (done, total) =>
           progress.update({ jobId, phase: `import-${kind}`, done, total })
         );
+        // Libreria su unità di rete: SQLite non regge i lock su SMB. Se la
+        // lettura è andata bene lo diciamo lo stesso, perché il prossimo
+        // tentativo potrebbe fallire con un errore incomprensibile.
+        const netWarn = networkPathWarning(path);
+        if (netWarn) result.warnings.unshift(netWarn);
         progress.finish({ jobId, phase: `import-${kind}`, done: result.tracks, total: result.tracks });
         logOperation(db, `import.${kind}`, path, 'ok', JSON.stringify(result));
         return { ok: true, ...result };
       } catch (err) {
         progress.finish({ jobId, phase: `import-${kind}`, done: 1, total: 1 });
         logOperation(db, `import.${kind}`, path, 'error', String(err));
-        return { ok: false, message: String(err) };
+        // Su rete l'errore di SQLite è criptico ("unable to open database
+        // file") e sembra un problema di permessi: spieghiamo la causa vera.
+        const netWarn = networkPathWarning(path);
+        return { ok: false, message: netWarn ? `${String(err)}\n\n${netWarn}` : String(err) };
       }
     });
   });
@@ -319,11 +328,15 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
         progress.finish({ jobId, phase: 'ingest-masterdb', done: 1, total: 1 });
         if (code !== 0) {
           logOperation(db, 'ingest.masterdb', masterDbPath, 'error', lastError ?? `exit ${code}`);
+          // Prima causa da escludere quando il master.db non si apre: sta su un
+          // NAS o su un'unità mappata, dove SQLite non riesce a prendere i lock.
+          const netWarn = networkPathWarning(masterDbPath);
           return {
             ok: false,
             fallbackXml: true,
             message:
               (lastError ?? 'Lettura del database non riuscita.') +
+              (netWarn ? `\n\n${netWarn}` : '') +
               ' Puoi usare la modalità solo-XML (esporta la collection da Rekordbox e importala qui)' +
               ' oppure, in modalità Esperto: Impostazioni → "Scarica chiave di lettura" e riprova.'
           };
@@ -346,7 +359,10 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
     }
     const r = await runSidecarJob('read-serato', 'read-serato', ['--serato-dir', seratoDir]);
     logOperation(db, 'import.serato', seratoDir, r.ok ? 'ok' : 'error', r.ok ? JSON.stringify(r.data) : r.message);
-    return r.ok ? { ok: true, ...r.data } : { ok: false, message: r.message };
+    const netWarn = networkPathWarning(seratoDir);
+    return r.ok
+      ? { ok: true, ...r.data, ...(netWarn ? { warnings: [netWarn] } : {}) }
+      : { ok: false, message: netWarn ? `${r.message}\n\n${netWarn}` : r.message };
   });
 
   ipcMain.handle('job:cancel', () => {
@@ -482,6 +498,9 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
         progress.update({ jobId, phase: 'excel', done, total })
     });
     progress.finish({ jobId, phase: 'excel', done: result.rows, total: result.rows });
+    // Il workbook in cache appartiene al report precedente: liberiamolo subito
+    // invece di tenere in memoria un file che nessuno sfoglierà più.
+    clearReportCache();
     logOperation(db, 'report.excel', result.outPath, 'ok', `${result.rows} righe`);
     return result;
   });

@@ -1,9 +1,17 @@
 import ExcelJS from 'exceljs';
+import { statSync } from 'fs';
 
 /**
  * Visualizzatore di report Excel (fase intermedia): legge un .xlsx generato
  * (o qualsiasi xlsx) e restituisce pagine di righe al renderer — mai l'intero
  * file in un colpo solo (§2: no bulk data su IPC).
+ *
+ * Cache del workbook: il parsing di un .xlsx costa (decompressione + XML), e
+ * sfogliare le pagine rileggeva OGNI VOLTA l'intero file — su un report di
+ * decine di migliaia di righe ogni clic "pagina successiva" ricominciava da
+ * zero. Teniamo in cache l'ultimo workbook aperto, invalidandolo quando il
+ * file cambia (mtime/size) così un report rigenerato non viene mai servito
+ * stantio.
  */
 
 export interface ReportPageResult {
@@ -25,13 +33,44 @@ function cellToPlain(v: ExcelJS.CellValue): string | number | null {
   return String(v);
 }
 
+interface CachedWorkbook {
+  filePath: string;
+  mtimeMs: number;
+  size: number;
+  wb: ExcelJS.Workbook;
+}
+
+// Un solo elemento: si sfoglia un report alla volta, e tenerne più d'uno
+// significherebbe trattenere in memoria file grandi senza motivo.
+let cache: CachedWorkbook | null = null;
+
+/** Svuota la cache (usata alla chiusura o dopo la rigenerazione di un report). */
+export function clearReportCache(): void {
+  cache = null;
+}
+
+async function loadWorkbook(filePath: string): Promise<ExcelJS.Workbook> {
+  const st = statSync(filePath);
+  if (
+    cache &&
+    cache.filePath === filePath &&
+    cache.mtimeMs === st.mtimeMs &&
+    cache.size === st.size
+  ) {
+    return cache.wb;
+  }
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.readFile(filePath);
+  cache = { filePath, mtimeMs: st.mtimeMs, size: st.size, wb };
+  return wb;
+}
+
 export async function readReportPage(
   filePath: string,
   offset: number,
   limit: number
 ): Promise<ReportPageResult> {
-  const wb = new ExcelJS.Workbook();
-  await wb.xlsx.readFile(filePath);
+  const wb = await loadWorkbook(filePath);
   const ws = wb.worksheets[0];
   if (!ws) throw new Error('Il file non contiene fogli di lavoro.');
 

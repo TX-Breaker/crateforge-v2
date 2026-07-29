@@ -63,6 +63,22 @@ describe('SyncDaemon.scanOnce', () => {
     expect(bad.has_tag_issues).toBe(1);
   });
 
+  it('riconosce come già noto un path che differisce solo per forma unicode o maiuscole', async () => {
+    const db = memDb();
+    const p = join(dir, 'Caffè.mp3');
+    writeFileSync(p, 'x');
+    // In libreria lo stesso file è registrato in NFD (come lo restituisce il
+    // filesystem su macOS) e con un case diverso: senza canonicalizzazione il
+    // confronto byte-per-byte lo considererebbe un brano nuovo a ogni scansione.
+    db.prepare(`INSERT INTO tracks (source, source_id, title, path) VALUES ('xml', '1', 'X', ?)`).run(
+      join(dir, 'CAFFÈ.mp3').normalize('NFD')
+    );
+    const daemon = new SyncDaemon(db, fakeReader);
+    const r = await daemon.scanOnce(dir);
+    expect(r.added).toBe(0);
+    expect(r.skipped).toBe(1);
+  });
+
   it('salta i file già in libreria (tracks.path)', async () => {
     const db = memDb();
     const p = join(dir, 'gia-in-lib.mp3');

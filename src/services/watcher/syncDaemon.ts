@@ -3,7 +3,7 @@ import type BetterSqlite3 from 'better-sqlite3';
 import { toCamelot } from '@core/camelot';
 import { extractVersionLabel } from '@core/versionRegex';
 import { logOperation } from '@core/udm';
-import { AUDIO_EXTENSIONS, walkFiles } from '@services/fsutil';
+import { AUDIO_EXTENSIONS, canonicalizePath, walkFiles } from '@services/fsutil';
 
 /**
  * Sync Daemon "Nuovi Acquisti" (§6 Fase 3.1).
@@ -131,10 +131,23 @@ export class SyncDaemon {
     this.scanning = true;
     const result: ScanResult = { scanned: 0, added: 0, skipped: 0, withIssues: 0 };
     try {
-      const known = this.db.prepare(
-        `SELECT 1 FROM inbox_items WHERE path = ?
-         UNION SELECT 1 FROM tracks WHERE path = ?`
-      );
+      // Confronto sui path CANONICALIZZATI (normalize + NFC + lowercase), come
+      // fa già orphanFinder: su macOS lo stesso file può arrivare in NFD dal
+      // filesystem e in NFC dal DB (é = 1 o 2 code point), e su Windows il case
+      // non è significativo. Col confronto byte-per-byte lo stesso brano
+      // rientrava in coda a ogni scansione, all'infinito.
+      //
+      // L'indice sta in memoria solo per la durata della scansione: evita una
+      // migrazione di schema e resta O(1) per file, invece di due query.
+      const known = new Set<string>();
+      for (const r of this.db
+        .prepare(
+          `SELECT path FROM inbox_items WHERE path IS NOT NULL
+           UNION ALL SELECT path FROM tracks WHERE path IS NOT NULL`
+        )
+        .iterate() as IterableIterator<{ path: string }>) {
+        known.add(canonicalizePath(r.path));
+      }
       const insert = this.db.prepare(
         `INSERT INTO inbox_items
            (path, title, artist, album, genre, year, bpm, musical_key, camelot,
@@ -143,10 +156,14 @@ export class SyncDaemon {
       );
       for await (const f of walkFiles(folder, AUDIO_EXTENSIONS)) {
         result.scanned++;
-        if (known.get(f.path, f.path)) {
+        const canon = canonicalizePath(f.path);
+        if (known.has(canon)) {
           result.skipped++;
           continue;
         }
+        // Aggiunto subito: due file che canonicalizzano uguale (NFC/NFD, case)
+        // nella stessa passata non devono entrare due volte in coda.
+        known.add(canon);
         let tags: InboxTagData | null = null;
         try {
           tags = await this.tagReader(f.path);
