@@ -22,13 +22,17 @@ export function writeRekordboxXml(
   outPath: string,
   sel: ExportSelection = {},
   onProgress?: (done: number) => void
-): { tracks: number; playlists: number } {
+): { tracks: number; playlists: number; warnings: string[] } {
   const doc = create({ version: '1.0', encoding: 'UTF-8' });
   const root = doc.ele('DJ_PLAYLISTS', { Version: '1.0.0' });
   root.ele('PRODUCT', { Name: 'CrateForge', Version: '0.1.0', Company: 'TX-Breaker' });
 
   const collection = root.ele('COLLECTION');
   let count = 0;
+  // Rekordbox ha 8 pad per brano: ciò che non ci sta viene degradato a
+  // memory (posizione conservata, pad no) e DICHIARATO, mai perso in silenzio.
+  let demotedHot = 0;
+  let demotedLoops = 0;
   const exportedIds: number[] = [];
   for (const t of iterateTracks(db, sel)) {
     const trackEle = collection.ele('TRACK', {
@@ -87,8 +91,12 @@ export function writeRekordboxXml(
         let num = -1;
         if (c.cue_index != null) {
           const alloc = allocHot(c.cue_index);
-          if (alloc === null) continue; // 8 pad già pieni
-          num = alloc;
+          // Pad esauriti: il loop NON si butta via, diventa un memory loop
+          // (Num=-1). Rekordbox li supporta, e perdere del tutto un loop
+          // perché i pad erano pieni sarebbe una perdita muta — capita
+          // sempre importando da Engine, che ha 8 hot cue E 8 loop per brano.
+          if (alloc === null) demotedLoops++;
+          else num = alloc;
         }
         trackEle.ele('POSITION_MARK', {
           Name: c.label ?? '',
@@ -100,12 +108,14 @@ export function writeRekordboxXml(
         });
       } else if (c.cue_type === 'hot') {
         const num = allocHot(c.cue_index);
-        if (num === null) continue; // max 8 hot cue
+        // Oltre gli 8 pad di Rekordbox il cue viene conservato come memory
+        // cue invece di sparire: la posizione resta, il pad no.
+        if (num === null) demotedHot++;
         trackEle.ele('POSITION_MARK', {
           Name: c.label ?? '',
           Type: '0',
           Start: (c.position_ms / 1000).toFixed(3),
-          Num: String(num),
+          Num: String(num ?? -1),
           ...colorAttrs(c.color)
         });
       } else if (c.cue_type === 'memory') {
@@ -156,7 +166,18 @@ export function writeRekordboxXml(
   rootNode.att('Count', String(byParent.get(null)?.length ?? 0));
 
   writeFileSync(outPath, doc.end({ prettyPrint: true }), 'utf-8');
-  return { tracks: count, playlists: plCount };
+  const warnings: string[] = [];
+  if (demotedHot > 0) {
+    warnings.push(
+      `${demotedHot} hot cue oltre gli 8 pad di Rekordbox: conservati come memory cue (posizione sì, pad no).`
+    );
+  }
+  if (demotedLoops > 0) {
+    warnings.push(
+      `${demotedLoops} loop senza pad libero: conservati come memory loop (Rekordbox li mostra, ma non su un pad).`
+    );
+  }
+  return { tracks: count, playlists: plCount, warnings };
 }
 
 function colorAttrs(hex: string | null): Record<string, string> {

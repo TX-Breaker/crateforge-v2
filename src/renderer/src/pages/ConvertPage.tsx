@@ -90,7 +90,7 @@ const FIELD_MAP: Record<Format, { fieldKey: string; cap: Cap; toKey: string }[]>
     { fieldKey: 'fPlaylists', cap: 'full', toKey: 'fPlaylistsTo' },
     { fieldKey: 'fSmart', cap: 'none', toKey: 'fNoEquiv' },
     { fieldKey: 'fMyTag', cap: 'none', toKey: 'fNoEquiv' },
-    { fieldKey: 'fLoops', cap: 'none', toKey: 'fNoEquiv' }
+    { fieldKey: 'fLoops', cap: 'partial', toKey: 'fLoopsRb' }
   ],
   traktor: [
     { fieldKey: 'fBasic', cap: 'full', toKey: 'fBasicTr' },
@@ -100,7 +100,7 @@ const FIELD_MAP: Record<Format, { fieldKey: string; cap: Cap; toKey: string }[]>
     { fieldKey: 'fPlaylists', cap: 'full', toKey: 'fPlaylistsTo' },
     { fieldKey: 'fSmart', cap: 'none', toKey: 'fNoEquiv' },
     { fieldKey: 'fMyTag', cap: 'none', toKey: 'fNoEquiv' },
-    { fieldKey: 'fLoops', cap: 'none', toKey: 'fNoEquiv' }
+    { fieldKey: 'fLoops', cap: 'partial', toKey: 'fLoopsTr' }
   ],
   virtualdj: [
     { fieldKey: 'fBasic', cap: 'full', toKey: 'fBasicVdj' },
@@ -110,7 +110,7 @@ const FIELD_MAP: Record<Format, { fieldKey: string; cap: Cap; toKey: string }[]>
     { fieldKey: 'fPlaylists', cap: 'full', toKey: 'fPlaylistsTo' },
     { fieldKey: 'fSmart', cap: 'none', toKey: 'fNoEquiv' },
     { fieldKey: 'fMyTag', cap: 'none', toKey: 'fNoEquiv' },
-    { fieldKey: 'fLoops', cap: 'none', toKey: 'fNoEquiv' }
+    { fieldKey: 'fLoops', cap: 'full', toKey: 'fLoopsVdj' }
   ]
 };
 
@@ -295,6 +295,9 @@ export function ConvertPage() {
         tp('outDone', { fmt: fmt.title, n: r.tracks.toLocaleString(locale), path: outPath }) +
         (fmt.id === 'rekordbox' ? tp('outRbTail') : '');
       setOutcome(text);
+      // Quello che il formato di arrivo non sa rappresentare (cue oltre l'ottavo
+      // pad, colori verso Traktor, memory cue…) viene detto qui, non nel log.
+      if (r.warnings?.length) setWarnings(r.warnings);
       push({ kind: 'success', job: true, title: tp('title'), body: text });
     } catch (err) {
       setError(String(err));

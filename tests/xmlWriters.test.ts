@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { mkdtempSync, readFileSync, rmSync } from 'fs';
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { XMLParser } from 'fast-xml-parser';
@@ -44,9 +44,9 @@ describe('writeRekordboxXml', () => {
     expect(tracks).toHaveLength(4);
   });
 
-  it('applica il limite di 8 hot cue (§4)', () => {
+  it('rispetta gli 8 pad di Rekordbox degradando il resto a memory', () => {
     const out = join(tmp, 'rb.xml');
-    writeRekordboxXml(db, out);
+    const r = writeRekordboxXml(db, out);
     const doc = parse(out);
     const tracks = doc.DJ_PLAYLISTS.COLLECTION.TRACK as Record<string, unknown>[];
     const levels = tracks.find((t) => (t['@_Name'] as string).startsWith('Levels'))!;
@@ -54,9 +54,14 @@ describe('writeRekordboxXml', () => {
     const hot = marks.filter((m) => m['@_Type'] === '0' && Number(m['@_Num']) >= 0);
     const memory = marks.filter((m) => m['@_Type'] === '0' && m['@_Num'] === '-1');
     const loops = marks.filter((m) => m['@_Type'] === '4');
-    expect(hot).toHaveLength(8); // dalle 10 in ingresso
-    expect(memory).toHaveLength(1);
-    // Loop ora esportati (roadmap §7.2): POSITION_MARK Type=4 con Start+End.
+
+    // Il limite dei pad resta (Rekordbox ne ha 8)…
+    expect(hot).toHaveLength(8);
+    // …ma i 2 hot cue in eccesso NON spariscono più: diventano memory cue,
+    // così la posizione sopravvive alla conversione (1 memory di partenza + 2).
+    expect(memory).toHaveLength(3);
+    expect(r.warnings.some((w) => w.includes('8 pad'))).toBe(true);
+    // Loop esportati come POSITION_MARK Type=4 con Start+End.
     expect(loops).toHaveLength(1);
     expect(loops[0]['@_End']).toBe('72.000');
   });
@@ -113,5 +118,63 @@ describe('writeVirtualDjXml', () => {
     expect(r.tracks).toBe(4);
     const doc = parse(out);
     expect(doc.VirtualDJ_Database.Song).toHaveLength(4);
+  });
+
+  it('conserva le memory cue come marker remix invece di scartarle', () => {
+    // Regressione: la catena if/else copriva solo hot e loop, quindi ogni
+    // memory cue spariva senza traccia — cioè il 100% dei cue su una rotta
+    // VirtualDJ→VirtualDJ, dove automix/remix vengono letti proprio come memory.
+    const out = join(tmp, 'vdj.xml');
+    writeVirtualDjXml(db, out);
+    const doc = parse(out);
+    const songs = doc.VirtualDJ_Database.Song as Record<string, unknown>[];
+    const levels = songs.find((s) =>
+      String((s.Tags as Record<string, string>)['@_Title']).startsWith('Levels')
+    )!;
+    const pois = ([] as Record<string, string>[]).concat(levels.Poi as never);
+    const remix = pois.filter((p) => p['@_Type'] === 'remix');
+    expect(remix.length).toBeGreaterThan(0);
+    // La memory della fixture sta a 200.000 s → Pos in secondi.
+    expect(remix.some((p) => Number(p['@_Pos']) === 200)).toBe(true);
+  });
+
+  it('dichiara nei warning ciò che non è rappresentabile', () => {
+    const out = join(tmp, 'vdj.xml');
+    const r = writeVirtualDjXml(db, out);
+    expect(Array.isArray(r.warnings)).toBe(true);
+    // La fixture ha una memory cue: dev'essere dichiarata, non silenziosa.
+    expect(r.warnings.some((w) => w.toLowerCase().includes('memory'))).toBe(true);
+  });
+
+  it('scrive le playlist come file .vdjfolder accanto al database', () => {
+    // In VirtualDJ le playlist NON stanno nel database.xml: sono file
+    // separati sotto "Folders". Prima non le esportavamo affatto.
+    const out = join(tmp, 'vdj.xml');
+    const r = writeVirtualDjXml(db, out);
+    expect(r.playlists).toBeGreaterThan(0);
+    const dir = join(tmp, 'Folders');
+    const files = readdirSync(dir).filter((f) => f.endsWith('.vdjfolder'));
+    expect(files.length).toBe(r.playlists);
+    const doc = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_' }).parse(
+      readFileSync(join(dir, files[0]), 'utf-8')
+    );
+    const songs = doc.VirtualFolder.song;
+    const arr = Array.isArray(songs) ? songs : [songs];
+    expect(arr.length).toBeGreaterThan(0);
+    expect(arr[0]['@_path']).toBeTruthy();
+  });
+
+  it('riscrive il colore del cue quando presente nel pivot', () => {
+    const out = join(tmp, 'vdj.xml');
+    // Colore su un hot cue esistente: il reader VDJ lo sa rileggere.
+    db.prepare(`UPDATE cues SET color = '#ff8800' WHERE cue_type = 'hot'`).run();
+    writeVirtualDjXml(db, out);
+    const doc = parse(out);
+    const songs = doc.VirtualDJ_Database.Song as Record<string, unknown>[];
+    const withColor = songs
+      .flatMap((s) => ([] as Record<string, string>[]).concat((s.Poi ?? []) as never))
+      .filter(Boolean)
+      .filter((p) => p['@_Color'] === '#FF8800');
+    expect(withColor.length).toBeGreaterThan(0);
   });
 });

@@ -20,16 +20,21 @@ export function writeTraktorNml(
   outPath: string,
   sel: ExportSelection = {},
   onProgress?: (done: number) => void
-): { tracks: number; playlists: number } {
+): { tracks: number; playlists: number; warnings: string[] } {
   const doc = create({ version: '1.0', encoding: 'UTF-8', standalone: false });
   const nml = doc.ele('NML', { VERSION: '19' });
   nml.ele('HEAD', { COMPANY: 'CrateForge', PROGRAM: 'CrateForge' });
 
   const collection = nml.ele('COLLECTION');
   let count = 0;
+  let droppedNoPath = 0;
+  let colouredCues = 0;
   const keyByTrackId = new Map<number, string>();
   for (const t of iterateTracks(db, sel)) {
-    if (!t.path) continue;
+    if (!t.path) {
+      droppedNoPath++;
+      continue;
+    }
     const dir = traktorDir(t.path);
     // Come traktorDir: normalizzo i separatori così un path Windows-style dal
     // DB (`\`) dà il nome file corretto anche esportando da macOS/Linux, dove
@@ -85,6 +90,7 @@ export function writeTraktorNml(
     // degradato a HOTCUE=-1 (in Traktor un pad tiene un solo elemento).
     const usedHot = new Set<number>();
     for (const c of getCuesForTrack(db, t.id)) {
+      if (c.color) colouredCues++;
       if (c.cue_type === 'hot' && c.cue_index !== null && c.cue_index < 8) {
         usedHot.add(c.cue_index);
         entry.ele('CUE_V2', {
@@ -160,7 +166,19 @@ export function writeTraktorNml(
   playlistsRoot.att('COUNT', String(plCount));
 
   writeFileSync(outPath, doc.end({ prettyPrint: true }), 'utf-8');
-  return { tracks: count, playlists: plCount };
+  const warnings: string[] = [];
+  if (droppedNoPath > 0) {
+    warnings.push(`${droppedNoPath} brani senza percorso file non esportati.`);
+  }
+  if (colouredCues > 0) {
+    // Limite del FORMATO, non nostro: il NML non ha un colore per cue (Traktor
+    // usa colori fissi per tipo di pad). Meglio dirlo che lasciare l'utente a
+    // scoprire da solo che i suoi colori non ci sono più.
+    warnings.push(
+      `${colouredCues} cue avevano un colore: Traktor non memorizza colori per i cue (usa i suoi colori per tipo di pad), quindi si perdono in questa direzione.`
+    );
+  }
+  return { tracks: count, playlists: plCount, warnings };
 }
 
 /** C:\Music\House\a.mp3 → /:Music/:House/: ; /Users/x/a.mp3 → /:Users/:x/:
