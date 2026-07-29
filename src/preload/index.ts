@@ -104,6 +104,26 @@ const api = {
         dbPath?: string;
         warnings?: string[];
         message?: string;
+      }>,
+    // Serato: i cue vivono nei tag dei file audio, non in un file di libreria.
+    // Richiede il gate delle scritture dirette; backup+rollback nel sidecar.
+    seratoCues: (sel?: { playlistIds?: number[] }) =>
+      ipcRenderer.invoke('export:seratoCues', sel) as Promise<{
+        ok: boolean;
+        written?: number;
+        failed?: number;
+        files?: number;
+        backupDir?: string;
+        message?: string;
+      }>,
+    // Playlist Serato: file .crate in Subcrates. Non sovrascrive mai crate
+    // esistenti (il formato non ha ancora un round-trip verificato).
+    seratoCrates: (seratoDir: string, sel?: { playlistIds?: number[] }) =>
+      ipcRenderer.invoke('export:seratoCrates', seratoDir, sel) as Promise<{
+        ok: boolean;
+        written?: number;
+        skipped?: string[];
+        message?: string;
       }>
   },
   relocator: {

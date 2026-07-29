@@ -582,7 +582,7 @@ const it = {
     enImport: 'Engine Library (m.db)',
     enExport: 'Engine Library nuova (brani, cue, loop, playlist)',
     srImport: 'cartella _Serato_',
-    srExport: 'non ancora',
+    srExport: 'cue e loop nei file audio; crate mai sovrascritti',
     cellFull: 'completo',
     cellPartial: 'parziale',
     cellNone: 'non disponibile',
@@ -591,8 +591,17 @@ const it = {
     fmtVdj: 'Database di VirtualDJ, con playlist e punti principali.',
     exportBtn: 'Esporta',
     comingSoon: 'in arrivo',
-    seratoReason:
-      'La scrittura diretta nelle crate di Serato non è sicura: finché non lo è, non la offriamo.',
+    seratoExportTitle: 'Serato',
+    seratoExportDesc:
+      'Serato tiene i punti dentro i file audio, non in un file di libreria: scrivendo qui si modificano i tuoi brani, con backup verificato e ripristino automatico se qualcosa va storto. Si esportano gli 8 pad per brano, cue e loop.',
+    seratoExportBtn: 'Scrivi i cue nei file',
+    seratoOutDone: 'Scritti i cue in {files} file ({n} riusciti). Backup in {dir}.',
+    seratoFailed: '{n} file non modificati: sono stati ripristinati dal backup.',
+    seratoCratesBtn: 'Scrivi le playlist come crate',
+    seratoCratesDesc:
+      'Le playlist di Serato sono file .crate nella cartella Subcrates. I crate già presenti non vengono mai sovrascritti: il formato non ha ancora un round-trip verificato.',
+    seratoCratesDone: 'Scritti {n} crate in Subcrates.',
+    seratoCratesSkipped: '{n} crate esistevano già e sono stati lasciati intatti: {list}',
     engineExportTitle: 'Engine DJ',
     engineExportDesc:
       'Engine legge una cartella "Engine Library": ne generiamo una NUOVA dove scegli tu, senza toccare la tua. Ti verrà chiesto anche un m.db esistente, che serve come modello dello schema. Forma d\'onda e griglia le ricalcola Engine alla prima analisi.',
@@ -1429,7 +1438,7 @@ const en: PageDict = {
     enImport: 'Engine Library (m.db)',
     enExport: 'new Engine Library (tracks, cues, loops, playlists)',
     srImport: '_Serato_ folder',
-    srExport: 'not yet',
+    srExport: 'cues and loops into the audio files; crates never overwritten',
     cellFull: 'full',
     cellPartial: 'partial',
     cellNone: 'not available',
@@ -1438,8 +1447,17 @@ const en: PageDict = {
     fmtVdj: 'VirtualDJ database, with playlists and main points.',
     exportBtn: 'Export',
     comingSoon: 'coming',
-    seratoReason:
-      'Writing directly into Serato crates is not safe: until it is, we do not offer it.',
+    seratoExportTitle: 'Serato',
+    seratoExportDesc:
+      'Serato stores cue points inside the audio files, not in a library file: writing here modifies your tracks, with a verified backup and automatic rollback if anything goes wrong. The 8 pads per track are exported, cues and loops.',
+    seratoExportBtn: 'Write cues into files',
+    seratoOutDone: 'Cues written into {files} files ({n} succeeded). Backup in {dir}.',
+    seratoFailed: '{n} files left unchanged: they were restored from the backup.',
+    seratoCratesBtn: 'Write playlists as crates',
+    seratoCratesDesc:
+      'Serato playlists are .crate files in the Subcrates folder. Existing crates are never overwritten: the format has no verified round-trip yet.',
+    seratoCratesDone: '{n} crates written into Subcrates.',
+    seratoCratesSkipped: '{n} crates already existed and were left untouched: {list}',
     engineExportTitle: 'Engine DJ',
     engineExportDesc:
       'Engine reads an "Engine Library" folder: we generate a NEW one where you choose, without touching yours. You will also be asked for an existing m.db, used as the schema template. Waveform and beat grid are recomputed by Engine on first analysis.',

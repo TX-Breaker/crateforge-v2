@@ -17,7 +17,7 @@ import {
   DialogHeader,
   DialogTitle
 } from '@/components/ui/dialog';
-import { Badge, Checkbox, Notice, Select } from '@/components/ui/misc';
+import { Checkbox, Notice, Select } from '@/components/ui/misc';
 import { GuideDialog } from '@/components/GuideDialog';
 import { SaveTargetNotice } from '@/components/SaveTargetNotice';
 import { RekordboxDiff } from '@/components/RekordboxDiff';
@@ -73,7 +73,7 @@ const MATRIX: { app: string; imp: Cap; impKey: string; exp: Cap; expKey: string 
   { app: 'Traktor', imp: 'full', impKey: 'trImport', exp: 'full', expKey: 'trExport' },
   { app: 'VirtualDJ', imp: 'partial', impKey: 'vdjImport', exp: 'full', expKey: 'vdjExport' },
   { app: 'Engine DJ', imp: 'full', impKey: 'enImport', exp: 'partial', expKey: 'enExport' },
-  { app: 'Serato', imp: 'full', impKey: 'srImport', exp: 'none', expKey: 'srExport' }
+  { app: 'Serato', imp: 'full', impKey: 'srImport', exp: 'partial', expKey: 'srExport' }
 ];
 
 /**
@@ -224,6 +224,80 @@ export function ConvertPage() {
     setConvertSource(SOURCES.find((s) => s.id === srcSel)!.udm);
     setAcknowledged(false);
     setPending(dstSel);
+  };
+
+  /**
+   * Serato: non c'è un file da salvare, i cue vanno DENTRO i file audio. È
+   * quindi una scrittura sugli originali: passa dal gate delle scritture
+   * dirette, con backup verificato e rollback automatico nel sidecar.
+   */
+  const doExportSeratoCues = async () => {
+    setError(null);
+    setOutcome(null);
+    setWarnings([]);
+    setBusy(true);
+    try {
+      const sel = convertSource ? { source: convertSource } : undefined;
+      const r = await run(tp('jobExport', { fmt: 'Serato' }), () =>
+        window.crateforge.exporter.seratoCues(sel as never)
+      );
+      if (!r.ok) {
+        setError(r.message ?? tp('convErr'));
+        push({ kind: 'error', job: true, title: tp('title'), body: r.message ?? tp('convErr') });
+        return;
+      }
+      const text = tp('seratoOutDone', {
+        n: r.written ?? 0,
+        files: r.files ?? 0,
+        dir: r.backupDir ?? ''
+      });
+      setOutcome(text);
+      // I file non modificati sono stati ripristinati dal backup: va detto.
+      if (r.failed) setWarnings([tp('seratoFailed', { n: r.failed })]);
+      push({ kind: 'success', job: true, title: tp('title'), body: text });
+    } catch (err) {
+      setError(String(err));
+      push({ kind: 'error', job: true, title: tp('title'), body: String(err) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /**
+   * Playlist Serato: file .crate in Subcrates. Il sidecar non sovrascrive mai
+   * un crate esistente, perché il formato non ha ancora un round-trip
+   * verificato contro un crate scritto da Serato.
+   */
+  const doExportSeratoCrates = async () => {
+    const dir = await window.crateforge.dialog.openDirectory();
+    if (!dir) return;
+    setError(null);
+    setOutcome(null);
+    setWarnings([]);
+    setBusy(true);
+    try {
+      const r = await run(tp('jobExport', { fmt: 'Serato' }), () =>
+        window.crateforge.exporter.seratoCrates(dir)
+      );
+      if (!r.ok) {
+        setError(r.message ?? tp('convErr'));
+        push({ kind: 'error', job: true, title: tp('title'), body: r.message ?? tp('convErr') });
+        return;
+      }
+      const text = tp('seratoCratesDone', { n: r.written ?? 0 });
+      setOutcome(text);
+      if (r.skipped?.length) {
+        setWarnings([
+          tp('seratoCratesSkipped', { n: r.skipped.length, list: r.skipped.join(', ') })
+        ]);
+      }
+      push({ kind: 'success', job: true, title: tp('title'), body: text });
+    } catch (err) {
+      setError(String(err));
+      push({ kind: 'error', job: true, title: tp('title'), body: String(err) });
+    } finally {
+      setBusy(false);
+    }
   };
 
   /**
@@ -461,13 +535,24 @@ export function ConvertPage() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <Card className="opacity-80">
+        {/* Serato: i cue vivono nei file audio, quindi è una scrittura sugli
+            originali — gate delle scritture dirette, backup e rollback. */}
+        <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-body">
-              Serato <Badge variant="neutral">{tp('comingSoon')}</Badge>
-            </CardTitle>
-            <CardDescription>{tp('seratoReason')}</CardDescription>
+            <CardTitle className="text-body">{tp('seratoExportTitle')}</CardTitle>
+            <CardDescription>{tp('seratoExportDesc')}</CardDescription>
           </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex flex-wrap gap-2">
+              <Button variant="secondary" onClick={doExportSeratoCues} disabled={busy}>
+                <Download /> {tp('seratoExportBtn')}
+              </Button>
+              <Button variant="secondary" onClick={doExportSeratoCrates} disabled={busy}>
+                <Download /> {tp('seratoCratesBtn')}
+              </Button>
+            </div>
+            <p className="text-caption text-ink-lo">{tp('seratoCratesDesc')}</p>
+          </CardContent>
         </Card>
         {/* Engine DJ: genera una libreria NUOVA, mai una modifica della sua. */}
         <Card>
