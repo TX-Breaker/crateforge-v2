@@ -66,13 +66,16 @@ module.exports = {
         }
       },
       fontFamily: {
-        sans: ['Archivo', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'],
+        sans: ['Be Vietnam Pro', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'],
         mono: ['JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'monospace']
       },
       /* Sei ruoli tipografici, niente in mezzo (§1.5). I valori sono quelli del
          design system, misura per misura: display 40/44 -0.03em, titolo 24/30
          -0.02em, sezione 15/20, corpo 13/19, didascalia 11.5/16, occhiello mono
-         11 +0.14em, dati mono 12.5/16 tabulari. */
+         11 +0.14em, dati mono 12.5/16 tabulari.
+         I pesi: corpo e didascalia non ne dichiarano uno e prendono il 500 di
+         base dal `body`; display, titolo e sezione restano a 600, perché è la
+         differenza di peso a separare un titolo dal testo che gli sta sotto. */
       fontSize: {
         display: ['40px', { lineHeight: '44px', letterSpacing: '-0.03em', fontWeight: '600' }],
         title: ['24px', { lineHeight: '30px', letterSpacing: '-0.02em', fontWeight: '600' }],

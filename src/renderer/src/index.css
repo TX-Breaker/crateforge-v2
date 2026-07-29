@@ -16,16 +16,17 @@
  * ------------------------------------------------------------------------- */
 
 /* Due famiglie con due mestieri distinti (design system §1.5):
-   Archivo per l'interfaccia — grottesca geometrica, aperture larghe che
-   reggono i corpi piccoli nelle liste dense; JetBrains Mono per i DATI e basta,
-   cioè ogni numero che l'app rende (BPM, tonalità, durata, conteggi, ETA,
-   percorsi, hash), dove `tabular-nums` impedisce alle cifre di ballare mentre
-   un contatore sale. Bundlati come file: la CSP del renderer vieta i font
-   remoti. */
-@import '@fontsource/archivo/400.css';
-@import '@fontsource/archivo/500.css';
-@import '@fontsource/archivo/600.css';
-@import '@fontsource/archivo/700.css';
+   Be Vietnam Pro per l'INTERFACCIA — tutte le scritte, titoli di pagina e
+   header di sezione inclusi. Il peso di base è 500: è la voce normale
+   dell'interfaccia, i titoli salgono a 600 e nient'altro cambia.
+   JetBrains Mono resta ai DATI e basta, cioè ogni numero che l'app rende (BPM,
+   tonalità, durata, conteggi, ETA, percorsi, hash), dove `tabular-nums`
+   impedisce alle cifre di ballare mentre un contatore sale. Bundlati come
+   file: la CSP del renderer vieta i font remoti. */
+@import '@fontsource/be-vietnam-pro/400.css';
+@import '@fontsource/be-vietnam-pro/500.css';
+@import '@fontsource/be-vietnam-pro/600.css';
+@import '@fontsource/be-vietnam-pro/700.css';
 @import '@fontsource/jetbrains-mono/400.css';
 @import '@fontsource/jetbrains-mono/500.css';
 @import '@fontsource/jetbrains-mono/700.css';
@@ -256,8 +257,15 @@
     margin: 0;
     background-color: rgb(var(--canvas));
     color: rgb(var(--text-hi));
-    font-family: Archivo, system-ui, -apple-system, 'Segoe UI', sans-serif;
+    font-family: 'Be Vietnam Pro', system-ui, -apple-system, 'Segoe UI', sans-serif;
     font-size: 13px;
+    /* Peso di base dell'interfaccia. Sta QUI e non nei token di `fontSize`
+       perché in Tailwind le utility di corpo escono dopo quelle di peso: un
+       500 infilato in `text-body` vincerebbe sui `font-semibold` scritti nei
+       componenti, e i titoli perderebbero il loro 600. Dal `body` invece si
+       eredita e basta — preflight passa `font-weight: inherit` anche a
+       bottoni, campi e intestazioni. */
+    font-weight: 500;
     line-height: 19px;
     -webkit-font-smoothing: antialiased;
     text-wrap: pretty;
@@ -390,4 +398,14 @@
   animation-iteration-count: 1 !important;
   transition-duration: 0.01ms !important;
   scroll-behavior: auto !important;
+}
+
+/* Il sollevamento e lo schiacciamento dei bottoni sono movimento anche se
+   durano zero: chi ha chiesto di non far muovere niente non deve vedere la
+   pagina saltare sotto il puntatore. Lo stato resta leggibile — restano il
+   colore, il bordo e l'ombra. La variante `motion-reduce:` di Tailwind copre
+   la media query di sistema; questa regola copre l'interruttore dell'app. */
+:root[data-motion='reduce'] button:hover,
+:root[data-motion='reduce'] button:active {
+  transform: none !important;
 }

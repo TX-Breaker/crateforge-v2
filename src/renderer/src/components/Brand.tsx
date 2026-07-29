@@ -183,7 +183,8 @@ export function CrateTile({
 /**
  * Lockup orizzontale (W1 · Primary — Tight, §02): marchio più nome.
  *
- * Il nome è in Archivo 600 con tracciatura -0.035em, come chiede la specifica:
+ * Il nome è in Be Vietnam Pro 600 con tracciatura -0.035em, come chiede la
+ * specifica per il peso del lockup:
  * è la voce dell'interfaccia. La targa mono resta al lockup tecnico (W3), che
  * è un'altra cosa e serve altrove.
  */
