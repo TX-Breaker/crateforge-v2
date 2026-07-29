@@ -851,6 +851,7 @@ export const fr: PageDict = {
     detectBody:
       'Chaque chemin ci-dessous a été vérifié sur cette machine avant d’être affiché. Rien n’a été ouvert, copié ni modifié — c’est un regard, pas une lecture.',
     ready: 'prêt',
+    directWrite: 'écrit dans les fichiers',
     readOnly: 'lecture seule',
     notFound: 'non trouvé',
     notFoundHint:
@@ -858,7 +859,7 @@ export const fr: PageDict = {
     externalHint:
       'Aucune Engine Library sur les disques internes. Si la vôtre est sur une clé USB ou un SSD, branchez-la et relancez.',
     seratoLimit:
-      'CrateForge lit vos crates mais n’écrit pas dans Serato : l’écriture directe n’est pas sûre, nous ne la proposons donc pas.',
+      "CrateForge lit vos crates. Il peut aussi écrire cues et boucles dans les fichiers audio et créer les crates, mais c'est une écriture sur les originaux : il faut l'activer dans Réglages → Sécurité, et chaque fichier est copié dans une sauvegarde vérifiée avant d'être touché.",
     browse: 'Indiquer le fichier…',
     rescan: 'Relancer la recherche',
     modified: 'modifié à {when}',
@@ -1745,6 +1746,7 @@ export const de: PageDict = {
     detectBody:
       'Jeder Pfad unten wurde auf diesem Rechner geprüft, bevor er erscheint. Nichts wurde geöffnet, kopiert oder verändert — es ist ein Blick, kein Zugriff.',
     ready: 'bereit',
+    directWrite: 'schreibt in Dateien',
     readOnly: 'nur lesen',
     notFound: 'nicht gefunden',
     notFoundHint:
@@ -1752,7 +1754,7 @@ export const de: PageDict = {
     externalHint:
       'Keine Engine Library auf internen Laufwerken. Liegt deine auf USB-Stick oder SSD, schließ sie an und suche erneut.',
     seratoLimit:
-      'CrateForge liest deine Crates, schreibt aber nicht nach Serato zurück: direktes Schreiben ist nicht sicher, also bieten wir es nicht an.',
+      'CrateForge liest deine Crates. Es kann auch Cues und Loops in die Audiodateien schreiben und Crates anlegen, aber das ist ein Schreibvorgang auf den Originalen: Er muss in Einstellungen → Sicherheit aktiviert werden, und jede Datei wird vorher in ein geprüftes Backup kopiert.',
     browse: 'Datei auswählen…',
     rescan: 'Erneut suchen',
     modified: 'geändert um {when}',

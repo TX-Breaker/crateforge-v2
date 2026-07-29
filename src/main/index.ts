@@ -1,7 +1,7 @@
 import { app, BrowserWindow, dialog, shell } from 'electron';
 import { join } from 'path';
 import { openUdm } from '@core/udm';
-import { registerIpc } from './ipc';
+import { isWriteJobRunning, registerIpc } from './ipc';
 import { runPreflight } from './preflight';
 
 /**
@@ -115,8 +115,38 @@ if (!app.requestSingleInstanceLock()) {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();
     });
 
-    // Chiusura ordinata: ferma daemon/job, chiudi il DB (WAL pulito).
-    app.on('before-quit', () => {
+    /* Chiudere la finestra mentre il sidecar sta scrivendo dentro un file
+       audio o dentro il master.db equivale a premere Annulla: il processo
+       viene terminato a forza e il ripristino, che vive in un blocco `except`
+       del sidecar, non viene mai eseguito. Qui la chiusura viene rimandata e
+       all'utente viene detto perché — non è un'attesa muta. */
+    let quitting = false;
+    app.on('before-quit', (event) => {
+      if (!quitting && isWriteJobRunning()) {
+        event.preventDefault();
+        const win = BrowserWindow.getAllWindows()[0];
+        const opts = {
+          type: 'warning' as const,
+          buttons: ['Aspetta'],
+          defaultId: 0,
+          title: 'Scrittura in corso',
+          message:
+            'CrateForge sta scrivendo dentro i tuoi file e non può essere chiuso adesso: ' +
+            "interrompere a metà lascerebbe un file scritto solo in parte, e il ripristino " +
+            'automatico non farebbe in tempo a partire. La chiusura avverrà appena la ' +
+            'scrittura è finita.'
+        };
+        void (win ? dialog.showMessageBox(win, opts) : dialog.showMessageBox(opts));
+        // Riprova appena il job finisce: nessun intervento richiesto all'utente.
+        const timer = setInterval(() => {
+          if (!isWriteJobRunning()) {
+            clearInterval(timer);
+            quitting = true;
+            app.quit();
+          }
+        }, 500);
+        return;
+      }
       try {
         disposeIpc?.();
       } catch {

@@ -806,6 +806,30 @@ def _sha256(path: str) -> str:
     return h.hexdigest()
 
 
+def _backup_manifest_append(backup_dir: str, entry: dict) -> None:
+    """Registra nel manifest della cartella di backup da DOVE viene ogni copia.
+
+    Senza questo file la cartella e' una pila di copie con nome appiattito
+    (`0007_Intro.mp3`): il contenuto e' salvo ma nessuno — nemmeno chi ha
+    scritto il programma — sa piu' in quale cartella andava rimesso. Il
+    manifest si scrive PRIMA della scrittura, e in modalita' append, cosi'
+    sopravvive anche a un'interruzione a meta' lavoro.
+    """
+    path = os.path.join(backup_dir, "crateforge-backup.json")
+    try:
+        data = {"kind": "audio", "files": []}
+        if os.path.exists(path):
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        data.setdefault("files", []).append(entry)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=1)
+    except Exception:
+        # Un manifest che non si scrive non deve impedire il backup: la copia
+        # verificata resta la protezione principale.
+        pass
+
+
 def cmd_write_tags(args: argparse.Namespace) -> None:
     """Scrive tag sui file originali. Per OGNI file:
     1. hash dell'originale; 2. copia di backup + verifica hash; 3. scrittura
@@ -846,6 +870,10 @@ def cmd_write_tags(args: argparse.Namespace) -> None:
             shutil.copy2(path, backup)
             if _sha256(backup) != src_hash:
                 raise IOError("verifica hash del backup fallita")
+            _backup_manifest_append(
+                args.backup_dir,
+                {"from": path, "to": backup, "sha256": src_hash, "at": _now_local()},
+            )
 
             audio = mutagen.File(path, easy=True)
             if audio is None:
@@ -1481,6 +1509,10 @@ def cmd_write_serato_cues(args: argparse.Namespace) -> None:
             shutil.copy2(path, backup)
             if _sha256(backup) != src_hash:
                 raise IOError("verifica hash del backup fallita")
+            _backup_manifest_append(
+                args.backup_dir,
+                {"from": path, "to": backup, "sha256": src_hash, "at": _now_local()},
+            )
 
             audio = mutagen.File(path)
             if audio is None or not hasattr(audio, "tags") or audio.tags is None:

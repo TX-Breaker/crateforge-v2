@@ -275,8 +275,14 @@ export function ConvertPage() {
     setBusy(true);
     try {
       const sel = convertSource ? { source: convertSource } : undefined;
-      const r = await run(tp('jobExport', { fmt: 'Serato' }), () =>
-        window.crateforge.exporter.seratoCues(sel)
+      /* Non annullabile di proposito: il ripristino promesso all'utente è un
+         blocco `except` dentro il sidecar, e un processo terminato a forza non
+         lo esegue mai. Meglio niente pulsante che un pulsante che lascia un
+         MP3 scritto a metà. */
+      const r = await run(
+        tp('jobExport', { fmt: 'Serato' }),
+        () => window.crateforge.exporter.seratoCues(sel),
+        { cancellable: false }
       );
       if (!r.ok) {
         setError(r.message ?? tp('convErr'));
@@ -589,6 +595,9 @@ export function ConvertPage() {
               </Button>
             </div>
             <p className="text-caption text-ink-lo">{tp('seratoCratesDesc')}</p>
+            {/* La destinazione va dichiarata dove si scrive, non solo dove è
+                innocuo: questa card modifica i file audio dell'utente. */}
+            <SaveTargetNotice target="original" />
           </CardContent>
         </Card>
         {/* Engine DJ: genera una libreria NUOVA, mai una modifica della sua. */}
@@ -601,6 +610,7 @@ export function ConvertPage() {
             <Button variant="secondary" onClick={doExportEngine} disabled={busy}>
               <Download /> {tp('engineExportBtn')}
             </Button>
+            <SaveTargetNotice target="copy" />
           </CardContent>
         </Card>
       </div>

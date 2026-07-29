@@ -29,9 +29,15 @@ design system in [`docs/DESIGN-SYSTEM.md`](docs/DESIGN-SYSTEM.md). In breve:
 - Quattro lingue a parità garantita da compilatore e test; `prefers-reduced-motion`
   rispettato ovunque.
 
-Le regole di sicurezza non sono cambiate di una virgola: gate espliciti, doppia
-conferma, dry-run, quarantena reversibile, dichiarazione della destinazione di ogni
-scrittura, registro completo.
+- **Cinque palette**: Studio e Neutro (chiaro/scuro) più **OLED**, nero assoluto
+  per gli schermi che spengono il pixel.
+- **Marchio proprio** in quattro disegni redatti per misura, e icona
+  dell'applicazione generata da quelli.
+
+Le regole di sicurezza sono più strette, non più larghe: ai gate espliciti,
+doppia conferma, dry-run, quarantena reversibile, dichiarazione della
+destinazione e registro completo si è aggiunto il **blocco per versione dei
+software DJ** — verso una versione mai collaudata non si scrive.
 
 ## Cosa fa (Fase 1)
 
@@ -90,10 +96,29 @@ il backend attuale usa `aubio`+`numpy`.
 
 ### Regole di sicurezza non negoziabili
 
-- **Mai** scritture sui file originali (database o audio): tutto avviene su copie.
-- Doppia conferma esplicita (parola chiave + checkbox) su ogni azione potenzialmente distruttiva.
+- **Per impostazione predefinita non si scrive su nessun file dell'utente**: si
+  generano file nuovi e si lavora su copie. Esistono **tre** eccezioni, e sono
+  tutte esplicite — l'utente deve accenderle, confermarle e sa quanti file
+  tocca:
+
+  | Cosa scrive | Dove | Come è protetta |
+  |---|---|---|
+  | Tag ID3 (arricchimento) | nei file audio | gate `directWrites` + conferma digitata + backup con hash verificato e ripristino automatico |
+  | Cue e loop Serato | nei file audio | idem, più il conteggio dei file mostrato prima di partire |
+  | Playlist Rekordbox | nel `master.db` | gate `masterDbWrites` + conferma digitata + backup verificato con manifest |
+
+  Fuori da queste tre, nessuna funzione tocca i file esistenti: orfani in
+  quarantena reversibile, export su file nuovi, libreria Engine creata da zero.
+- I gate vivono nel processo principale e si attivano solo da un dialogo di
+  sistema: un renderer compromesso non può accenderli da solo.
+- Doppia conferma esplicita (parola chiave + checkbox) su ogni azione
+  potenzialmente distruttiva, con i numeri in chiaro prima di procedere.
 - Dry-run di default sulle operazioni di massa.
+- Le scritture sui file non sono annullabili a metà: il ripristino vive nel
+  modulo che scrive, e un processo interrotto a forza non lo eseguirebbe.
 - Log completo di ogni operazione, esportabile.
+- Si scrive solo verso versioni di software DJ **collaudate**
+  ([docs/COMPATIBILITA-VERSIONI.md](docs/COMPATIBILITA-VERSIONI.md)).
 
 ## Architettura
 

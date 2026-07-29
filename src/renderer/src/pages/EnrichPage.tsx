@@ -558,8 +558,13 @@ function TagsTab() {
     setBusy(true);
     setError(null);
     try {
-      const r = await run(tp('applyOriginalBtn'), () =>
-        window.crateforge.tagger.apply(chosen(), 'original')
+      /* Non annullabile: la scrittura dei tag entra nei file audio e il
+         ripristino vive dentro il sidecar, in un blocco `except` che un
+         processo terminato a forza non esegue mai. */
+      const r = await run(
+        tp('applyOriginalBtn'),
+        () => window.crateforge.tagger.apply(chosen(), 'original'),
+        { cancellable: false }
       );
       if (!r.ok) {
         setError(r.message ?? tp('writeFailed'));

@@ -82,9 +82,20 @@ describe.skipIf(!hasVenv)('sidecar write-tags (e2e, §3.4)', () => {
       expect(done.data.failed).toBe(0);
 
       // Il backup esiste ed è byte-identico all'originale PRIMA della scrittura.
-      const backups = readdirSync(backupDir);
+      const backups = readdirSync(backupDir).filter((f) => f !== 'crateforge-backup.json');
       expect(backups.length).toBe(1);
       expect(sha256(join(backupDir, backups[0]))).toBe(preHash);
+
+      /* E il manifest dice DA DOVE veniva quella copia: il nome del backup è
+         appiattito (`0000_brano.mp3`), quindi senza manifest il contenuto
+         sarebbe salvo ma nessuno saprebbe in quale cartella rimetterlo. */
+      const manifest = JSON.parse(
+        readFileSync(join(backupDir, 'crateforge-backup.json'), 'utf-8')
+      ) as { files: { from: string; to: string; sha256: string; at: string }[] };
+      expect(manifest.files).toHaveLength(1);
+      expect(manifest.files[0].from).toBe(mp3);
+      expect(manifest.files[0].sha256).toBe(preHash);
+      expect(manifest.files[0].to).toBe(join(backupDir, backups[0]));
 
       // I tag sono davvero cambiati e il file resta un MP3 leggibile.
       const tags = readTags(mp3);

@@ -32,7 +32,7 @@ interface Detection {
   companionPath?: string | null;
   checked: string[];
   modifiedAt: string | null;
-  limit?: 'readOnly' | 'external';
+  limit?: 'readOnly' | 'external' | 'directWrite';
   kind: 'masterdb' | 'nml' | 'vdjxml' | 'seratoDir' | 'enginedb';
 }
 
@@ -236,8 +236,10 @@ export function FirstRun() {
                         <div className="flex items-center gap-2">
                           <span className="text-section text-ink-hi">{NAMES[d.id]}</span>
                           {found ? (
-                            d.limit === 'readOnly' ? (
-                              <Badge variant="warning">{tp('readOnly')}</Badge>
+                            d.limit === 'readOnly' || d.limit === 'directWrite' ? (
+                              <Badge variant="warning">
+                                {d.limit === 'directWrite' ? tp('directWrite') : tp('readOnly')}
+                              </Badge>
                             ) : (
                               <Badge variant="success">{tp('ready')}</Badge>
                             )
@@ -278,7 +280,7 @@ export function FirstRun() {
                                 {tp('modified', { when: formatClock(d.modifiedAt) })}
                               </p>
                             )}
-                            {d.limit === 'readOnly' && (
+                            {(d.limit === 'readOnly' || d.limit === 'directWrite') && (
                               <p className="text-caption text-warning">{tp('seratoLimit')}</p>
                             )}
                           </>

@@ -1,12 +1,16 @@
 /**
- * Serato: scrittura diretta NON disponibile in Fase 1 (§6.4).
- * Lo schema dei crate/database Serato varia per versione e una scrittura
- * ingenua rischia di corrompere la libreria. Arriverà in Fase 2/3 con
- * librerie dedicate, lavorando SOLO su copie e con rollback verificato.
+ * Serato: stato del canale.
+ *
+ * La scrittura ESISTE dalla versione 2 e passa dal gate delle scritture dirette,
+ * perché i cue di Serato vivono dentro i file audio: si riscrivono i tag dei
+ * brani, con backup verificato e ripristino automatico. Le playlist diventano
+ * crate, e un crate già esistente non viene mai sovrascritto — quel formato non
+ * ha ancora un round-trip verificato contro un file scritto da Serato.
  */
 export const SERATO_STATUS = {
-  available: false,
+  available: true,
   reason:
-    'Export diretto verso Serato in arrivo in una versione futura. ' +
-    'Per ora usa l\'export Rekordbox XML o il report Excel.'
+    'Export verso Serato: cue e loop vengono scritti nei tag dei file audio (serve il gate ' +
+    'delle scritture dirette; backup verificato e ripristino automatico). Le playlist ' +
+    'diventano crate, e i crate esistenti non vengono mai sovrascritti.'
 } as const;

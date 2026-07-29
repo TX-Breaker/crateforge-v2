@@ -1,12 +1,15 @@
 /**
- * Engine DJ: scrittura diretta NON disponibile in Fase 1 (§6.4).
- * Il database Engine (SQLite) cambia schema tra versioni: scrivere
- * direttamente è rischio corruzione. Arriverà in una fase successiva,
- * con safeguard e lavoro esclusivamente su copie.
+ * Engine DJ: stato del canale.
+ *
+ * La scrittura ESISTE dalla versione 2 e non tocca la libreria dell'utente: ne
+ * genera una nuova nella cartella scelta, copiando lo schema da un m.db
+ * indicato da lui. Restano fuori, dichiarati, forma d'onda e griglia dei beat:
+ * si sanno leggere ma non ricreare byte per byte, ed Engine le rigenera alla
+ * prima analisi.
  */
 export const ENGINE_STATUS = {
-  available: false,
+  available: true,
   reason:
-    'Export diretto verso Engine DJ in arrivo in una versione futura. ' +
-    'Per ora usa l\'export Rekordbox XML o Traktor NML.'
+    'Export verso Engine DJ: viene generata una libreria NUOVA nella cartella scelta, ' +
+    "la tua non viene toccata. Forma d'onda e griglia le ricalcola Engine alla prima analisi."
 } as const;

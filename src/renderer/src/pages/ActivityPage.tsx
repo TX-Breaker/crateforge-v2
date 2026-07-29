@@ -69,6 +69,11 @@ export function ActivityPage() {
   /** Destinazione di scrittura dedotta dall'operazione registrata. */
   const targetOf = (op: string): SaveTarget => {
     if (op.startsWith('masterdb')) return 'masterdb';
+    // I cue Serato finiscono DENTRO i file audio: è una scrittura sugli
+    // originali, non un export. Prima prendeva il badge 'XML — file da
+    // importare', che è il contrario di quello che è successo.
+    if (op.includes('serato-cues')) return 'original';
+    if (op.includes('serato-crates')) return 'copy';
     if (op.includes('write-tags') || op.includes('original')) return 'original';
     if (op.startsWith('export') || op.includes('xml') || op.startsWith('setbuilder')) return 'xml';
     if (op.startsWith('backup') || op.startsWith('orphans') || op.startsWith('report') || op.startsWith('siae'))

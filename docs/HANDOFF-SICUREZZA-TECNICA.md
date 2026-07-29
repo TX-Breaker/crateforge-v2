@@ -13,6 +13,13 @@ sono auto-vincolato a operazioni **non distruttive**.
 
 ## 0. Postura di sicurezza adottata (leggere per primo)
 
+> **Che cos'è questo documento.** È il resoconto di una singola sessione di
+> lavoro sull'ambiente dell'autore: dice che cosa è stato toccato *in quella
+> sessione*, non che cosa fa il programma. CrateForge oggi può scrivere nei file
+> dell'utente in tre punti, tutti dietro un interruttore, una conferma digitata
+> e un backup verificato — vedi le regole di sicurezza nel README. Non leggere
+> le righe qui sotto come una promessa del prodotto.
+
 | Ambito | Cosa ho fatto | Rischio residuo |
 |---|---|---|
 | **master.db Rekordbox** | Backup verificato in `~/Desktop/Backup MASTER DB Rekordbox/`; il file REALE **mai aperto in scrittura**; hash+mtime invariati a fine sessione | Nessuno per l'originale |

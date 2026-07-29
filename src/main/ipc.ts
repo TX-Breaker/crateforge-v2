@@ -59,6 +59,7 @@ import { writeInboxXml } from '@adapters/rekordbox/inboxXml';
 import { writeSetXml } from '@adapters/rekordbox/setXml';
 import type { TrackRow } from '@core/udm';
 import { ThrottledProgress } from './progress';
+import { hashFile } from '@services/fsutil';
 import { networkPathWarning } from './networkPath';
 import {
   acknowledgeKey,
@@ -81,6 +82,24 @@ import { getLastPreflight, runPreflight } from './preflight';
  *  - progressi SEMPRE via ThrottledProgress (§2);
  *  - un solo job di ingestion alla volta (serializza i writer sull'UDM).
  */
+/**
+ * Comandi del sidecar che entrano DENTRO i file dell'utente. Mentre uno di
+ * questi è in corso l'applicazione non può essere chiusa: terminare il
+ * processo salterebbe il ripristino, che nel sidecar è un blocco `except`.
+ */
+const WRITE_COMMANDS = new Set([
+  'write-tags',
+  'write-serato-cues',
+  'write-serato-crates',
+  'masterdb-create-playlist'
+]);
+let writeJobsInFlight = 0;
+
+/** true se una scrittura sui file dell'utente è in corso in questo momento. */
+export function isWriteJobRunning(): boolean {
+  return writeJobsInFlight > 0;
+}
+
 export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => void {
   let currentCancel: (() => void) | null = null;
 
@@ -122,12 +141,24 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
   // Chiavi di sicurezza che NON possono essere scritte dal canale generico:
   // sono i gate delle scritture (§3), altrimenti un renderer compromesso le
   // attiverebbe da solo via settings:set e poi eseguirebbe azioni distruttive.
-  const GATE_KEYS = new Set(['directWrites', 'masterDbWrites']);
+  const GATE_KEYS = new Set(['directWrites', 'masterDbWrites', 'versionGate']);
+
+  /**
+   * Chiave protetta: oltre ai gate espliciti, anche gli SBLOCCHI di versione
+   * (`versionAck.*`, `versionAckApp.*`). Erano rimasti fuori dall'elenco, e
+   * questo rendeva il blocco delle versioni aggirabile in una riga dal
+   * renderer: scrivere `versionAck.engine = 99` e la scrittura verso una
+   * versione mai collaudata sarebbe passata. Lo sblocco deve restare
+   * possibile solo dal canale dedicato, che chiede conferma nel processo
+   * principale con un dialogo di sistema.
+   */
+  const isGuardedKey = (key: string): boolean =>
+    GATE_KEYS.has(key) || /^versionAck(App)?\./.test(key);
 
   // ---- settings / stato ----
   ipcMain.handle('settings:get', (_e, key: string) => getSetting(db, key));
   ipcMain.handle('settings:set', (_e, key: string, value: string) => {
-    if (GATE_KEYS.has(key)) {
+    if (isGuardedKey(key)) {
       throw new Error(`Il setting "${key}" non è modificabile da questo canale.`);
     }
     return setSetting(db, key, value);
@@ -1004,6 +1035,8 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
     withJobLock(() => {
       const progress = new ThrottledProgress(wc());
       const jobId = randomUUID();
+      const isWrite = WRITE_COMMANDS.has(command);
+      if (isWrite) writeJobsInFlight++;
       let doneData: Record<string, unknown> | undefined;
       let lastError: string | null = null;
       const handle = runSidecar({
@@ -1024,6 +1057,7 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
       return handle.finished.then(({ code }) => {
         progress.finish({ jobId, phase, done: 1, total: 1 });
         currentCancel = null;
+        if (isWrite) writeJobsInFlight--;
         if (code !== 0 || !doneData) {
           return { ok: false as const, message: lastError ?? `Il modulo è terminato con codice ${code}.` };
         }
@@ -1378,13 +1412,33 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
       );
       try {
         mkdirSync(backupDir, { recursive: true });
-        copyFileSync(masterDbPath, join(backupDir, basename(masterDbPath)));
-        if (optionsJsonPath) copyFileSync(optionsJsonPath, join(backupDir, basename(optionsJsonPath)));
+        /* Copia VERIFICATA: si confronta l'hash dell'originale con quello della
+           copia prima di considerare fatto il backup. Una copia troncata (disco
+           pieno, percorso di rete, antivirus) sarebbe una rete di sicurezza che
+           cede proprio quando serve — ed è l'unica che protegge l'unica
+           scrittura dentro la libreria cifrata dell'utente.
+           Insieme ai file si scrive un manifest: senza, un backup è una cartella
+           di file dal nome uguale e nessuno sa più da dove venivano. */
+        const copied: { from: string; to: string; sha256: string; bytes: number }[] = [];
+        for (const src of [masterDbPath, ...(optionsJsonPath ? [optionsJsonPath] : [])]) {
+          const dest = join(backupDir, basename(src));
+          copyFileSync(src, dest);
+          const [a, b] = await Promise.all([hashFile(src), hashFile(dest)]);
+          if (a !== b) {
+            throw new Error(`la copia di ${basename(src)} non corrisponde all'originale`);
+          }
+          copied.push({ from: src, to: dest, sha256: a, bytes: statSync(dest).size });
+        }
+        writeFileSync(
+          join(backupDir, 'crateforge-backup.json'),
+          JSON.stringify({ kind: 'masterdb', at: new Date().toISOString(), files: copied }, null, 2),
+          'utf-8'
+        );
       } catch (err) {
         logOperation(db, 'masterdb.backup', backupDir, 'error', String(err));
         return { ok: false, message: `Backup del database non riuscito, scrittura annullata: ${String(err)}` };
       }
-      logOperation(db, 'masterdb.backup', backupDir, 'ok', `${basename(masterDbPath)} + options.json`);
+      logOperation(db, 'masterdb.backup', backupDir, 'ok', `${basename(masterDbPath)} + options.json (hash verificati)`);
 
       const idsFile = writeTempJson('content-ids', contentIds);
       let r;

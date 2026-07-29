@@ -35,7 +35,7 @@ export interface DjSoftwareDetection {
    * Limite dichiarato del canale: Serato si legge ma non si riscrive, Engine
    * spesso vive su un supporto esterno. La UI lo mostra sulla card, non in nota.
    */
-  limit?: 'readOnly' | 'external';
+  limit?: 'readOnly' | 'external' | 'directWrite';
   /** tipo di sorgente da passare alla IPC di import */
   kind: 'masterdb' | 'nml' | 'vdjxml' | 'seratoDir' | 'enginedb';
 }
@@ -173,8 +173,10 @@ export function detectDjSoftware(): DjSoftwareDetection[] {
       path: seratoPath,
       checked: seratoChecked,
       modifiedAt: modifiedAt(seratoPath),
-      // La scrittura diretta su Serato non è sicura: lo dichiariamo sulla card.
-      limit: 'readOnly',
+      // La scrittura verso Serato esiste (cue e loop nei tag dei file audio,
+      // crate per le playlist) ma tocca gli originali: la card lo dichiara come
+      // limite del canale, non come impossibilità.
+      limit: 'directWrite',
       kind: 'seratoDir'
     },
     {

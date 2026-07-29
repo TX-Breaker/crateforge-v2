@@ -180,13 +180,20 @@ function BuildTab() {
     setOutcome(null);
     setBusy(true);
     try {
-      const r = await run(tp('mdbBtn'), () =>
-        window.crateforge.masterdb.createPlaylist(
-          built.tracks.map((t) => t.id),
-          name,
-          masterDbPath,
-          optionsPath
-        )
+      /* Non annullabile: qui si scrive dentro il database cifrato di
+         Rekordbox. Interrompere a metà una transazione SQLCipher è il modo
+         più diretto per lasciare la libreria in uno stato che nessuno sa
+         rimettere a posto. */
+      const r = await run(
+        tp('mdbBtn'),
+        () =>
+          window.crateforge.masterdb.createPlaylist(
+            built.tracks.map((t) => t.id),
+            name,
+            masterDbPath,
+            optionsPath
+          ),
+        { cancellable: false }
       );
       if (!r.ok) {
         setError(tp('mdbErr', { msg: r.message ?? '?' }));

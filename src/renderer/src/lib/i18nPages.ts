@@ -849,6 +849,7 @@ const it = {
     detectBody:
       'Ogni percorso qui sotto è stato verificato su questa macchina prima di comparire. Niente è stato aperto, copiato o modificato: è solo uno sguardo.',
     ready: 'pronto',
+    directWrite: 'scrive nei file',
     readOnly: 'sola lettura',
     notFound: 'non trovato',
     notFoundHint:
@@ -856,7 +857,7 @@ const it = {
     externalHint:
       'Nessuna Engine Library sui dischi interni. Se la tua è su chiavetta o SSD, collegala e riprova.',
     seratoLimit:
-      'CrateForge legge le tue crate ma non scrive dentro Serato: la scrittura diretta non è sicura, quindi non la offriamo.',
+      'CrateForge legge le tue crate. Può anche scrivere cue e loop dentro i file audio e creare i crate, ma è una scrittura sugli originali: serve attivarla in Impostazioni → Sicurezza, e ogni file viene copiato in un backup verificato prima di essere toccato.',
     browse: 'Indica il file…',
     rescan: 'Cerca di nuovo',
     modified: 'modificato alle {when}',
@@ -1744,6 +1745,7 @@ const en: PageDict = {
     detectBody:
       'Every path below was verified on this machine before being shown. Nothing has been opened, copied or modified — this is a look, not a read.',
     ready: 'ready',
+    directWrite: 'writes into files',
     readOnly: 'read only',
     notFound: 'not found',
     notFoundHint:
@@ -1751,7 +1753,7 @@ const en: PageDict = {
     externalHint:
       'No Engine Library on internal drives. If yours lives on a USB stick or SSD, connect it and rescan.',
     seratoLimit:
-      'CrateForge can read your crates but cannot write back to Serato: direct writing is not safe, so we do not offer it.',
+      'CrateForge reads your crates. It can also write cues and loops into the audio files and create crates, but that writes to the originals: it must be enabled in Settings → Security, and every file is copied to a verified backup before being touched.',
     browse: 'Point at the file…',
     rescan: 'Rescan',
     modified: 'modified at {when}',

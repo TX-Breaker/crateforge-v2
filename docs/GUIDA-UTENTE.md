@@ -2,8 +2,18 @@
 
 > Questa guida parte da **zero**. Non dà per scontato niente. Se sai già cos'è
 > un hot cue puoi saltare i riquadri "In parole povere", ma leggerli non fa male.
-> Regola d'oro, valida dall'inizio alla fine: **CrateForge non tocca mai i tuoi
-> file originali.** Lavora su copie e crea file nuovi. Puoi sbagliare senza paura.
+>
+> **Regola d'oro, valida dall'inizio alla fine: CrateForge non tocca i tuoi file
+> senza che tu glielo dica.** Quasi tutto quello che fa avviene su copie e su
+> file nuovi, e lì puoi sbagliare senza paura.
+>
+> Ci sono **tre sole eccezioni**, e non possono capitarti per sbaglio: scrivere
+> i tag dentro i brani, scrivere i cue di Serato dentro i brani, e creare una
+> playlist dentro il database di Rekordbox. Tutte e tre vanno prima accese in
+> *Impostazioni → Sicurezza*, poi confermate scrivendo una parola, e prima di
+> partire ti dicono **quanti file** stanno per toccare. Di ogni file viene fatta
+> una copia di sicurezza controllata, e se qualcosa va storto il file torna
+> com'era.
 
 Indice:
 
