@@ -594,14 +594,19 @@ export function EmptyState({
   children,
   action,
   className,
-  watermark = true
+  watermark = false
 }: {
   icon?: React.ReactNode;
   title: React.ReactNode;
   children?: React.ReactNode;
   action?: React.ReactNode;
   className?: string;
-  /** Filigrana del marchio dietro il contenuto; si spegne dove darebbe fastidio. */
+  /**
+   * Filigrana del marchio dietro il contenuto. Spenta ovunque per scelta: gli
+   * stati vuoti del design system sono nudi, e ripeterla su tutti avrebbe
+   * riscritto l'aspetto di mezza applicazione. Si accende in un solo punto —
+   * la libreria ancora vuota — dove il marchio è il messaggio.
+   */
   watermark?: boolean;
 }) {
   return (

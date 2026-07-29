@@ -15,19 +15,19 @@
  * `bg-accent/15` funziona su ogni token.
  * ------------------------------------------------------------------------- */
 
-/* JetBrains Mono per TUTTA l'interfaccia, peso 500 di base.
-   Una famiglia sola, monospaziata: ogni cifra occupa la stessa larghezza, e in
-   un programma che è quasi solo BPM, tonalità, durate, conteggi e percorsi le
-   colonne stanno in colonna senza `tabular-nums` sparsi a mano. Il carattere è
-   nato per essere letto a lungo su schermo a corpo piccolo, che è esattamente
-   il mestiere di questa app. Il peso 500 è il regolare qui: il 400 su fondo
-   scuro si assottiglia e sparisce.
-   Conseguenza accettata: il monospazio è più largo del proporzionale, quindi le
-   righe portano meno parole. Le misure tipografiche sotto sono state strette di
-   conseguenza, non lasciate com'erano. */
+/* Due famiglie con due mestieri distinti (design system §1.5):
+   Archivo per l'interfaccia — grottesca geometrica, aperture larghe che
+   reggono i corpi piccoli nelle liste dense; JetBrains Mono per i DATI e basta,
+   cioè ogni numero che l'app rende (BPM, tonalità, durata, conteggi, ETA,
+   percorsi, hash), dove `tabular-nums` impedisce alle cifre di ballare mentre
+   un contatore sale. Bundlati come file: la CSP del renderer vieta i font
+   remoti. */
+@import '@fontsource/archivo/400.css';
+@import '@fontsource/archivo/500.css';
+@import '@fontsource/archivo/600.css';
+@import '@fontsource/archivo/700.css';
 @import '@fontsource/jetbrains-mono/400.css';
 @import '@fontsource/jetbrains-mono/500.css';
-@import '@fontsource/jetbrains-mono/600.css';
 @import '@fontsource/jetbrains-mono/700.css';
 
 @tailwind base;
@@ -235,11 +235,11 @@
   /* Densità delle liste: comfortable 46px, compact 30px (§5.3). */
   :root {
     --row-h: 46px;
-    --row-font: 12px;
+    --row-font: 12.5px;
   }
   :root[data-density='compact'] {
     --row-h: 30px;
-    --row-font: 11px;
+    --row-font: 11.5px;
   }
 
   * {
@@ -256,15 +256,9 @@
     margin: 0;
     background-color: rgb(var(--canvas));
     color: rgb(var(--text-hi));
-    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 12.5px;
-    font-weight: 500;
-    /* Corpo 13→12.5px perché il monospazio è più largo: a parità di misura la
-       riga porterebbe un quarto di parole in meno. L'interlinea resta generosa
-       (20px) e la tracciatura torna a zero: il monospazio l'aria fra le lettere
-       ce l'ha già per costruzione, aggiungerne farebbe cadere la parola a pezzi. */
-    line-height: 20px;
-    letter-spacing: 0;
+    font-family: Archivo, system-ui, -apple-system, 'Segoe UI', sans-serif;
+    font-size: 13px;
+    line-height: 19px;
     -webkit-font-smoothing: antialiased;
     text-wrap: pretty;
     /* Cross-fade del tema: 240ms lineari, nessun flash dell'altra palette. */

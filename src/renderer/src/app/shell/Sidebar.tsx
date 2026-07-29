@@ -59,9 +59,7 @@ export function Sidebar({
         <CrateTile size={22} radius={5} />
         {!collapsed && (
           <>
-            <span className="font-mono text-body font-medium tracking-[.06em] text-ink-hi">
-              CrateForge
-            </span>
+            <span className="text-body font-semibold tracking-tight text-ink-hi">CrateForge</span>
             <span className="ml-auto font-mono text-[9.5px] tracking-[.08em] text-ink-lo">
               V2.0.0
             </span>

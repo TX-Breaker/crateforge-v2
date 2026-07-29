@@ -220,6 +220,7 @@ export function OverviewPage() {
         <EmptyState
           icon={<Music2 />}
           title={tp('emptyTitle')}
+          watermark
           action={
             <div className="flex flex-wrap justify-center gap-2">
               <Button variant="primary" onClick={importXml}>

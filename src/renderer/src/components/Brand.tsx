@@ -183,13 +183,9 @@ export function CrateTile({
 /**
  * Lockup orizzontale (W1 · Primary — Tight, §02): marchio più nome.
  *
- * Scostamento dichiarato dalla specifica: il nome doveva essere in Archivo 600,
- * ma l'interfaccia è passata per intero a JetBrains Mono su scelta dell'autore.
- * Tenere una seconda famiglia solo per il logo avrebbe significato spedire un
- * font intero per sei parole, e un lockup che non somiglia a nessun'altra
- * scritta dell'app. La voce diventa quindi quella "tecnica" della W3: mono,
- * peso 500, tracciatura ampia — la stessa targa di apparecchiatura che il
- * prodotto usa dappertutto.
+ * Il nome è in Archivo 600 con tracciatura -0.035em, come chiede la specifica:
+ * è la voce dell'interfaccia. La targa mono resta al lockup tecnico (W3), che
+ * è un'altra cosa e serve altrove.
  */
 export function CrateLockup({
   size = 22,
@@ -209,13 +205,9 @@ export function CrateLockup({
     <span className={cn('inline-flex items-center gap-2.5', className)}>
       {tile ? <CrateTile size={size} radius={radius} /> : <CrateMark size={size} />}
       <span className="flex flex-col leading-none">
-        <span className="font-mono text-body font-medium tracking-[.06em] text-ink-hi">
-          CrateForge
-        </span>
+        <span className="text-body font-semibold tracking-[-.035em] text-ink-hi">CrateForge</span>
         {descriptor && (
-          <span className="mt-1 font-mono text-caption tracking-[.04em] text-ink-lo">
-            {descriptor}
-          </span>
+          <span className="mt-1 text-caption text-ink-lo">{descriptor}</span>
         )}
       </span>
     </span>
