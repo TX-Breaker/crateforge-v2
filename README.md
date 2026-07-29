@@ -38,7 +38,7 @@ scrittura, registro completo.
 - **Backup Smart Incrementale** — snapshot di `master.db` + `options.json`, poi copia solo i file musicali nuovi/modificati (confronto mtime+size, hash opzionale con verifica d'integrità).
 - **Cacciatore di File Orfani** — diff tra disco e libreria; gli orfani vanno in una **quarantena reversibile**, mai eliminati.
 - **Report Excel** — .xlsx nativo con artista, titolo, versione (estratta dal filename quando il tag manca), durata, BPM, key (opzione Camelot), tag mancanti evidenziati in rosso, filtri attivi.
-- **Converter Anti-Lock-in** — export verso Traktor (.nml), VirtualDJ (XML) e Rekordbox XML. Serato/Engine DJ: in arrivo (la scrittura diretta è rischiosa, non la facciamo finché non è sicura).
+- **Converter Anti-Lock-in** — export verso Traktor (.nml), VirtualDJ (XML + playlist `.vdjfolder`), Rekordbox XML, **Engine DJ** (genera una libreria nuova: la tua non viene toccata) e **Serato** (cue e loop nei tag dei file audio, con backup verificato e ripristino automatico; le playlist come crate, senza mai sovrascrivere quelli esistenti). Ciò che il formato di arrivo non sa rappresentare viene dichiarato, mai scartato in silenzio — vedi [docs/PORTING-V1-V2.md](docs/PORTING-V1-V2.md).
 - **Relocator** (modalità Esperto) — ritrova i file spostati per nome file e genera un XML di aggiornamento da re-importare.
 - **Gestione encoding** — tag con caratteri corrotti/mojibake finiscono in "Da revisionare" e non inquinano gli export.
 
@@ -105,7 +105,10 @@ il backend attuale usa `aubio`+`numpy`.
 ## Prerequisiti
 
 - Node.js ≥ 20 e npm
-- Python 3.10–3.12 (per il sidecar)
+- Python 3.9+ **solo per lo sviluppo dai sorgenti**: nell'app installata il
+  sidecar è un binario e Python non serve. L'app rileva da sola l'interprete
+  (virtualenv del progetto, launcher `py -3`, PATH) e, se manca solo il
+  virtualenv, lo crea e installa le dipendenze in background al primo avvio.
 - (Facoltativo) `fpcalc`/Chromaprint nel PATH per il fingerprint
 
 ## Build
@@ -120,7 +123,7 @@ bash python-sidecar/build_sidecar.sh
 #   Windows:
 powershell -ExecutionPolicy Bypass -File python-sidecar/build_sidecar.ps1
 
-npm test                   # suite Vitest (41 test)
+npm test                   # suite Vitest (231 test; quelli su librerie reali si auto-saltano)
 npm run build              # bundle main/preload/renderer
 npm run dist               # pacchetto installabile (dmg/zip · nsis/portable)
 ```
