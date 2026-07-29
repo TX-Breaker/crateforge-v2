@@ -58,6 +58,12 @@ export interface PageQuery {
   limit: number;
   search?: string;
   needsReview?: boolean;
+  /** solo brani senza tonalita' */
+  noKey?: boolean;
+  /** solo brani senza BPM */
+  noBpm?: boolean;
+  /** solo brani senza genere */
+  noGenre?: boolean;
 }
 
 /** Lettura paginata: la UI non riceve mai l'intera libreria in un colpo solo. */
@@ -76,6 +82,13 @@ export function getTracksPage(db: BetterSqlite3.Database, q: PageQuery): { rows:
     where.push(`needs_review = :nr`);
     params.nr = q.needsReview ? 1 : 0;
   }
+  /* Filtri "manca il dato". Devono stare QUI e non nel renderer: applicati alla
+     sola pagina scaricata mostrerebbero buchi in mezzo all'elenco e un totale
+     che conta righe mai filtrate. Il vuoto include sia NULL sia stringa vuota,
+     perche' un import puo' produrre l'uno o l'altra. */
+  if (q.noKey) where.push(`(camelot IS NULL OR camelot = '')`);
+  if (q.noBpm) where.push(`(bpm IS NULL OR bpm = 0)`);
+  if (q.noGenre) where.push(`(genre IS NULL OR genre = '')`);
   const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
   const total = (
     db.prepare(`SELECT COUNT(*) AS c FROM tracks ${whereSql}`).get(params) as { c: number }

@@ -60,8 +60,17 @@ const api = {
       }>
   },
   library: {
-    page: (q: { offset: number; limit: number; search?: string; needsReview?: boolean }) =>
-      ipcRenderer.invoke('library:page', q),
+    page: (q: {
+      offset: number;
+      limit: number;
+      search?: string;
+      needsReview?: boolean;
+      /* Filtri applicati dal database: applicarli nel renderer lascerebbe buchi
+         nell'elenco virtualizzato e un totale che non corrisponde. */
+      noKey?: boolean;
+      noBpm?: boolean;
+      noGenre?: boolean;
+    }) => ipcRenderer.invoke('library:page', q),
     pageByPlaylist: (playlistId: number, offset: number, limit: number) =>
       ipcRenderer.invoke('library:pageByPlaylist', playlistId, offset, limit),
     stats: () => ipcRenderer.invoke('library:stats'),

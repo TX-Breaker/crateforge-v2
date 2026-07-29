@@ -73,6 +73,14 @@ export function TrackList({
   }, [search]);
 
   const needsReviewOnly = filters.has('needsReview');
+  /* Tutti i filtri vengono applicati dal database. Prima i tre "manca il dato"
+     erano applicati alla sola pagina scaricata: l'elenco mostrava buchi bianchi
+     dove le righe erano state nascoste, e il totale continuava a contare anche
+     quelle. Su una libreria grande significava un contatore che diceva 50.000
+     mentre a schermo se ne vedevano trenta. */
+  const noKey = filters.has('noKey');
+  const noBpm = filters.has('noBpm');
+  const noGenre = filters.has('noGenre');
 
   // Cambiare ricerca o filtri azzera la finestra: le pagine già scaricate non
   // valgono più.
@@ -84,7 +92,10 @@ export function TrackList({
         offset: 0,
         limit: PAGE,
         search: debounced || undefined,
-        needsReview: needsReviewOnly ? true : undefined
+        needsReview: needsReviewOnly ? true : undefined,
+        noKey: noKey || undefined,
+        noBpm: noBpm || undefined,
+        noGenre: noGenre || undefined
       })) as { rows: Track[]; total: number };
       const next: (Track | undefined)[] = new Array(r.total);
       r.rows.forEach((row, i) => (next[i] = row));
@@ -94,7 +105,7 @@ export function TrackList({
       setLoading(false);
       scroller.current?.scrollTo({ top: 0 });
     })();
-  }, [debounced, needsReviewOnly]);
+  }, [debounced, needsReviewOnly, noKey, noBpm, noGenre]);
 
   const loadPage = useCallback(
     async (page: number) => {
@@ -104,7 +115,10 @@ export function TrackList({
         offset: page * PAGE,
         limit: PAGE,
         search: debounced || undefined,
-        needsReview: needsReviewOnly ? true : undefined
+        needsReview: needsReviewOnly ? true : undefined,
+        noKey: noKey || undefined,
+        noBpm: noBpm || undefined,
+        noGenre: noGenre || undefined
       })) as { rows: Track[]; total: number };
       setRows((prev) => {
         const next = prev.slice();
@@ -112,7 +126,7 @@ export function TrackList({
         return next;
       });
     },
-    [debounced, needsReviewOnly]
+    [debounced, needsReviewOnly, noKey, noBpm, noGenre]
   );
 
   const rowH = density === 'compact' ? 30 : 46;
@@ -132,19 +146,6 @@ export function TrackList({
   useEffect(() => {
     for (const it of items) loadPage(Math.floor(it.index / PAGE));
   }, [items, loadPage]);
-
-  // Filtri client-side che l'IPC non copre: si applicano alla finestra
-  // scaricata, e la UI lo dice mostrando il conteggio reale del filtro.
-  const clientFilter = useCallback(
-    (tr: Track | undefined) => {
-      if (!tr) return true;
-      if (filters.has('noKey') && tr.camelot) return false;
-      if (filters.has('noBpm') && tr.bpm) return false;
-      if (filters.has('noGenre') && tr.genre) return false;
-      return true;
-    },
-    [filters]
-  );
 
   const toggle = (id: number, index: number, e: React.MouseEvent) => {
     const next = new Set(selected);
@@ -229,7 +230,6 @@ export function TrackList({
           <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
             {items.map((v) => {
               const tr = rows[v.index];
-              if (!clientFilter(tr)) return null;
               const isSel = tr ? selected.has(tr.id) : false;
               return (
                 <div

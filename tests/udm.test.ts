@@ -76,6 +76,38 @@ describe('getTracksPage (paginazione: mai tutta la libreria)', () => {
     expect(search.total).toBe(1);
   });
 
+  it('i filtri "manca il dato" filtrano nel database, e il totale è quello vero', () => {
+    const db = memDb();
+    const ins = db.prepare(
+      `INSERT INTO tracks (source, source_id, title, camelot, bpm, genre)
+       VALUES ('xml', ?, ?, ?, ?, ?)`
+    );
+    ins.run('1', 'Completo', '8A', 128, 'House');
+    ins.run('2', 'Senza key', null, 126, 'Techno');
+    ins.run('3', 'Key vuota', '', 124, 'Techno');
+    ins.run('4', 'Senza bpm', '9A', null, 'House');
+    ins.run('5', 'Bpm a zero', '9A', 0, 'House');
+    ins.run('6', 'Senza genere', '10A', 130, null);
+    ins.run('7', 'Genere vuoto', '10A', 130, '');
+
+    // Il totale deve contare le righe FILTRATE, non tutta la libreria: è il
+    // numero che l'interfaccia mostra accanto ai chip.
+    const noKey = getTracksPage(db, { offset: 0, limit: 100, noKey: true });
+    expect(noKey.total).toBe(2);
+    expect(noKey.rows.map((r) => r.title).sort()).toEqual(['Key vuota', 'Senza key']);
+
+    const noBpm = getTracksPage(db, { offset: 0, limit: 100, noBpm: true });
+    expect(noBpm.total).toBe(2);
+
+    const noGenre = getTracksPage(db, { offset: 0, limit: 100, noGenre: true });
+    expect(noGenre.total).toBe(2);
+
+    // Filtri combinati: si sommano, non si escludono.
+    expect(getTracksPage(db, { offset: 0, limit: 100, noKey: true, noBpm: true }).total).toBe(0);
+    // Nessun filtro: tutto.
+    expect(getTracksPage(db, { offset: 0, limit: 100 }).total).toBe(7);
+  });
+
   it('escape dei metacaratteri LIKE: % e _ non fanno da wildcard', () => {
     const db = memDb();
     const ins = db.prepare(`INSERT INTO tracks (source, source_id, title) VALUES ('xml', ?, ?)`);

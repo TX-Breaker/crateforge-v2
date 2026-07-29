@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { CalendarClock, Database, Eye, FileSpreadsheet, ListMusic, Receipt } from 'lucide-react';
 import {
   Card,
@@ -179,6 +179,14 @@ function SiaeTab() {
     setSessions(s);
     if (s.length && !s.some((x) => x.session_id === selected)) setSelected(s[0].session_id);
   };
+
+  /* Le serate gia' lette restano nell'archivio interno fra un avvio e l'altro:
+     senza questa lettura all'apertura la scheda si presentava vuota, e l'utente
+     concludeva che i suoi dati fossero spariti. Difetto ereditato dalla V1. */
+  useEffect(() => {
+    void refreshSessions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const doRead = async () => {
     const rb = await window.crateforge.rekordbox.defaultPaths();
