@@ -31,7 +31,7 @@ npm run dist                      # icone + bundle + pacchetto installabile
 |---|---|---|
 | Destinazioni nell'interfaccia | 13 | file in `src/renderer/src/pages/` |
 | Lingue | 4 (it · en · fr · de) | `LOCALES` in `src/renderer/src/lib/i18n.ts` |
-| Test | 247 passati, 2 file auto-saltati | `node scripts/run-vitest.cjs run` |
+| Test | 248 passati, 2 file auto-saltati | `node scripts/run-vitest.cjs run` |
 | File di test | 37 | `ls tests/*.test.ts` |
 | Canali IPC | 71 invoke ↔ 71 handle, 0 disallineamenti | `node tests/ui/ipccheck.cjs` |
 | Icona dell'applicazione | presente | `build/icon.ico` + `build/icon.png`, da `npm run icons` |
@@ -92,14 +92,19 @@ Elenco tenuto corto di proposito: sono punti emersi da revisioni sul codice, non
 una lista dei desideri.
 
 ### Prima di una distribuzione pubblica
-- [ ] **Ripristino dai backup dentro l'app.** I backup delle scritture sugli
-      originali vengono creati e verificati, ma per rimetterli a posto oggi
-      serve il gestore di file. Serve `backups:list` / `backups:restore`,
-      simmetrico a quello della quarantena
-- [ ] **Annullamento cooperativo del sidecar.** Oggi `job:cancel` termina il
-      processo anche mentre sta scrivendo dentro un file: il rollback non fa in
-      tempo a partire. La fase di scrittura va dichiarata non annullabile,
-      oppure l'annullamento va reso cooperativo
+- [ ] **Ripristino dai backup dentro l'app.** Le copie sono verificate e da oggi
+      accompagnate da un manifest che dice da dove veniva ogni file, quindi il
+      ripristino è possibile — ma va fatto a mano. Serve `backups:list` /
+      `backups:restore`, simmetrico a quello della quarantena
+- [ ] **Spazio e rotazione dei backup.** Scrivere i cue in 3.000 brani copia
+      3.000 file audio interi in `%APPDATA%`, senza controllare lo spazio libero
+      e senza cancellarli mai. Servono: somma dei byte mostrata nella conferma,
+      rifiuto se il disco non basta, e una pulizia delle cartelle vecchie
+- [ ] **Annullamento cooperativo del sidecar.** Le tre scritture sugli originali
+      sono ora dichiarate non annullabili e la chiusura della finestra le
+      aspetta, quindi il caso peggiore è chiuso. Resta da fare la versione
+      cooperativa (SIGTERM gestito dal sidecar) per poter offrire di nuovo
+      l'annullamento senza rischi
 - [ ] **Licenze di terze parti.** Il pacchetto include mutagen (GPL-2.0+) e
       altre dipendenze: serve il file delle licenze e una revisione della
       posizione di `package.json` (`UNLICENSED`)
@@ -107,8 +112,6 @@ una lista dei desideri.
       correzioni non raggiungono chi ha già installato
 
 ### Qualità
-- [ ] Filtri dell'elenco brani applicati dal database e non alla sola finestra
-      già scaricata (oggi il contatore può mentire)
 - [ ] Contrasto: il testo terziario è sotto AA in tutte le palette; accento e
       avviso usati come TESTO falliscono AA in Studio chiaro
 - [ ] Copertura CI: i test del sidecar non vengono eseguiti, e quelli dell'app

@@ -661,6 +661,14 @@ export function ConvertPage() {
             value: convertSource ? tp('seratoScopeConverted') : tp('seratoScopeAll'),
             warn: !convertSource
           },
+          {
+            // Il writer preserva ciò che non interpreta, ma i CUE li
+            // SOSTITUISCE: se l'utente aveva già segnato i suoi punti dentro
+            // Serato, quelli spariscono. Va detto prima, non dopo.
+            label: tp('seratoFactReplace'),
+            value: tp('yes'),
+            warn: true
+          },
           { label: tp('seratoFactBackup'), value: tp('yes') }
         ]}
         description={<p>{tp('seratoConfirmBody')}</p>}
