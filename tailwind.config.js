@@ -63,24 +63,29 @@ module.exports = {
         }
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'],
-        mono: ['JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'monospace']
+        /* Una sola famiglia: `font-sans` e `font-mono` puntano allo stesso
+           carattere, così le classi esistenti continuano a funzionare senza
+           dover ripassare ogni componente. */
+        sans: ['JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
+        mono: ['JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace']
       },
-      /* Sei ruoli tipografici, niente in mezzo (§1.5).
-         Spaziatura: i corpi piccoli (body, caption, data) hanno un tracking
-         POSITIVO — a 11-13px le lettere si toccano e il testo sembra soffocato;
-         i corpi grandi restano negativi, perché lì il difetto è opposto e gli
-         spazi si aprono da soli. Interlinee alzate di 1px sui ruoli di lettura. */
+      /* Sei ruoli tipografici, niente in mezzo (§1.5), ritarati sul monospazio.
+         Due regole che cambiano rispetto a un proporzionale:
+         1. i corpi calano di mezzo punto — il monospazio è più largo, e a parità
+            di misura la riga porterebbe meno parole;
+         2. la tracciatura POSITIVA sparisce dai corpi di lettura: l'aria fra le
+            lettere il monospazio ce l'ha per costruzione. Resta solo dove è un
+            segnale di ruolo (occhiello e targa), non un aggiustamento ottico. */
       fontSize: {
-        display: ['40px', { lineHeight: '46px', letterSpacing: '-0.028em', fontWeight: '600' }],
-        title: ['24px', { lineHeight: '31px', letterSpacing: '-0.018em', fontWeight: '600' }],
-        section: ['15px', { lineHeight: '21px', letterSpacing: '0', fontWeight: '600' }],
-        body: ['13px', { lineHeight: '20px', letterSpacing: '0.006em' }],
-        caption: ['11.5px', { lineHeight: '17px', letterSpacing: '0.01em' }],
-        eyebrow: ['11px', { lineHeight: '15px', letterSpacing: '0.13em', fontWeight: '500' }],
-        data: ['12.5px', { lineHeight: '17px', letterSpacing: '0.012em', fontWeight: '500' }],
-        'data-lg': ['27px', { lineHeight: '31px', fontWeight: '500', letterSpacing: '-0.015em' }],
-        'data-xl': ['44px', { lineHeight: '48px', fontWeight: '500', letterSpacing: '-0.025em' }]
+        display: ['38px', { lineHeight: '46px', letterSpacing: '-0.02em', fontWeight: '600' }],
+        title: ['22px', { lineHeight: '30px', letterSpacing: '-0.015em', fontWeight: '600' }],
+        section: ['14px', { lineHeight: '20px', letterSpacing: '0', fontWeight: '600' }],
+        body: ['12.5px', { lineHeight: '20px', letterSpacing: '0' }],
+        caption: ['11px', { lineHeight: '17px', letterSpacing: '0' }],
+        eyebrow: ['10.5px', { lineHeight: '15px', letterSpacing: '0.13em', fontWeight: '500' }],
+        data: ['12px', { lineHeight: '17px', letterSpacing: '0', fontWeight: '500' }],
+        'data-lg': ['26px', { lineHeight: '31px', fontWeight: '500', letterSpacing: '-0.01em' }],
+        'data-xl': ['42px', { lineHeight: '48px', fontWeight: '500', letterSpacing: '-0.02em' }]
       },
       borderRadius: {
         chip: '4px',

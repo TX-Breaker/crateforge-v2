@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '@/lib/utils';
+import { CrateWatermark } from '@/components/Brand';
 
 /* Riesportati da card.tsx: i componenti li importano da un posto solo. */
 export { Skeleton, SkeletonRows } from './card';
@@ -592,31 +593,43 @@ export function EmptyState({
   title,
   children,
   action,
-  className
+  className,
+  watermark = true
 }: {
   icon?: React.ReactNode;
   title: React.ReactNode;
   children?: React.ReactNode;
   action?: React.ReactNode;
   className?: string;
+  /** Filigrana del marchio dietro il contenuto; si spegne dove darebbe fastidio. */
+  watermark?: boolean;
 }) {
   return (
     <div
       className={cn(
-        'flex flex-col items-center gap-3 rounded-card border border-dashed border-line px-6 py-10 text-center',
+        'relative flex flex-col items-center gap-3 overflow-hidden rounded-card border border-dashed border-line px-6 py-10 text-center',
         className
       )}
     >
+      {/* Resa "Disabled · watermark" della specifica logo §04: filigrana spenta,
+          mai con l'accento — l'ambra significa "questa è la selezione", e una
+          filigrana non seleziona niente. Dice di chi è la finestra senza
+          rubare l'attenzione al testo che spiega cosa fare. */}
+      {watermark && (
+        <span aria-hidden className="pointer-events-none absolute inset-0 grid place-items-center">
+          <CrateWatermark size={104} />
+        </span>
+      )}
       {icon && (
-        <span className="grid size-10 place-items-center rounded-full bg-surface-3 text-ink-lo [&_svg]:size-5">
+        <span className="relative grid size-10 place-items-center rounded-full bg-surface-3 text-ink-lo [&_svg]:size-5">
           {icon}
         </span>
       )}
-      <div className="space-y-1">
+      <div className="relative space-y-1">
         <div className="text-section text-ink-hi">{title}</div>
         {children && <p className="mx-auto max-w-md text-caption text-ink-mid">{children}</p>}
       </div>
-      {action}
+      {action && <div className="relative">{action}</div>}
     </div>
   );
 }

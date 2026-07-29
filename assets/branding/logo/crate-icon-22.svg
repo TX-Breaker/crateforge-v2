@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="22" height="22" fill="none" role="img" aria-label="CrateForge">
+  <title>CrateForge</title>
+  <rect width="64" height="64" rx="14" fill="#E8912E"></rect>
+  <path d="M14 17V43a5 5 0 0 0 5 5h26a5 5 0 0 0 5-5V17" stroke="#0A0B0D" stroke-width="7" stroke-linecap="square"></path>
+  <rect x="22" y="28" width="7" height="18" rx="1" fill="#0A0B0D"></rect>
+  <rect x="32" y="23" width="7" height="23" rx="1" fill="#0A0B0D"></rect>
+  <rect x="42" y="31" width="7" height="15" rx="1" fill="#0A0B0D"></rect>
+</svg>

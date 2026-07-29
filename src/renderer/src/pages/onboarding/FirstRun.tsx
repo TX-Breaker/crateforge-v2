@@ -20,6 +20,7 @@ import { useLibrary } from '@/lib/library';
 import { useJobs } from '@/lib/jobs';
 import { LOCALES } from '@/lib/i18n';
 import { pageText } from '@/lib/i18nPages';
+import { CrateTile } from '@/components/Brand';
 import { cn, formatClock, shortenPath } from '@/lib/utils';
 
 type SoftwareId = 'rekordbox' | 'traktor' | 'virtualdj' | 'serato' | 'engine';
@@ -154,9 +155,7 @@ export function FirstRun() {
     <div className="flex h-full flex-col bg-canvas">
       {/* barra dei passi */}
       <header className="flex shrink-0 items-center gap-4 border-b border-line-subtle bg-surface-1 px-6 py-3">
-        <span className="grid size-[22px] place-items-center rounded-[5px] bg-accent font-mono text-[12px] font-bold text-accent-ink">
-          C
-        </span>
+        <CrateTile size={22} radius={5} />
         <div className="flex flex-wrap items-center gap-1.5">
           {steps.map((s, i) => (
             <span

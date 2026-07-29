@@ -38,6 +38,7 @@ import { useRouter } from '@/lib/router';
 import { LOCALES, t } from '@/lib/i18n';
 import { pageText } from '@/lib/i18nPages';
 import logoUrl from '../../../../assets/branding/rekordbox-dj-italia-logo.svg';
+import { CrateStack } from '@/components/Brand';
 
 /**
  * Impostazioni — quattro tab: Generale (aspetto, densità, lingua, movimento),
@@ -560,15 +561,16 @@ function AboutTab() {
   return (
     <Card>
       <CardContent className="flex flex-col items-center gap-4 py-10 text-center">
-        <span className="grid size-12 place-items-center rounded-card bg-accent font-mono text-[22px] font-bold text-accent-ink">
-          C
-        </span>
-        <div>
-          <div className="text-title text-ink-hi">CrateForge</div>
-          <div className="font-mono text-caption tabular-nums text-ink-lo">v2.0.0</div>
-        </div>
+        {/* Unico punto in cui la piastrella SPARISCE (specifica logo §05): a
+            48px il marchio sta da solo e la scritta passa alla voce tecnica —
+            mono maiuscolo, tracciatura ampia, riga di versione sotto. */}
+        <CrateStack size={48} version="v2.0.0" />
         <p className="max-w-lg text-body text-ink-mid">{tp('tagline')}</p>
-        <img src={logoUrl} alt="Rekordbox DJ Italia Group" className="h-20 w-20 opacity-90" />
+        {/* Co-branding (§05): righe separate e una banda di spazio libero piena
+            fra i due marchi, mai affiancati in un lockup comune e mai scalati
+            per pareggiarsi — il marchio della community resta visibilmente una
+            cosa sua. */}
+        <img src={logoUrl} alt="Rekordbox DJ Italia Group" className="mt-2 h-20 w-20 opacity-90" />
         <p className="max-w-lg text-caption text-ink-mid">{tp('credit')}</p>
         <p className="max-w-lg text-caption text-ink-lo">{tp('disclaimer')}</p>
         <p className="max-w-lg text-caption text-ink-lo">{t(locale, 'safety.readonly')}</p>

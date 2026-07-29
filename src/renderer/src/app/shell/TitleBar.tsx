@@ -3,6 +3,7 @@ import { useAppState } from '@/lib/appState';
 import { isMac } from '@/lib/platform';
 import { t } from '@/lib/i18n';
 import { cn, shortenPath } from '@/lib/utils';
+import { CrateTile } from '@/components/Brand';
 
 /**
  * Chrome della finestra (§3.1). Stessa gerarchia, buone maniere native.
@@ -25,11 +26,11 @@ export function TitleBar() {
       )}
       style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
     >
-      {!isMac && (
-        <span className="mr-2 grid size-[18px] place-items-center rounded-[4px] bg-accent font-mono text-[9px] font-bold text-accent-ink">
-          C
-        </span>
-      )}
+      {/* Marchio in negativo sulla piastrella ambra (specifica logo §05):
+          stesso box, stesso raggio, stessa posizione della "C" che c'era prima,
+          così lo scambio non muove il layout. A 18px vale il disegno D, due
+          dorsi: tre a questa misura diventano un blocco grigio. */}
+      {!isMac && <CrateTile size={18} radius={4} className="mr-2" />}
       <span className="truncate text-caption text-ink-mid">
         CrateForge
         {stats && rbPaths?.dir ? (

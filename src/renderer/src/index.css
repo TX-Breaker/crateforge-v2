@@ -15,16 +15,19 @@
  * `bg-accent/15` funziona su ogni token.
  * ------------------------------------------------------------------------- */
 
-/* Inter al posto di Archivo: a 13px l'altezza-x maggiore e le aperture più
-   larghe di Inter reggono la densità di questa interfaccia, dove Archivo — un
-   grottesco stretto, disegnato per titoli — chiudeva le contro-forme e faceva
-   sembrare il testo soffocato. JetBrains Mono resta per numeri e percorsi. */
-@import '@fontsource/inter/400.css';
-@import '@fontsource/inter/500.css';
-@import '@fontsource/inter/600.css';
-@import '@fontsource/inter/700.css';
+/* JetBrains Mono per TUTTA l'interfaccia, peso 500 di base.
+   Una famiglia sola, monospaziata: ogni cifra occupa la stessa larghezza, e in
+   un programma che è quasi solo BPM, tonalità, durate, conteggi e percorsi le
+   colonne stanno in colonna senza `tabular-nums` sparsi a mano. Il carattere è
+   nato per essere letto a lungo su schermo a corpo piccolo, che è esattamente
+   il mestiere di questa app. Il peso 500 è il regolare qui: il 400 su fondo
+   scuro si assottiglia e sparisce.
+   Conseguenza accettata: il monospazio è più largo del proporzionale, quindi le
+   righe portano meno parole. Le misure tipografiche sotto sono state strette di
+   conseguenza, non lasciate com'erano. */
 @import '@fontsource/jetbrains-mono/400.css';
 @import '@fontsource/jetbrains-mono/500.css';
+@import '@fontsource/jetbrains-mono/600.css';
 @import '@fontsource/jetbrains-mono/700.css';
 
 @tailwind base;
@@ -232,11 +235,11 @@
   /* Densità delle liste: comfortable 46px, compact 30px (§5.3). */
   :root {
     --row-h: 46px;
-    --row-font: 12.5px;
+    --row-font: 12px;
   }
   :root[data-density='compact'] {
     --row-h: 30px;
-    --row-font: 11.5px;
+    --row-font: 11px;
   }
 
   * {
@@ -253,13 +256,15 @@
     margin: 0;
     background-color: rgb(var(--canvas));
     color: rgb(var(--text-hi));
-    font-family: Inter, system-ui, -apple-system, 'Segoe UI', sans-serif;
-    font-size: 13px;
-    /* Interlinea 19→20px e spaziatura +0.006em: l'aria che mancava. Il valore
-       è piccolo di proposito — sopra 0.01em un carattere da interfaccia perde
-       la parola come unità visiva e il testo si legge lettera per lettera. */
+    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12.5px;
+    font-weight: 500;
+    /* Corpo 13→12.5px perché il monospazio è più largo: a parità di misura la
+       riga porterebbe un quarto di parole in meno. L'interlinea resta generosa
+       (20px) e la tracciatura torna a zero: il monospazio l'aria fra le lettere
+       ce l'ha già per costruzione, aggiungerne farebbe cadere la parola a pezzi. */
     line-height: 20px;
-    letter-spacing: 0.006em;
+    letter-spacing: 0;
     -webkit-font-smoothing: antialiased;
     text-wrap: pretty;
     /* Cross-fade del tema: 240ms lineari, nessun flash dell'altra palette. */

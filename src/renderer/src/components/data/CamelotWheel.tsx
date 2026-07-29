@@ -274,7 +274,7 @@ export function CamelotWheel({
           y={cy + 26}
           textAnchor="middle"
           fill={inks.mid}
-          style={{ fontFamily: 'Inter, sans-serif', fontSize: 9.5 }}
+          style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9.5 }}
         >
           {KEYNAME[shownPos.letter][shownPos.num - 1]}
         </text>

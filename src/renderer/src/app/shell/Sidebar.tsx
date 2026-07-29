@@ -6,6 +6,7 @@ import { useLibrary } from '@/lib/library';
 import { t } from '@/lib/i18n';
 import { shortcut } from '@/lib/platform';
 import { Tooltip } from '@/components/ui/misc';
+import { CrateTile } from '@/components/Brand';
 import { GROUPS, visibleRoutes, type RouteDef } from '@/app/routes';
 
 /**
@@ -52,12 +53,15 @@ export function Sidebar({
     >
       {/* marchio + versione */}
       <div className={cn('flex items-center gap-2.5 px-4 pb-3 pt-4', collapsed && 'justify-center px-0')}>
-        <span className="grid size-[22px] shrink-0 place-items-center rounded-[5px] bg-accent font-mono text-[12px] font-bold text-accent-ink">
-          C
-        </span>
+        {/* Disegno C a 22px (specifica logo §03 e §05): è la stessa piastrella
+            che, con la colonna collassata a 68px, resta da sola al centro — per
+            questo il marchio doveva funzionare a 22px senza la parola. */}
+        <CrateTile size={22} radius={5} />
         {!collapsed && (
           <>
-            <span className="text-body font-semibold tracking-tight text-ink-hi">CrateForge</span>
+            <span className="font-mono text-body font-medium tracking-[.06em] text-ink-hi">
+              CrateForge
+            </span>
             <span className="ml-auto font-mono text-[9.5px] tracking-[.08em] text-ink-lo">
               V2.0.0
             </span>
