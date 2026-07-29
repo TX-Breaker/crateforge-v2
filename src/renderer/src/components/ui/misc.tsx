@@ -275,7 +275,8 @@ export function Segmented<T extends string>({
   onChange,
   options,
   size = 'md',
-  className
+  className,
+  disabled = false
 }: {
   value: T;
   onChange: (v: T) => void;
@@ -287,12 +288,16 @@ export function Segmented<T extends string>({
   }[];
   size?: 'sm' | 'md';
   className?: string;
+  /** Gruppo inerte: resta leggibile e annunciato, ma non si cambia. */
+  disabled?: boolean;
 }) {
   return (
     <div
       role="radiogroup"
+      aria-disabled={disabled || undefined}
       className={cn(
         'inline-flex items-center gap-0.5 rounded-control border border-line bg-surface-3 p-0.5',
+        disabled && 'opacity-55',
         className
       )}
     >
@@ -303,8 +308,10 @@ export function Segmented<T extends string>({
             key={o.value}
             role="radio"
             aria-checked={active}
+            disabled={disabled}
             onClick={() => onChange(o.value)}
             className={cn(
+              disabled && 'cursor-not-allowed',
               'inline-flex items-center gap-1.5 rounded-[4px] px-2.5 font-medium transition-colors duration-press',
               size === 'sm' ? 'h-6 text-caption' : 'h-7 text-body',
               active

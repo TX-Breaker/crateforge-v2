@@ -15,10 +15,14 @@
  * `bg-accent/15` funziona su ogni token.
  * ------------------------------------------------------------------------- */
 
-@import '@fontsource/archivo/400.css';
-@import '@fontsource/archivo/500.css';
-@import '@fontsource/archivo/600.css';
-@import '@fontsource/archivo/700.css';
+/* Inter al posto di Archivo: a 13px l'altezza-x maggiore e le aperture più
+   larghe di Inter reggono la densità di questa interfaccia, dove Archivo — un
+   grottesco stretto, disegnato per titoli — chiudeva le contro-forme e faceva
+   sembrare il testo soffocato. JetBrains Mono resta per numeri e percorsi. */
+@import '@fontsource/inter/400.css';
+@import '@fontsource/inter/500.css';
+@import '@fontsource/inter/600.css';
+@import '@fontsource/inter/700.css';
 @import '@fontsource/jetbrains-mono/400.css';
 @import '@fontsource/jetbrains-mono/500.css';
 @import '@fontsource/jetbrains-mono/700.css';
@@ -177,6 +181,54 @@
     --glass: 255 255 255;
   }
 
+  /* ---------------- OLED · sempre scuro ----------------
+     Palette per schermi OLED: il canvas è nero ASSOLUTO (0 0 0), dove il
+     pixel è spento — meno consumo e nero senza alone. Due conseguenze di
+     progetto, non di gusto:
+     1. le ombre spariscono (un'ombra nera su fondo nero non esiste), quindi
+        l'elevazione la portano i BORDI, qui più chiari che nelle altre palette;
+     2. il testo non è bianco puro: 255 su 0 produce alone sui pannelli OLED e
+        stanca l'occhio in cabina, dove si legge di sbieco e al buio.
+     Ogni token è ridefinito per intero: il primo blocco ha selettore `:root`,
+     che matcha anche qui, e qualunque token omesso erediterebbe Studio Dark. */
+  :root[data-style='oled'] {
+    --canvas: 0 0 0;
+    --surface-1: 9 10 11;
+    --surface-2: 15 16 18;
+    --surface-3: 22 24 27;
+    --surface-hover: 31 34 38;
+
+    --line-subtle: 30 33 37;
+    --line: 48 52 58;
+    --line-strong: 74 80 88;
+
+    --text-hi: 233 234 237;
+    --text-mid: 165 170 178;
+    --text-lo: 150 155 163;
+    --text-disabled: 92 98 106;
+
+    --accent: 236 152 58;
+    --accent-hover: 246 170 88;
+    --accent-ink: 0 0 0;
+
+    --warning: 216 172 52;
+    --warning-ink: 0 0 0;
+    --destructive: 218 94 84;
+    --destructive-ink: 255 255 255;
+    --success: 104 172 126;
+    --success-ink: 0 0 0;
+
+    --sidebar-expert: 20 16 10;
+
+    /* Ombre quasi inutili sul nero: restano per il distacco dei livelli
+       sovrapposti (dialog sopra dialog), ma il lavoro lo fanno i bordi. */
+    --shadow-e1: 0 1px 2px rgb(0 0 0 / 0.6);
+    --shadow-e2: 0 6px 18px rgb(0 0 0 / 0.7);
+    --shadow-e3: 0 18px 48px rgb(0 0 0 / 0.8);
+    --glass: 0 0 0;
+    --glass-blur: 16px;
+  }
+
   /* Densità delle liste: comfortable 46px, compact 30px (§5.3). */
   :root {
     --row-h: 46px;
@@ -201,9 +253,13 @@
     margin: 0;
     background-color: rgb(var(--canvas));
     color: rgb(var(--text-hi));
-    font-family: Archivo, system-ui, -apple-system, 'Segoe UI', sans-serif;
+    font-family: Inter, system-ui, -apple-system, 'Segoe UI', sans-serif;
     font-size: 13px;
-    line-height: 19px;
+    /* Interlinea 19→20px e spaziatura +0.006em: l'aria che mancava. Il valore
+       è piccolo di proposito — sopra 0.01em un carattere da interfaccia perde
+       la parola come unità visiva e il testo si legge lettera per lettera. */
+    line-height: 20px;
+    letter-spacing: 0.006em;
     -webkit-font-smoothing: antialiased;
     text-wrap: pretty;
     /* Cross-fade del tema: 240ms lineari, nessun flash dell'altra palette. */

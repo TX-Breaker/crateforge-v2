@@ -63,20 +63,24 @@ module.exports = {
         }
       },
       fontFamily: {
-        sans: ['Archivo', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'],
+        sans: ['Inter', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'],
         mono: ['JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'monospace']
       },
-      /* Sei ruoli tipografici, niente in mezzo (§1.5). */
+      /* Sei ruoli tipografici, niente in mezzo (§1.5).
+         Spaziatura: i corpi piccoli (body, caption, data) hanno un tracking
+         POSITIVO — a 11-13px le lettere si toccano e il testo sembra soffocato;
+         i corpi grandi restano negativi, perché lì il difetto è opposto e gli
+         spazi si aprono da soli. Interlinee alzate di 1px sui ruoli di lettura. */
       fontSize: {
-        display: ['40px', { lineHeight: '44px', letterSpacing: '-0.03em', fontWeight: '600' }],
-        title: ['24px', { lineHeight: '30px', letterSpacing: '-0.02em', fontWeight: '600' }],
-        section: ['15px', { lineHeight: '20px', fontWeight: '600' }],
-        body: ['13px', { lineHeight: '19px' }],
-        caption: ['11.5px', { lineHeight: '16px' }],
-        eyebrow: ['11px', { lineHeight: '14px', letterSpacing: '0.14em', fontWeight: '500' }],
-        data: ['12.5px', { lineHeight: '16px', fontWeight: '500' }],
-        'data-lg': ['27px', { lineHeight: '30px', fontWeight: '500', letterSpacing: '-0.02em' }],
-        'data-xl': ['44px', { lineHeight: '46px', fontWeight: '500', letterSpacing: '-0.03em' }]
+        display: ['40px', { lineHeight: '46px', letterSpacing: '-0.028em', fontWeight: '600' }],
+        title: ['24px', { lineHeight: '31px', letterSpacing: '-0.018em', fontWeight: '600' }],
+        section: ['15px', { lineHeight: '21px', letterSpacing: '0', fontWeight: '600' }],
+        body: ['13px', { lineHeight: '20px', letterSpacing: '0.006em' }],
+        caption: ['11.5px', { lineHeight: '17px', letterSpacing: '0.01em' }],
+        eyebrow: ['11px', { lineHeight: '15px', letterSpacing: '0.13em', fontWeight: '500' }],
+        data: ['12.5px', { lineHeight: '17px', letterSpacing: '0.012em', fontWeight: '500' }],
+        'data-lg': ['27px', { lineHeight: '31px', fontWeight: '500', letterSpacing: '-0.015em' }],
+        'data-xl': ['44px', { lineHeight: '48px', fontWeight: '500', letterSpacing: '-0.025em' }]
       },
       borderRadius: {
         chip: '4px',

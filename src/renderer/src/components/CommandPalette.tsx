@@ -141,10 +141,21 @@ export function CommandPalette({
       },
       {
         id: 'style',
-        label: t(locale, themeStyle === 'studio' ? 'action.styleNeutral' : 'action.styleStudio'),
+        // Ciclo a tre, non interruttore: con un ternario da OLED non si sarebbe
+        // più usciti se non dalle impostazioni.
+        label: t(
+          locale,
+          themeStyle === 'studio'
+            ? 'action.styleNeutral'
+            : themeStyle === 'neutral'
+              ? 'action.styleOled'
+              : 'action.styleStudio'
+        ),
         icon: <Wand2 />,
         run: () => {
-          setThemeStyle(themeStyle === 'studio' ? 'neutral' : 'studio');
+          setThemeStyle(
+            themeStyle === 'studio' ? 'neutral' : themeStyle === 'neutral' ? 'oled' : 'studio'
+          );
           close();
         }
       },

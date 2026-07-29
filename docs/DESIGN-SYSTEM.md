@@ -41,11 +41,13 @@ in tutte e sei le combinazioni di tema.
 
 Due impostazioni indipendenti, persistite separatamente nelle settings dell'UDM:
 
-- `themeStyle` → `studio` | `neutral` (attributo `data-style` su `<html>`)
+- `themeStyle` → `studio` | `neutral` | `oled` (attributo `data-style` su `<html>`)
 - `theme` → `light` | `dark` | `system` (classe `dark` su `<html>`)
 
-`system` risolve sulla luminosità del sistema operativo **mantenendo lo stile scelto**:
-quattro palette coprono le sei combinazioni.
+`system` risolve sulla luminosità del sistema operativo **mantenendo lo stile scelto**.
+Cinque palette: quattro coprono le combinazioni stile × luminosità, la quinta è OLED,
+che esiste per spegnere i pixel e quindi **forza lo scuro** — con l'interruttore di
+luminosità disattivato e il motivo scritto accanto, invece di un comando inerte.
 
 | Palette | canvas | surface-2 | accento | note |
 |---|---|---|---|---|
@@ -53,6 +55,7 @@ quattro palette coprono le sei combinazioni.
 | Studio · Light | `#F1EFEB` | `#FBFAF8` | `#B86A15` | base carta calda invece del bianco puro; accento scurito per l'AA |
 | Neutral · Dark | `#0E0F11` | `#1C1E22` | `#7FA8CC` | più freddo e piatto, densità più bassa |
 | Neutral · Light | `#F7F7F8` | `#FFFFFF` | `#3D6C99` | quasi bianco, filetti netti, ombre minime |
+| OLED · sempre scuro | `#000000` | `#0F1012` | `#EC983A` | pixel spento; l'elevazione la portano i bordi, non le ombre; testo mai bianco puro (alone) |
 
 L'accento è **desaturato sotto la soglia neon** in tutte e quattro le palette ed è
 sempre uno solo per tema.
@@ -72,7 +75,9 @@ renderer (`default-src 'self'`) vieta font remoti, e per lo stesso motivo
 `data:` verrebbe bloccato, con il risultato silenzioso di un'app che ricade sui font
 di sistema.
 
-- **Archivo** — interfaccia. Grottesca geometrica con temperamento ingegneristico.
+- **Inter** — interfaccia. Scelta per l'altezza-x alta e le aperture larghe: a 13px
+  regge la densità di questa app. Sostituisce Archivo, che è un grottesco stretto
+  disegnato per i titoli e a corpo piccolo chiudeva le contro-forme.
 - **JetBrains Mono** — dati. Obbligatoria per ogni numero: BPM, key Camelot, durata,
   conteggi, percentuali, ETA, percorsi, hash. Con `tabular-nums` le cifre non
   ballano mentre un contatore sale.
@@ -81,15 +86,20 @@ Sei ruoli, niente in mezzo (classi Tailwind):
 
 | Classe | Uso |
 |---|---|
-| `text-display` | 40/44, -0.03em — titoli di primo avvio |
-| `text-title` | 24/30, -0.02em — titolo di dialog e di sezione grande |
-| `text-section` | 15/20 — titolo di card |
-| `text-body` | 13/19 — default per tutta la prosa d'interfaccia |
-| `text-caption` | 11.5/16 — note, testo d'aiuto, timestamp |
-| `text-eyebrow` | mono 11, 0.14em — etichette di gruppo maiuscole |
+| `text-display` | 40/46, -0.028em — titoli di primo avvio |
+| `text-title` | 24/31, -0.018em — titolo di dialog e di sezione grande |
+| `text-section` | 15/21 — titolo di card |
+| `text-body` | 13/20, +0.006em — default per tutta la prosa d'interfaccia |
+| `text-caption` | 11.5/17, +0.01em — note, testo d'aiuto, timestamp |
+| `text-eyebrow` | mono 11, 0.13em — etichette di gruppo maiuscole |
 | `text-data`, `text-data-lg`, `text-data-xl` | mono tabellare per i valori |
 
 > Niente `text-xs` sparso a sentimento. Se serve un settimo livello, il layout è sbagliato.
+
+**Spaziatura tra i caratteri.** I corpi piccoli (body, caption, data) hanno tracking
+POSITIVO: a 11-13px le lettere si toccano e il testo sembra soffocato. I corpi grandi
+restano negativi, perché lì il difetto è l'opposto. Il valore è volutamente piccolo:
+sopra 0.01em una scrittura da interfaccia perde la parola come unità visiva.
 
 ---
 

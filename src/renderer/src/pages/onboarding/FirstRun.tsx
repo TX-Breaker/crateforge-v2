@@ -421,7 +421,8 @@ export function FirstRun() {
                       onChange={setThemeStyle}
                       options={[
                         { value: 'studio', label: tp('styleStudio') },
-                        { value: 'neutral', label: tp('styleNeutral') }
+                        { value: 'neutral', label: tp('styleNeutral') },
+                        { value: 'oled', label: tp('styleOled') }
                       ]}
                     />
                   </div>

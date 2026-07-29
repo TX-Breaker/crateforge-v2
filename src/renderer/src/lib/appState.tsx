@@ -5,14 +5,18 @@ import type { Locale } from './i18n';
  * Stato applicativo globale, persistito nelle settings dell'UDM via IPC.
  *
  * Il tema ha DUE assi indipendenti (§1.4 del design system):
- *   themeStyle : 'studio' | 'neutral'          → famiglia di palette
- *   theme      : 'light' | 'dark' | 'system'   → luminosità
- * Quattro palette coprono le sei combinazioni; `system` risolve sulla
- * luminosità del sistema operativo mantenendo lo stile scelto.
+ *   themeStyle : 'studio' | 'neutral' | 'oled'  → famiglia di palette
+ *   theme      : 'light' | 'dark' | 'system'    → luminosità
+ * `system` risolve sulla luminosità del sistema operativo mantenendo lo stile.
+ *
+ * OLED è l'eccezione dichiarata: esiste per spegnere i pixel di uno schermo
+ * OLED, quindi ha senso solo scuro. Quando è attivo la luminosità è forzata a
+ * scuro e l'interfaccia lo dice, invece di lasciare all'utente un interruttore
+ * che non fa niente.
  */
 
 export type Theme = 'light' | 'dark' | 'system';
-export type ThemeStyle = 'studio' | 'neutral';
+export type ThemeStyle = 'studio' | 'neutral' | 'oled';
 export type Density = 'comfortable' | 'compact';
 export type MotionPref = 'system' | 'reduce';
 export type UserMode = 'simple' | 'expert';
@@ -67,7 +71,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         get('onboarded')
       ]);
       if (t === 'light' || t === 'dark' || t === 'system') setThemeState(t);
-      if (style === 'studio' || style === 'neutral') setThemeStyleState(style);
+      if (style === 'studio' || style === 'neutral' || style === 'oled') setThemeStyleState(style);
       if (d === 'comfortable' || d === 'compact') setDensityState(d);
       if (mo === 'system' || mo === 'reduce') setMotionState(mo);
       if (m === 'simple' || m === 'expert') setModeState(m);
@@ -85,7 +89,9 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     return () => mql.removeEventListener('change', apply);
   }, []);
 
-  const isDark = theme === 'dark' || (theme === 'system' && systemDark);
+  // OLED è per definizione scuro: la scelta di luminosità resta memorizzata
+  // (se l'utente torna a Studio ritrova la sua) ma non viene applicata.
+  const isDark = themeStyle === 'oled' || theme === 'dark' || (theme === 'system' && systemDark);
 
   // Gli assi vivono sull'elemento <html>: il CSS fa il resto senza che i
   // componenti sappiano nulla della palette attiva.

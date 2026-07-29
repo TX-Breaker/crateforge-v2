@@ -95,7 +95,8 @@ function GeneralTab() {
 
   const styles: { id: ThemeStyle; label: string; desc: string }[] = [
     { id: 'studio', label: tp('styleStudio'), desc: tp('styleStudioDesc') },
-    { id: 'neutral', label: tp('styleNeutral'), desc: tp('styleNeutralDesc') }
+    { id: 'neutral', label: tp('styleNeutral'), desc: tp('styleNeutralDesc') },
+    { id: 'oled', label: tp('styleOled'), desc: tp('styleOledDesc') }
   ];
 
   return (
@@ -108,7 +109,7 @@ function GeneralTab() {
         <CardContent className="space-y-4">
           <div className="space-y-2">
             <Eyebrow>{tp('styleLabel')}</Eyebrow>
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-3 sm:grid-cols-3">
               {styles.map((s) => (
                 <button
                   key={s.id}
@@ -131,9 +132,16 @@ function GeneralTab() {
 
           <div className="space-y-2 border-t border-line-subtle pt-3">
             <Eyebrow>{tp('brightnessLabel')}</Eyebrow>
+            {/* Con OLED la luminosità è forzata a scuro: l'interruttore resta
+                visibile ma disattivato, e sopra c'è scritto perché. Un comando
+                che non fa nulla senza spiegazione è peggio di un comando in meno. */}
+            {themeStyle === 'oled' && (
+              <p className="text-caption text-ink-mid">{tp('oledForcesDark')}</p>
+            )}
             <Segmented<Theme>
-              value={theme}
+              value={themeStyle === 'oled' ? 'dark' : theme}
               onChange={setTheme}
+              disabled={themeStyle === 'oled'}
               options={[
                 { value: 'light', label: tp('themeLight'), icon: <Sun /> },
                 { value: 'dark', label: tp('themeDark'), icon: <Moon /> },

@@ -99,7 +99,7 @@ chiamata di rete dal renderer: tutto invariato.
 | `cmdk` | palette comandi |
 | `@tanstack/react-virtual` | liste tracce virtualizzate |
 | `@radix-ui/react-popover` | centro notifiche in topbar |
-| `@fontsource/archivo`, `@fontsource/jetbrains-mono` | font bundlati localmente (la CSP vieta i font remoti) |
+| `@fontsource/inter`, `@fontsource/jetbrains-mono` | font bundlati localmente (la CSP vieta i font remoti) |
 
 Nessuna libreria di charting: i grafici sono SVG scritti a mano, più leggeri di un
 runtime e senza risorse esterne.
