@@ -179,7 +179,13 @@ export function readEngineLibrary(dbPath: string): ForeignLibrary {
     ].join(', ');
 
     const rows = db.prepare(`SELECT ${sel} FROM Track`).all() as Record<string, unknown>[];
-    const libRoot = resolve(dirname(dbPath), '..', '..'); // …/Engine Library/Database2/m.db → drive root
+    // I path dei brani sono relativi alla cartella "Engine Library" — NON alla
+    // cartella che la contiene. Verificato sui dati reali: da
+    // …/Music/Engine Library/Database2/m.db, il path "../../Desktop/x.mp3"
+    // deve risolvere in …/Vale/Desktop/x.mp3, e ci riesce solo partendo da
+    // "Engine Library". Risalendo un livello di troppo i file risultavano tutti
+    // introvabili (in Engine appaiono in rosso, "unavailable").
+    const libRoot = resolve(dirname(dbPath), '..'); // …/Engine Library/Database2 → …/Engine Library
 
     // Cue/loop dai blob PerformanceData (roadmap §7.9): indicizzati per trackId.
     const perfByTrack = new Map<string, { quickCues: unknown; loops: unknown; trackData: unknown }>();
@@ -210,10 +216,12 @@ export function readEngineLibrary(dbPath: string): ForeignLibrary {
     const tracks: NormTrack[] = rows.map((r) => {
       const rawPath = r.path != null ? String(r.path) : null;
       // I path Engine sono spesso relativi al drive: prova a renderli assoluti.
+      // `resolve` applica i ".." correttamente, quanti ce ne siano; tagliarne
+      // uno solo a mano (come si faceva prima) sbagliava il risultato.
       const path = rawPath
         ? rawPath.match(/^([A-Za-z]:|\/|\\\\)/)
           ? rawPath
-          : join(libRoot, rawPath.replace(/^\.\.?[\\/]/, ''))
+          : resolve(libRoot, rawPath)
         : null;
       const keyval = r.keyval != null ? Number(r.keyval) : NaN;
       const musicalKey = Number.isInteger(keyval) && ENGINE_KEY[keyval] ? ENGINE_KEY[keyval] : null;

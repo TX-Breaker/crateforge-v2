@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { mkdtempSync, rmSync } from 'fs';
+import { mkdirSync, mkdtempSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { deflateSync } from 'zlib';
@@ -122,6 +122,28 @@ describe('readEngineLibrary', () => {
     expect(t.cues).toHaveLength(2);
     expect(t.cues[0]).toMatchObject({ type: 'hot', index: 0, positionMs: 1000, color: '#F4D338', label: 'Cue 1' });
     expect(t.cues[1]).toMatchObject({ type: 'hot', index: 1, positionMs: 2000, color: '#00FF00', label: 'Cue 2' });
+  });
+
+  it('risolve i path relativi rispetto alla cartella "Engine Library"', () => {
+    // Struttura reale: …/Music/Engine Library/Database2/m.db, con i path dei
+    // brani relativi a "Engine Library" (non alla cartella che la contiene).
+    const dbDir = join(dir, 'Music', 'Engine Library', 'Database2');
+    mkdirSync(dbDir, { recursive: true });
+    const p = join(dbDir, 'm.db');
+    const db = new Database(p);
+    db.exec(`CREATE TABLE Track (id INTEGER PRIMARY KEY, title TEXT, path TEXT)`);
+    db.prepare(`INSERT INTO Track (id,title,path) VALUES (1,'T','../../Desktop/Musica/x.mp3')`).run();
+    // Senza ".." iniziale il path è interno alla libreria: è qui che la vecchia
+    // risoluzione (radice un livello troppo in alto + taglio manuale di un solo
+    // "..") sbagliava, finendo fuori da "Engine Library".
+    db.prepare(`INSERT INTO Track (id,title,path) VALUES (2,'U','Musica/y.mp3')`).run();
+    db.close();
+
+    const lib = readEngineLibrary(p);
+    expect(lib.tracks.find((t) => t.sourceId === '1')!.path).toBe(join(dir, 'Desktop', 'Musica', 'x.mp3'));
+    expect(lib.tracks.find((t) => t.sourceId === '2')!.path).toBe(
+      join(dir, 'Music', 'Engine Library', 'Musica', 'y.mp3')
+    );
   });
 
   it('rifiuta un db senza tabella Track', () => {
