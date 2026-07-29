@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<DJ_PLAYLISTS Version="1.0.0">
+  <PRODUCT Name="rekordbox" Version="6.8.5" Company="AlphaTheta"/>
+  <COLLECTION Entries="4">
+    <TRACK TrackID="1001" Name="Levels (Extended Mix)" Artist="Avicii" Album="Levels"
+           Genre="Progressive House" Year="2011" AverageBpm="126.00" Tonality="C#m"
+           TotalTime="320" Size="9000000"
+           Location="file://localhost/C:/Music/Avicii%20-%20Levels%20(Extended%20Mix).mp3">
+      <POSITION_MARK Name="Intro" Type="0" Start="0.500" Num="0" Red="40" Green="226" Blue="20"/>
+      <POSITION_MARK Name="Cue 2" Type="0" Start="15.000" Num="1"/>
+      <POSITION_MARK Name="Cue 3" Type="0" Start="30.000" Num="2"/>
+      <POSITION_MARK Name="Cue 4" Type="0" Start="45.000" Num="3"/>
+      <POSITION_MARK Name="Cue 5" Type="0" Start="60.000" Num="4"/>
+      <POSITION_MARK Name="Cue 6" Type="0" Start="75.000" Num="5"/>
+      <POSITION_MARK Name="Cue 7" Type="0" Start="90.000" Num="6"/>
+      <POSITION_MARK Name="Cue 8" Type="0" Start="105.000" Num="7"/>
+      <POSITION_MARK Name="Cue 9" Type="0" Start="120.000" Num="8"/>
+      <POSITION_MARK Name="Cue 10" Type="0" Start="135.000" Num="9"/>
+      <POSITION_MARK Name="Mem" Type="0" Start="200.000" Num="-1"/>
+      <POSITION_MARK Name="Loop" Type="4" Start="64.000" End="72.000" Num="-1"/>
+    </TRACK>
+    <TRACK TrackID="1002" Name="Strobe" Artist="deadmau5" Genre="Progressive House"
+           Year="2009" AverageBpm="128.00" Tonality="B" TotalTime="634" Size="15000000"
+           Location="file://localhost/C:/Music/deadmau5%20-%20Strobe.mp3"/>
+    <TRACK TrackID="1003" Name="Senza Artista - Club Mix" TotalTime="180"
+           Location="file://localhost/C:/Music/unknown%20-%20track%20(Club%20Mix).mp3"/>
+    <TRACK TrackID="1004" Name="TÃ¨sto Rotto" Artist="ArtÃ¬sta" TotalTime="200"
+           Location="file://localhost/C:/Music/broken.mp3"/>
+  </COLLECTION>
+  <PLAYLISTS>
+    <NODE Type="0" Name="ROOT" Count="1">
+      <NODE Type="0" Name="Cartella Set">
+        <NODE Type="1" Name="Warm Up" KeyType="0" Entries="2">
+          <TRACK Key="1001"/>
+          <TRACK Key="1002"/>
+        </NODE>
+      </NODE>
+    </NODE>
+  </PLAYLISTS>
+</DJ_PLAYLISTS>

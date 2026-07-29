@@ -1,0 +1,314 @@
+/* ---------------------------------------------------------------------------
+ * CrateForge V2 — token layer
+ *
+ * Regola del design system: i token hanno nomi di RUOLO, mai di aspetto.
+ * `surface-2` è "la superficie delle card", non "grigio scuro": è questo che
+ * permette allo stesso componente di rendersi onesto in tutte e sei le
+ * combinazioni di tema (2 stili × 3 luminosità).
+ *
+ * Assi indipendenti:
+ *   data-style="studio" | "neutral"     → famiglia di palette
+ *   class="dark" su <html>              → luminosità risolta (auto = sistema)
+ * Quattro palette coprono le sei combinazioni.
+ *
+ * I valori sono terne RGB senza funzione, così Tailwind può applicare l'alpha:
+ * `bg-accent/15` funziona su ogni token.
+ * ------------------------------------------------------------------------- */
+
+@import '@fontsource/archivo/400.css';
+@import '@fontsource/archivo/500.css';
+@import '@fontsource/archivo/600.css';
+@import '@fontsource/archivo/700.css';
+@import '@fontsource/jetbrains-mono/400.css';
+@import '@fontsource/jetbrains-mono/500.css';
+@import '@fontsource/jetbrains-mono/700.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* ---------------- STUDIO · DARK (default) ---------------- */
+  :root,
+  :root[data-style='studio'] {
+    --canvas: 10 11 13;
+    --surface-1: 16 18 21;
+    --surface-2: 22 25 29;
+    --surface-3: 29 33 38;
+    --surface-hover: 35 40 48;
+
+    --line-subtle: 34 38 44;
+    --line: 44 49 56;
+    --line-strong: 58 64 72;
+
+    --text-hi: 235 236 238;
+    --text-mid: 162 168 176;
+    --text-lo: 110 117 126;
+    --text-disabled: 74 80 88;
+
+    --accent: 232 145 46;
+    --accent-hover: 242 160 72;
+    --accent-ink: 10 11 13;
+
+    --warning: 212 167 44;
+    --warning-ink: 10 11 13;
+    --destructive: 210 84 74;
+    --destructive-ink: 255 255 255;
+    --success: 94 158 114;
+    --success-ink: 10 11 13;
+
+    /* superficie della colonna di navigazione quando la modalità Esperto è
+       attiva: più calda e più scura, segnale persistente (§3.2 proposta B) */
+    --sidebar-expert: 26 22 16;
+
+    --shadow-e1: 0 1px 2px rgb(0 0 0 / 0.35);
+    --shadow-e2: 0 6px 18px rgb(0 0 0 / 0.42);
+    --shadow-e3: 0 18px 48px rgb(0 0 0 / 0.55);
+    --glass: 10 11 13;
+    --glass-blur: 14px;
+  }
+
+  /* ---------------- STUDIO · LIGHT ---------------- */
+  :root[data-style='studio']:not(.dark) {
+    --canvas: 241 239 235;
+    --surface-1: 237 234 228;
+    --surface-2: 251 250 248;
+    --surface-3: 245 242 236;
+    --surface-hover: 233 229 222;
+
+    --line-subtle: 231 227 220;
+    --line: 221 217 210;
+    --line-strong: 201 196 186;
+
+    --text-hi: 26 27 29;
+    --text-mid: 92 96 104;
+    --text-lo: 118 122 130;
+    --text-disabled: 168 164 156;
+
+    --accent: 184 106 21;
+    --accent-hover: 160 91 16;
+    --accent-ink: 255 255 255;
+
+    --warning: 138 109 18;
+    --warning-ink: 255 255 255;
+    --destructive: 178 58 50;
+    --destructive-ink: 255 255 255;
+    --success: 63 122 84;
+    --success-ink: 255 255 255;
+
+    --sidebar-expert: 242 233 218;
+
+    --shadow-e1: 0 1px 2px rgb(40 34 24 / 0.1);
+    --shadow-e2: 0 6px 18px rgb(40 34 24 / 0.12);
+    --shadow-e3: 0 18px 48px rgb(40 34 24 / 0.18);
+    --glass: 251 250 248;
+  }
+
+  /* ---------------- NEUTRAL · DARK ---------------- */
+  :root[data-style='neutral'] {
+    --canvas: 14 15 17;
+    --surface-1: 20 22 25;
+    --surface-2: 28 30 34;
+    --surface-3: 35 38 41;
+    --surface-hover: 41 44 49;
+
+    --line-subtle: 33 36 41;
+    --line: 38 40 45;
+    --line-strong: 62 65 71;
+
+    --text-hi: 236 237 239;
+    --text-mid: 157 161 168;
+    --text-lo: 113 117 124;
+    --text-disabled: 76 80 87;
+
+    --accent: 127 168 204;
+    --accent-hover: 141 180 216;
+    --accent-ink: 14 15 17;
+
+    --warning: 212 167 44;
+    --warning-ink: 14 15 17;
+    --destructive: 210 84 74;
+    --destructive-ink: 255 255 255;
+    --success: 94 158 114;
+    --success-ink: 14 15 17;
+
+    --sidebar-expert: 26 23 20;
+
+    --shadow-e1: 0 1px 2px rgb(0 0 0 / 0.3);
+    --shadow-e2: 0 6px 18px rgb(0 0 0 / 0.36);
+    --shadow-e3: 0 18px 48px rgb(0 0 0 / 0.48);
+    --glass: 14 15 17;
+    --glass-blur: 10px;
+  }
+
+  /* ---------------- NEUTRAL · LIGHT ---------------- */
+  :root[data-style='neutral']:not(.dark) {
+    --canvas: 247 247 248;
+    --surface-1: 241 242 243;
+    --surface-2: 255 255 255;
+    --surface-3: 244 245 246;
+    --surface-hover: 237 238 240;
+
+    --line-subtle: 237 238 240;
+    --line: 223 225 228;
+    --line-strong: 203 206 210;
+
+    --text-hi: 23 24 26;
+    --text-mid: 107 112 120;
+    --text-lo: 118 123 130;
+    --text-disabled: 169 173 179;
+
+    --accent: 61 108 153;
+    --accent-hover: 52 94 134;
+    --accent-ink: 255 255 255;
+
+    --warning: 138 109 18;
+    --warning-ink: 255 255 255;
+    --destructive: 178 58 50;
+    --destructive-ink: 255 255 255;
+    --success: 63 122 84;
+    --success-ink: 255 255 255;
+
+    --sidebar-expert: 245 238 227;
+
+    --shadow-e1: 0 1px 2px rgb(20 22 26 / 0.08);
+    --shadow-e2: 0 6px 18px rgb(20 22 26 / 0.1);
+    --shadow-e3: 0 18px 48px rgb(20 22 26 / 0.16);
+    --glass: 255 255 255;
+  }
+
+  /* Densità delle liste: comfortable 46px, compact 30px (§5.3). */
+  :root {
+    --row-h: 46px;
+    --row-font: 12.5px;
+  }
+  :root[data-density='compact'] {
+    --row-h: 30px;
+    --row-font: 11.5px;
+  }
+
+  * {
+    border-color: rgb(var(--line));
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background-color: rgb(var(--canvas));
+    color: rgb(var(--text-hi));
+    font-family: Archivo, system-ui, -apple-system, 'Segoe UI', sans-serif;
+    font-size: 13px;
+    line-height: 19px;
+    -webkit-font-smoothing: antialiased;
+    text-wrap: pretty;
+    /* Cross-fade del tema: 240ms lineari, nessun flash dell'altra palette. */
+    transition:
+      background-color 240ms linear,
+      color 240ms linear;
+    user-select: none;
+  }
+
+  input,
+  textarea,
+  [data-selectable] {
+    user-select: text;
+  }
+
+  ::-webkit-scrollbar {
+    width: 11px;
+    height: 11px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgb(var(--line-strong) / 0.7);
+    border: 3px solid transparent;
+    background-clip: content-box;
+    border-radius: 999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgb(var(--text-disabled));
+    background-clip: content-box;
+  }
+
+  /* Focus ring: 2px accent + 2px offset, uguale ovunque (§07). */
+  :focus-visible {
+    outline: 2px solid rgb(var(--accent));
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  .cf-glass {
+    background-color: rgb(var(--glass) / 0.84);
+    backdrop-filter: blur(var(--glass-blur, 12px));
+  }
+
+  /* Striscia tratteggiata della modalità Esperto (§3.2). Il pattern porta il
+     significato anche in scala di grigi, senza dipendere dalla tinta. */
+  .cf-hatch {
+    background-image: repeating-linear-gradient(
+      -45deg,
+      rgb(var(--warning) / 0.32) 0 6px,
+      transparent 6px 12px
+    );
+  }
+
+  .cf-skeleton {
+    background: linear-gradient(
+      90deg,
+      rgb(var(--surface-3)) 25%,
+      rgb(var(--surface-hover)) 37%,
+      rgb(var(--surface-3)) 63%
+    );
+    background-size: 400% 100%;
+    animation: cf-shimmer 1.4s ease-in-out infinite;
+  }
+}
+
+@keyframes cf-shimmer {
+  0% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0 50%;
+  }
+}
+
+@keyframes cf-sweep {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(300%);
+  }
+}
+
+/* Sotto prefers-reduced-motion ogni durata collassa: niente si muove, niente
+   si rompe, nessuna informazione va persa (§1.6). L'attributo data-motion
+   replica la regola quando l'utente la forza dalle impostazioni. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+:root[data-motion='reduce'] *,
+:root[data-motion='reduce'] *::before,
+:root[data-motion='reduce'] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}

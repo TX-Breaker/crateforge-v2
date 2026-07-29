@@ -1,0 +1,7 @@
+# Gli script bash DEVONO restare LF anche se il checkout avviene su Windows
+# (con CRLF su macOS fallirebbero con "\r: command not found").
+*.sh text eol=lf
+# Python: LF ovunque per coerenza (l'interprete accetta entrambi).
+*.py text eol=lf
+# Script PowerShell: CRLF nativo Windows.
+*.ps1 text eol=crlf

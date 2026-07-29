@@ -1,0 +1,10 @@
+# Sidecar base Fase 1 — versioni pinnate (§10). Preferire SEMPRE wheel prebuilt.
+pyrekordbox==0.4.3
+# numpy arriva transitivo da pyrekordbox ma va pinnato: è proprio il pacchetto
+# che lo .spec raccoglie con collect_all (numpy 2.x carica dinamicamente
+# numpy._core._exceptions); senza pin la CI potrebbe congelare una versione
+# diversa da quella testata in locale.
+numpy==2.5.0
+sqlcipher3-wheels==0.5.4
+mutagen==1.47.0
+pyinstaller==6.11.1

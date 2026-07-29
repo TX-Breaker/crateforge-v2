@@ -1,0 +1,34 @@
+appId: com.txbreaker.crateforge
+productName: CrateForge
+directories:
+  output: release
+  buildResources: build
+files:
+  - out/**
+  - package.json
+extraResources:
+  # Sidecar PyInstaller --onedir (meno falsi positivi antivirus di --onefile).
+  # La cartella viene prodotta da python-sidecar/build_sidecar.(sh|ps1).
+  - from: python-sidecar/dist/crateforge-sidecar
+    to: sidecar
+    filter: ['**/*']
+  - from: assets
+    to: assets
+    filter: ['**/*']
+asarUnpack:
+  - '**/*.node'
+npmRebuild: true
+mac:
+  target:
+    - dmg
+    - zip
+  category: public.app-category.music
+  # Build locali non firmati: warning Gatekeeper atteso (vedi README).
+  identity: null
+win:
+  target:
+    - nsis
+    - portable
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true

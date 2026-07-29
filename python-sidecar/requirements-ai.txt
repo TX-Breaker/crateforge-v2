@@ -1,0 +1,17 @@
+# Livello AI del sidecar (Fase 2, opzionale — modalità Esperto).
+# Installare DOPO requirements.txt, nello stesso venv:
+#   pip install --prefer-binary -r requirements-ai.txt
+#
+# ATTENZIONE compatibilità (motivo per cui NON stanno in requirements.txt):
+#  - essentia: niente wheel Windows (solo Linux/macOS)
+#  - madmom: richiede build Cython su alcune versioni Python recenti
+#  - aubio: wheel disponibili fino a Python 3.11 su alcune piattaforme
+# Se una wheel manca, il sidecar base resta pienamente funzionante:
+# analyze-cues/stems degradano con un errore pulito in-app.
+aubio==0.4.9
+numpy>=1.26
+demucs==4.0.1
+# Solo macOS/Linux:
+# essentia==2.1b6.dev1110
+# madmom==0.16.1
+# allin1==1.1.0

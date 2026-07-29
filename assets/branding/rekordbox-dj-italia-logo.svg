@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" role="img" aria-label="Rekordbox DJ Italia Group — logo placeholder">
+  <!-- PLACEHOLDER LOGO: sostituire questo file con il logo ufficiale del gruppo,
+       mantenendo lo stesso nome file (rekordbox-dj-italia-logo.svg). -->
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#009246"/>
+      <stop offset="0.5" stop-color="#f1f2f1"/>
+      <stop offset="1" stop-color="#ce2b37"/>
+    </linearGradient>
+  </defs>
+  <circle cx="100" cy="100" r="92" fill="none" stroke="url(#g)" stroke-width="10"/>
+  <circle cx="100" cy="100" r="58" fill="none" stroke="currentColor" stroke-width="4" opacity="0.7"/>
+  <circle cx="100" cy="100" r="10" fill="currentColor" opacity="0.7"/>
+  <text x="100" y="172" text-anchor="middle" font-family="system-ui, sans-serif" font-size="15" font-weight="700" fill="currentColor">RB DJ ITALIA</text>
+</svg>

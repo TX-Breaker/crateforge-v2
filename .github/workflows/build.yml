@@ -1,0 +1,126 @@
+name: Build CrateForge
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+# Il workflow builda e carica artifact: bastano i permessi di lettura.
+permissions:
+  contents: read
+
+# Un push/PR che ne annulla uno precedente sullo stesso ref evita build doppie.
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+# NOTA layout: il toplevel della repo git È la cartella crateforge (package.json
+# alla root). Niente working-directory: i path sono relativi alla root.
+
+jobs:
+  # Gate rapido e a basso costo: typecheck + test su Linux, prima di impacchettare.
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Tests
+        run: npm test
+
+  build:
+    needs: check
+    # Impacchetta solo su push/dispatch: le PR passano dal gate `check`, non
+    # serve produrre artefatti (lenti) a ogni PR.
+    if: github.event_name != 'pull_request'
+    strategy:
+      fail-fast: false
+      matrix:
+        # macos-latest = arm64 (Apple Silicon, macOS 15).
+        # macos-15-intel = x64: macos-13 è stato RITIRATO da GitHub il
+        # 4 dic 2025; macos-15-intel è l'ultima immagine x86_64 (fino ad ago 2027).
+        os: [macos-latest, macos-15-intel, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - uses: actions/setup-python@v5
+        with:
+          # 3.13 = stessa versione del venv locale in cui il fix numpy è stato
+          # validato (tutte le dipendenze pinnate hanno wheel cp313, incl.
+          # sqlcipher3-wheels per macOS arm64/x86_64).
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: python-sidecar/requirements.txt
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      # Entrambi gli script buildano dallo .spec (collect_all esplicito su
+      # pyrekordbox+numpy+sqlcipher3+sqlalchemy: senza, il frozen fallisce con
+      # "No module named 'numpy._core._exceptions'").
+      - name: Build Python sidecar (macOS)
+        if: runner.os == 'macOS'
+        run: bash python-sidecar/build_sidecar.sh
+
+      - name: Build Python sidecar (Windows)
+        if: runner.os == 'Windows'
+        run: python-sidecar/build_sidecar.ps1
+        shell: pwsh
+
+      # Il build script del sidecar degrada a solo-warning se il download di
+      # fpcalc fallisce: qui invece fallisce il job, cosi' non si pubblica un
+      # artefatto senza fingerprinting o senza sidecar.
+      - name: Verify sidecar artifact (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          test -x python-sidecar/dist/crateforge-sidecar/crateforge-sidecar
+          test -x python-sidecar/dist/crateforge-sidecar/fpcalc
+          # Smoke: il frozen deve rispondere al ping (verifica import numpy & co.)
+          python-sidecar/dist/crateforge-sidecar/crateforge-sidecar ping | grep -q '"pong": true'
+
+      - name: Verify sidecar artifact (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          if (-not (Test-Path python-sidecar/dist/crateforge-sidecar/crateforge-sidecar.exe)) { exit 1 }
+          if (-not (Test-Path python-sidecar/dist/crateforge-sidecar/fpcalc.exe)) { exit 1 }
+          $ping = & python-sidecar/dist/crateforge-sidecar/crateforge-sidecar.exe ping
+          if ($ping -notmatch '"pong": true') { exit 1 }
+        shell: pwsh
+
+      - name: Build app
+        run: npm run build
+
+      - name: Package (unsigned)
+        run: npx electron-builder --publish never
+        env:
+          # Build CI non firmati: Gatekeeper/SmartScreen mostreranno warning (vedi README).
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: crateforge-${{ matrix.os }}
+          retention-days: 14
+          # Se i glob non matchano nulla è un bug di path: fallire, non
+          # caricare un artifact vuoto restando verdi.
+          if-no-files-found: error
+          path: |
+            release/*.dmg
+            release/*.zip
+            release/*.exe
