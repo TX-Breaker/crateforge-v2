@@ -179,7 +179,9 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
   // riesegue (es. dopo aver collegato internet) e notifica il renderer.
   ipcMain.handle('preflight:get', () => getLastPreflight());
   ipcMain.handle('preflight:rerun', async () => {
-    const state = await runPreflight(db, udmPath);
+    // Il callback serve alla riparazione dell'ambiente Python, che finisce
+    // dopo: senza, l'esito resterebbe solo nel registro operazioni.
+    const state = await runPreflight(db, udmPath, (s) => wc()?.send('preflight:update', s));
     wc()?.send('preflight:update', state);
     return state;
   });

@@ -3,6 +3,7 @@ import { existsSync } from 'fs';
 import { app } from 'electron';
 import { join } from 'path';
 import { createInterface } from 'readline';
+import { detectPython, pythonExecutable, type PythonInfo } from './pythonRuntime';
 
 const IS_WIN = process.platform === 'win32';
 
@@ -27,8 +28,8 @@ export interface SidecarEvent {
 }
 
 export type SidecarAvailability =
-  | { available: true; binaryPath: string }
-  | { available: false; reason: 'not-found' | 'not-built'; searched: string[] };
+  | { available: true; binaryPath: string; python?: PythonInfo }
+  | { available: false; reason: 'not-found' | 'not-built' | 'no-python'; searched: string[] };
 
 const BINARY_NAME = process.platform === 'win32' ? 'crateforge-sidecar.exe' : 'crateforge-sidecar';
 
@@ -54,7 +55,17 @@ export function checkSidecar(): SidecarAvailability {
 
   const devScript = join(app.getAppPath(), 'python-sidecar', 'sidecar.py');
   searched.push(devScript);
-  if (existsSync(devScript)) return { available: true, binaryPath: devScript };
+  if (existsSync(devScript)) {
+    // Lo script c'è, ma da solo non basta: senza un Python capace di eseguirlo
+    // (con le dipendenze del sidecar) dichiararlo "disponibile" produrrebbe un
+    // errore incomprensibile al primo import, invece di un messaggio chiaro ora.
+    const python = detectPython();
+    if (!python.found) {
+      searched.push(...python.checked.map((c) => `python: ${c}`));
+      return { available: false, reason: 'no-python', searched };
+    }
+    return { available: true, binaryPath: devScript, python };
+  }
 
   return { available: false, reason: 'not-built', searched };
 }
@@ -85,7 +96,18 @@ export function runSidecar(opts: SidecarRunOptions): SidecarHandle {
   }
 
   const isScript = check.binaryPath.endsWith('.py');
-  const cmd = isScript ? pythonExecutable() : check.binaryPath;
+  const python = isScript ? pythonExecutable() : null;
+  if (isScript && !python) {
+    opts.onEvent({
+      type: 'error',
+      message:
+        'Nessun interprete Python utilizzabile per il modulo di lettura. ' +
+        'Installa Python 3.9 o superiore, oppure costruisci il sidecar con ' +
+        'python-sidecar/build_sidecar.ps1 (Windows) o build_sidecar.sh (macOS/Linux).'
+    });
+    return { cancel: () => undefined, finished: Promise.resolve({ code: -1 }) };
+  }
+  const cmd = isScript ? python! : check.binaryPath;
   const baseArgs = isScript ? [check.binaryPath] : [];
   const args = [
     ...baseArgs,
@@ -178,7 +200,3 @@ export function runSidecar(opts: SidecarRunOptions): SidecarHandle {
   };
 }
 
-function pythonExecutable(): string {
-  // Solo per sviluppo (script non impacchettato); in produzione si usa il binario PyInstaller.
-  return process.platform === 'win32' ? 'python' : 'python3';
-}

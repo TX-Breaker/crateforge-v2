@@ -2,6 +2,7 @@ import { release, platform } from 'os';
 import type BetterSqlite3 from 'better-sqlite3';
 import { getSetting, logOperation, setSetting } from '@core/udm';
 import { checkSidecar, runSidecar, SidecarEvent } from './sidecar';
+import { detectPython, ensureSidecarEnv } from './pythonRuntime';
 
 /**
  * Preflight all'avvio (§ auto-setup): verifica che tutto sia pronto su un
@@ -21,6 +22,21 @@ import { checkSidecar, runSidecar, SidecarEvent } from './sidecar';
 export interface PreflightState {
   checkedAt: string;
   sidecar: { available: boolean; runs: boolean; binaryPath?: string; reason?: string };
+  /**
+   * Stato dell'interprete Python. `required: false` sull'app distribuita, dove
+   * il sidecar è un binario e Python non serve: dirlo esplicitamente evita la
+   * domanda più frequente ("devo installare Python?").
+   */
+  python: {
+    required: boolean;
+    found: boolean;
+    path?: string;
+    version?: string;
+    depsReady: boolean;
+    /** true mentre l'ambiente si sta preparando da solo in background. */
+    installing?: boolean;
+    message?: string;
+  };
   key: { ready: boolean; downloaded: boolean; message?: string };
   os: { platform: string; release: string; changed: boolean };
   ok: boolean;
@@ -69,9 +85,18 @@ function runSidecarCollect(
   });
 }
 
+/**
+ * Una sola riparazione per sessione: se l'installazione delle dipendenze non
+ * riesce, riprovare a ogni riavvio significherebbe scaricare pacchetti in
+ * loop senza che nulla cambi.
+ */
+let envRepairAttempted = false;
+
 export async function runPreflight(
   db: BetterSqlite3.Database,
-  udmPath: string
+  udmPath: string,
+  /** Notifica il renderer quando la riparazione in background è finita. */
+  notify?: (state: PreflightState) => void
 ): Promise<PreflightState> {
   const osPlatform = platform();
   const osRelease = release();
@@ -103,6 +128,7 @@ export async function runPreflight(
   // Ricorda l'OS per rilevare gli upgrade al prossimo avvio.
   setSetting(db, 'lastOsRelease', osRelease);
 
+  const py = detectPython();
   const state: PreflightState = {
     checkedAt: new Date().toISOString(),
     sidecar: {
@@ -111,11 +137,41 @@ export async function runPreflight(
       binaryPath: chk.available ? chk.binaryPath : undefined,
       reason: chk.available ? undefined : chk.reason
     },
+    python: {
+      required: py.required,
+      found: py.found,
+      path: py.path ?? undefined,
+      version: py.version ?? undefined,
+      depsReady: !py.required || py.hasSidecarDeps
+    },
     key,
     os: { platform: osPlatform, release: osRelease, changed: osChanged },
     ok: chk.available && sidecarRuns && key.ready
   };
   lastState = state;
+
+  /* Auto-setup dell'ambiente Python (§ auto-setup): se il sidecar non è
+     eseguibile solo perché il virtualenv non è mai stato creato, lo prepariamo
+     da soli invece di chiedere all'utente di aprire un terminale. Va in
+     background — l'installazione dei pacchetti dura minuti e bloccare l'avvio
+     sarebbe peggio del problema — e al termine il preflight viene rieseguito e
+     il renderer aggiornato. Mai sull'app impacchettata: lì c'è il binario. */
+  const needsEnv = py.required && (!py.found || !py.hasSidecarDeps);
+  if (needsEnv && !envRepairAttempted && getSetting(db, 'pythonAutoSetup') !== '0') {
+    envRepairAttempted = true;
+    state.python.installing = true;
+    void ensureSidecarEnv()
+      .then(async (r) => {
+        logOperation(db, 'preflight.python-setup', null, r.ok ? 'ok' : 'error', r.message);
+        const fresh = await runPreflight(db, udmPath, notify);
+        fresh.python.message = r.message;
+        lastState = fresh;
+        notify?.(fresh);
+      })
+      .catch((err) => {
+        logOperation(db, 'preflight.python-setup', null, 'error', String(err));
+      });
+  }
 
   // Log a basso rumore: solo se c'è qualcosa da sapere (problema, OS cambiato,
   // o chiave appena scaricata). Un avvio "tutto ok" non sporca il registro.

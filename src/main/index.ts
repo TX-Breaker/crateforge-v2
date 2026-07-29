@@ -101,7 +101,9 @@ if (!app.requestSingleInstanceLock()) {
     // scarica se manca). Così su un computer appena installato tutto funziona
     // senza passaggi manuali. L'esito viene inviato al renderer quando pronto
     // (che comunque lo rilegge con preflight:get al mount).
-    runPreflight(db, udmPath)
+    runPreflight(db, udmPath, (state) =>
+      BrowserWindow.getAllWindows()[0]?.webContents.send('preflight:update', state)
+    )
       .then((state) => {
         BrowserWindow.getAllWindows()[0]?.webContents.send('preflight:update', state);
       })
