@@ -19,7 +19,9 @@ const DialogOverlay = React.forwardRef<
   <DialogPrimitive.Overlay
     ref={ref}
     className={cn(
-      'fixed inset-0 z-50 bg-black/55 backdrop-blur-[2px]',
+      // Overlay e pannello devono entrare INSIEME: a 150ms contro 280 il velo
+      // arrivava prima e il dialog sembrava inseguirlo.
+      'fixed inset-0 z-50 bg-black/55 backdrop-blur-[2px] duration-dialog ease-swift',
       'data-[state=open]:animate-in data-[state=open]:fade-in-0',
       'data-[state=closed]:animate-out data-[state=closed]:fade-out-0',
       className
@@ -39,7 +41,7 @@ const DialogContent = React.forwardRef<
       ref={ref}
       className={cn(
         'fixed left-1/2 top-1/2 z-50 flex max-h-[86vh] w-full max-w-lg -translate-x-1/2 -translate-y-1/2 flex-col gap-4',
-        'overflow-y-auto rounded-dialog border border-line bg-surface-2 p-6 shadow-e3 duration-dialog',
+        'overflow-y-auto rounded-dialog border border-line bg-surface-2 p-6 shadow-e3 duration-dialog ease-swift',
         'data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95',
         'data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95',
         className
@@ -74,7 +76,7 @@ const DialogTitle = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DialogPrimitive.Title
     ref={ref}
-    className={cn('text-title text-ink-hi', className)}
+    className={cn('text-section text-ink-hi', className)}
     {...props}
   />
 ));

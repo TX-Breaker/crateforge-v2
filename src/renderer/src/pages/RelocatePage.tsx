@@ -133,7 +133,7 @@ function ByNameTab() {
     <div className="space-y-4">
       <Card>
         <CardHeader>
-          <CardTitle className="text-body">{tp('step1')}</CardTitle>
+          <CardTitle className="text-body font-semibold">{tp('step1')}</CardTitle>
           <CardDescription>{tp('step1Desc')}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -154,7 +154,11 @@ function ByNameTab() {
               />
               <div className="max-h-48 overflow-auto rounded-card border border-line-subtle bg-surface-3 p-2">
                 {broken.slice(0, 200).map((b) => (
-                  <div key={b.trackId} className="truncate py-0.5 text-caption text-ink-mid">
+                  <div
+                    key={b.trackId}
+                    style={{ fontSize: 'var(--row-font)' }}
+                    className="truncate py-0.5 text-ink-mid"
+                  >
                     <span className="text-ink-hi">
                       {b.artist ?? '?'} — {b.title ?? '?'}
                     </span>{' '}
@@ -175,7 +179,7 @@ function ByNameTab() {
       {broken && broken.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-body">{tp('step2')}</CardTitle>
+            <CardTitle className="text-body font-semibold">{tp('step2')}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <PathField
@@ -310,7 +314,7 @@ function ByFingerprintTab() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-body">
+          <CardTitle className="flex items-center gap-2 text-body font-semibold">
             <Fingerprint className="size-4" /> {tp('fpTitle')}
           </CardTitle>
           <CardDescription>{tp('fpDesc')}</CardDescription>

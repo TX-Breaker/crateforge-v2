@@ -292,6 +292,22 @@
     background-clip: content-box;
   }
 
+  /* Cross-fade del tema (§1.6, 240ms lineari). Vale per l'INTERO albero, non
+     solo per il fondo della pagina: senza, al cambio tema lo sfondo sfumava
+     mentre pannelli, bordi e testi scattavano. La transizione è attiva solo
+     durante lo scambio — l'attributo lo mette e lo toglie appState — perché
+     lasciarla sempre accesa rallenterebbe ogni hover di ogni riga. */
+  :root[data-theming] *,
+  :root[data-theming] *::before,
+  :root[data-theming] *::after {
+    transition:
+      background-color 240ms linear,
+      border-color 240ms linear,
+      color 240ms linear,
+      fill 240ms linear,
+      stroke 240ms linear !important;
+  }
+
   /* Focus ring: 2px accent + 2px offset, uguale ovunque (§07). */
   :focus-visible {
     outline: 2px solid rgb(var(--accent));
@@ -300,6 +316,13 @@
 }
 
 @layer components {
+  /* I toast di sonner si muovono di default in 400ms: sopra il tetto di 280
+     dichiarato dal sistema per l'ingresso di un pannello. */
+  [data-sonner-toast] {
+    transition-duration: 280ms !important;
+    animation-duration: 280ms !important;
+  }
+
   .cf-glass {
     background-color: rgb(var(--glass) / 0.84);
     backdrop-filter: blur(var(--glass-blur, 12px));

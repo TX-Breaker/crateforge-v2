@@ -88,7 +88,8 @@ export function Topbar() {
                 // accessibile, il tooltip non conta per la tastiera.
                 aria-label={th.label}
                 className={cn(
-                  'grid size-6 place-items-center rounded-[4px] transition-colors duration-press [&_svg]:size-3.5',
+                  // 28x28 e' il bersaglio minimo (§4.1): a 24 il bottone del tema stava sotto.
+                  'grid size-7 place-items-center rounded-[4px] transition-colors duration-press [&_svg]:size-3.5',
                   theme === th.id
                     ? 'bg-accent text-accent-ink'
                     : 'text-ink-lo hover:bg-surface-hover hover:text-ink-mid'

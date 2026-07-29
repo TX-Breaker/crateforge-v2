@@ -127,11 +127,11 @@ export function BackupPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-body">{tp('step1')}</CardTitle>
+          <CardTitle className="text-body font-semibold">{tp('step1')}</CardTitle>
           <CardDescription>{tp('step1Desc')}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="grid gap-3 md:grid-cols-2">
+          <div className="grid gap-4 md:grid-cols-2">
             <PathField label={tp('fMusic')} value={musicDir} onBrowse={() => pickDir(setMusicDir)} />
             <PathField
               label={tp('fBackup')}
@@ -150,7 +150,7 @@ export function BackupPage() {
       {plan && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-body">{tp('step2')}</CardTitle>
+            <CardTitle className="text-body font-semibold">{tp('step2')}</CardTitle>
             <CardDescription>{tp('step2Desc')}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">

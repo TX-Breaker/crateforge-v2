@@ -16,7 +16,7 @@ const MAP: Record<
   SaveTarget,
   {
     icon: React.ReactNode;
-    tone: 'neutral' | 'accent' | 'warning' | 'destructive';
+    tone: 'neutral' | 'success' | 'accent' | 'warning' | 'destructive';
     label: MsgKey;
     title: MsgKey;
     body: MsgKey;
@@ -31,7 +31,7 @@ const MAP: Record<
   },
   copy: {
     icon: <Copy />,
-    tone: 'neutral',
+    tone: 'success',
     label: 'target.copy.tag',
     title: 'target.copy.title',
     body: 'target.copy.body'
@@ -59,24 +59,34 @@ const MAP: Record<
   }
 };
 
+/* Cinque gradini, uno per bersaglio: il colore SALE con il rischio (§4.3).
+   Prima "copia" e "solo database interno" erano lo stesso grigio, e la
+   dichiarazione più frequente dell'app — il backup — sembrava identica a
+   "non scrivo niente". La barra a sinistra porta lo stesso salto anche a chi
+   non distingue le tinte. */
 const TONE = {
   neutral: {
-    wrap: 'border-line bg-surface-3',
+    wrap: 'border-line bg-surface-3 border-l-[3px] border-l-ink-lo',
     tag: 'bg-surface-hover text-ink-mid',
     icon: 'text-ink-lo'
   },
+  success: {
+    wrap: 'border-line bg-surface-3 border-l-[3px] border-l-success',
+    tag: 'bg-success/20 text-success',
+    icon: 'text-success'
+  },
   accent: {
-    wrap: 'border-accent/40 bg-accent/[.08]',
+    wrap: 'border-accent/40 bg-accent/[.08] border-l-[3px] border-l-accent',
     tag: 'bg-accent/20 text-accent',
     icon: 'text-accent'
   },
   warning: {
-    wrap: 'border-warning/50 bg-warning/[.1]',
+    wrap: 'border-warning/50 bg-warning/[.1] border-l-[3px] border-l-warning',
     tag: 'bg-warning/25 text-warning',
     icon: 'text-warning'
   },
   destructive: {
-    wrap: 'border-destructive/55 bg-destructive/[.1]',
+    wrap: 'border-destructive/55 bg-destructive/[.1] border-l-[3px] border-l-destructive',
     tag: 'bg-destructive/25 text-destructive',
     icon: 'text-destructive'
   }

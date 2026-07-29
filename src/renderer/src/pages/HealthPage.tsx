@@ -110,7 +110,7 @@ export function HealthPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-body">{tp('breakdownTitle')}</CardTitle>
+          <CardTitle className="text-body font-semibold">{tp('breakdownTitle')}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           {rows.map((r, i) => (

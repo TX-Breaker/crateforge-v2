@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { AnimatePresence, MotionConfig, motion } from 'framer-motion';
 import { Toaster } from 'sonner';
 import { useAppState } from '@/lib/appState';
 import { RouterProvider, useRouter } from '@/lib/router';
@@ -53,7 +53,7 @@ export function App() {
 }
 
 function Shell() {
-  const { ready, onboarded, isDark } = useAppState();
+  const { ready, onboarded, isDark, motion: motionPref } = useAppState();
   const { route, params, rememberScroll, scrollFor } = useRouter();
   const [collapsed, setCollapsed] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -88,16 +88,21 @@ function Shell() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  // Memoria dello scroll per rotta: tornare su una pagina non deve far
-  // ricominciare la lettura dall'inizio.
-  useEffect(() => {
+  /* Memoria dello scroll per rotta: tornare su una pagina non deve far
+     ricominciare la lettura dall'inizio.
+     Il ripristino avviene in useLayoutEffect, cioè DOPO che la rotta nuova è
+     montata e prima che il browser dipinga: scriverlo nell'effetto del cambio
+     rotta lo applicava all'altezza della pagina uscente, che lo tagliava — e
+     la posizione andava persa proprio nelle pagine lunghe, le uniche in cui
+     serviva. */
+  useLayoutEffect(() => {
     const el = scroller.current;
     if (!el) return;
     if (prevRoute.current !== route) {
       rememberScroll(prevRoute.current, el.scrollTop);
       prevRoute.current = route;
-      el.scrollTop = scrollFor(route);
     }
+    el.scrollTop = scrollFor(route);
   }, [route, rememberScroll, scrollFor]);
 
   if (!ready) {
@@ -113,7 +118,12 @@ function Shell() {
     );
   }
 
+  /* `prefers-reduced-motion` e l'impostazione dell'app devono spegnere ANCHE
+     le animazioni di framer-motion, che non passano dal CSS: senza questo, la
+     regola in index.css copriva le transizioni ma non le pagine e la barra
+     job. Un solo punto invece di toccare ogni motion.div. */
   return (
+    <MotionConfig reducedMotion={motionPref === 'reduce' ? 'always' : 'user'}>
     <div className="flex h-full flex-col bg-canvas">
       <TitleBar />
       <div className="flex min-h-0 flex-1">
@@ -125,18 +135,25 @@ function Shell() {
         <div className="flex min-w-0 flex-1 flex-col">
           <Topbar />
           <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto">
-            <AnimatePresence mode="wait" initial={false}>
-              <motion.main
-                key={route}
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -4 }}
-                transition={{ duration: 0.22, ease: [0.2, 0, 0, 1] }}
-                className="mx-auto max-w-[1400px] p-6"
-              >
-                <Route route={route} params={params} />
-              </motion.main>
-            </AnimatePresence>
+            {/* Dissolvenza INCROCIATA da 220ms: le due schermate si
+                sovrappongono. Con `mode="wait"` il cambio pagina durava 440ms
+                con il canvas vuoto in mezzo, e non era una dissolvenza ma una
+                staffetta. Niente scivolamento verticale: la specifica per il
+                cambio di pagina prevede solo l'opacità. */}
+            <div className="relative min-h-full">
+              <AnimatePresence initial={false}>
+                <motion.main
+                  key={route}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0, position: 'absolute', inset: 0 }}
+                  transition={{ duration: 0.22, ease: [0.2, 0, 0, 1] }}
+                  className="p-6"
+                >
+                  <Route route={route} params={params} />
+                </motion.main>
+              </AnimatePresence>
+            </div>
           </div>
           <JobBar />
           <Statusbar />
@@ -160,6 +177,7 @@ function Shell() {
         }}
       />
     </div>
+    </MotionConfig>
   );
 }
 

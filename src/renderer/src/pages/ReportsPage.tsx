@@ -106,7 +106,7 @@ function ExcelTab() {
       <div className="grid gap-4 lg:grid-cols-[380px_1fr]">
         <Card>
           <CardHeader>
-            <CardTitle className="text-body">{tp('optTitle')}</CardTitle>
+            <CardTitle className="text-body font-semibold">{tp('optTitle')}</CardTitle>
             <CardDescription>{tp('optDesc')}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -133,7 +133,7 @@ function ExcelTab() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-body">
+            <CardTitle className="flex items-center gap-2 text-body font-semibold">
               <Eye className="size-4" /> {tp('previewTitle')}
             </CardTitle>
             <CardDescription>{tp('previewDesc')}</CardDescription>
@@ -257,7 +257,7 @@ function SiaeTab() {
       <div className="grid gap-4 lg:grid-cols-[380px_1fr]">
         <Card>
           <CardHeader>
-            <CardTitle className="text-body">{tp('step1')}</CardTitle>
+            <CardTitle className="text-body font-semibold">{tp('step1')}</CardTitle>
             <CardDescription>{tp('step1Desc')}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -286,7 +286,7 @@ function SiaeTab() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-body">
+            <CardTitle className="flex items-center gap-2 text-body font-semibold">
               <CalendarClock className="size-4" /> {tp('sessionsTitle')}
             </CardTitle>
             <CardDescription>{tp('sessionsDesc')}</CardDescription>

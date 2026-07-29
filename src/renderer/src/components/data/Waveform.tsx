@@ -113,7 +113,9 @@ export function Waveform({
     // envelope speculare
     const mid = h / 2;
     const barW = Math.max(1, w / envelope.length);
-    ctx.fillStyle = rgb('--accent', 0.55);
+    /* L'onda è il FONDO su cui si leggono i cue: in accento competeva con i
+       marker, e con un accento solo per schermata (§1.4) vinceva lei. */
+    ctx.fillStyle = rgb('--line-strong', 0.9);
     for (let i = 0; i < envelope.length; i++) {
       const v = Math.max(0, Math.min(1, envelope[i]));
       const bh = Math.max(1, v * (mid - 3));

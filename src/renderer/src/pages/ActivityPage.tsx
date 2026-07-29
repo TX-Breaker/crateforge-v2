@@ -108,7 +108,7 @@ export function ActivityPage() {
       <Card>
         <CardHeader className="flex-row items-center justify-between gap-4">
           <div>
-            <CardTitle className="text-body">
+            <CardTitle className="text-body font-semibold">
               {tp('countTitle', { n: rows.length.toLocaleString(locale) })}
             </CardTitle>
             <CardDescription>{tp('retention')}</CardDescription>

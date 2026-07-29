@@ -112,7 +112,7 @@ export function TracksPage({
       {exported && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-body">{tp('exportedTitle')}</CardTitle>
+            <CardTitle className="text-body font-semibold">{tp('exportedTitle')}</CardTitle>
             <CardDescription>{exported}</CardDescription>
           </CardHeader>
           <CardContent>

@@ -131,7 +131,7 @@ export function ArrivalsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-body">{tp('folderTitle')}</CardTitle>
+          <CardTitle className="text-body font-semibold">{tp('folderTitle')}</CardTitle>
           <CardDescription>{tp('folderDesc')}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -163,7 +163,7 @@ export function ArrivalsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-body">{tp('queueTitle', { n: items.length })}</CardTitle>
+          <CardTitle className="text-body font-semibold">{tp('queueTitle', { n: items.length })}</CardTitle>
           <CardDescription>{tp('queueDesc')}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">

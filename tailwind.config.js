@@ -79,7 +79,7 @@ module.exports = {
         eyebrow: ['11px', { lineHeight: '14px', letterSpacing: '0.14em', fontWeight: '500' }],
         data: ['12.5px', { lineHeight: '16px', fontWeight: '500' }],
         'data-lg': ['27px', { lineHeight: '30px', fontWeight: '500', letterSpacing: '-0.02em' }],
-        'data-xl': ['44px', { lineHeight: '46px', fontWeight: '500', letterSpacing: '-0.03em' }]
+        'data-xl': ['34px', { lineHeight: '38px', fontWeight: '500', letterSpacing: '-0.03em' }]
       },
       borderRadius: {
         chip: '4px',

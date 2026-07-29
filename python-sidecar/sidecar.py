@@ -754,20 +754,23 @@ def cmd_analyze_cues(args: argparse.Namespace) -> None:
         if 0 <= t < duration and len(cues) < 8:
             cues.append({"label": label, "positionMs": round(t * 1000), "color": color})
 
-    add("Intro", onsets_s[0] if onsets_s else 0.0, "#28e214")
+    # Tinte della palette dei cue (design system §5.1): desaturate, distinguibili
+    # anche in scala di grigi. Le tinte sature di prima erano fuori scala rispetto
+    # a tutto il resto dell'interfaccia e sparavano dal fondo scuro.
+    add("Intro", onsets_s[0] if onsets_s else 0.0, "#6C9BC9")
     # Drop: primo salto sostenuto sopra l'80% del picco
     for i, e in enumerate(profile):
         if e >= 0.8 * peak and i > 4:
-            add("Drop", float(i), "#e21414")
+            add("Drop", float(i), "#E8912E")
             break
     # Breakdown: primo crollo sotto il 30% del picco dopo il drop
     drop_i = next((i for i, e in enumerate(profile) if e >= 0.8 * peak and i > 4), None)
     if drop_i is not None:
         for i in range(drop_i + 4, len(profile)):
             if profile[i] <= 0.3 * peak:
-                add("Breakdown", float(i), "#1478e2")
+                add("Breakdown", float(i), "#8F8AC4")
                 break
-    add("Outro", max(0.0, duration - 32.0), "#e2a014")
+    add("Outro", max(0.0, duration - 32.0), "#7FA8A0")
 
     # Envelope normalizzata per la waveform UI: max 480 bucket (pochi KB,
     # coerente con "mai bulk data su IPC" — non sono campioni audio).

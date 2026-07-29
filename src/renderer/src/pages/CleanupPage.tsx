@@ -208,7 +208,7 @@ function OrphansTab() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-body">{tp('step1')}</CardTitle>
+          <CardTitle className="text-body font-semibold">{tp('step1')}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <PathField label={tp('fMusic')} value={musicDir} onBrowse={() => pickDir(setMusicDir)} />
@@ -221,7 +221,7 @@ function OrphansTab() {
       {result && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-body">{tp('step2')}</CardTitle>
+            <CardTitle className="text-body font-semibold">{tp('step2')}</CardTitle>
             <CardDescription>
               {tp('resLine', {
                 scanned: result.scannedFiles.toLocaleString(locale),
@@ -263,7 +263,11 @@ function OrphansTab() {
                   {pageItems.map((o) => (
                     <label
                       key={o.path}
-                      className="flex cursor-pointer items-center gap-2.5 border-b border-line-subtle px-3 py-1.5 transition-colors duration-press last:border-b-0 hover:bg-surface-hover"
+                      /* Altezza e corpo dalle variabili di densita': l'impostazione
+                         comfortable/compatta deve valere in tutte le liste, non
+                         solo in Tracce. */
+                      style={{ height: 'var(--row-h)', fontSize: 'var(--row-font)' }}
+                      className="flex cursor-pointer items-center gap-2.5 border-b border-line-subtle px-3 transition-colors duration-press last:border-b-0 hover:bg-surface-hover"
                     >
                       <Checkbox
                         checked={selected.has(o.path)}
@@ -473,7 +477,7 @@ function DuplicatesTab() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-body">{tp('step1')}</CardTitle>
+          <CardTitle className="text-body font-semibold">{tp('step1')}</CardTitle>
           <CardDescription>{tp('step1Desc')}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -487,7 +491,7 @@ function DuplicatesTab() {
       {groups && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-body">{tp('step2', { n: groups.length })}</CardTitle>
+            <CardTitle className="text-body font-semibold">{tp('step2', { n: groups.length })}</CardTitle>
             <CardDescription>{tp('step2Desc')}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -650,7 +654,7 @@ function QuarantineTab() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-body">{tp('pickTitle')}</CardTitle>
+          <CardTitle className="text-body font-semibold">{tp('pickTitle')}</CardTitle>
           <CardDescription>{tp('pickDesc')}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -692,7 +696,7 @@ function QuarantineTab() {
           {folders.map((f) => (
             <Card key={f.dir}>
               <CardHeader>
-                <CardTitle className="text-body">{shortenPath(f.dir, 60)}</CardTitle>
+                <CardTitle className="text-body font-semibold">{shortenPath(f.dir, 60)}</CardTitle>
                 <CardDescription>
                   {tp('folderLine', { n: f.entries.length.toLocaleString(locale) })}
                 </CardDescription>

@@ -434,7 +434,7 @@ export function ConvertPage() {
       {/* conversione diretta X→Y */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-body">
+          <CardTitle className="flex items-center gap-2 text-body font-semibold">
             <ArrowRightLeft className="size-4" /> {tp('directTitle')}
           </CardTitle>
           <CardDescription>{tp('directDesc')}</CardDescription>
@@ -475,7 +475,7 @@ export function ConvertPage() {
       {/* mappa dei campi: contenuto primario, non nota a piè di pagina */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-body">
+          <CardTitle className="text-body font-semibold">
             {tp('fieldMapTitle', { fmt: FORMATS.find((f) => f.id === dstSel)!.title })}
           </CardTitle>
           <CardDescription>{tp('fieldMapDesc')}</CardDescription>
@@ -512,7 +512,7 @@ export function ConvertPage() {
       {/* matrice di compatibilità */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-body">{tp('matrixTitle')}</CardTitle>
+          <CardTitle className="text-body font-semibold">{tp('matrixTitle')}</CardTitle>
           <CardDescription>{tp('matrixDesc')}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-2">
@@ -565,7 +565,7 @@ export function ConvertPage() {
         {FORMATS.map((f) => (
           <Card key={f.id}>
             <CardHeader>
-              <CardTitle className="text-body">{f.title}</CardTitle>
+              <CardTitle className="text-body font-semibold">{f.title}</CardTitle>
               <CardDescription>{tp(f.descKey)}</CardDescription>
             </CardHeader>
             <CardContent>
@@ -582,7 +582,7 @@ export function ConvertPage() {
             originali — gate delle scritture dirette, backup e rollback. */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-body">{tp('seratoExportTitle')}</CardTitle>
+            <CardTitle className="text-body font-semibold">{tp('seratoExportTitle')}</CardTitle>
             <CardDescription>{tp('seratoExportDesc')}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -603,7 +603,7 @@ export function ConvertPage() {
         {/* Engine DJ: genera una libreria NUOVA, mai una modifica della sua. */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-body">{tp('engineExportTitle')}</CardTitle>
+            <CardTitle className="text-body font-semibold">{tp('engineExportTitle')}</CardTitle>
             <CardDescription>{tp('engineExportDesc')}</CardDescription>
           </CardHeader>
           <CardContent>

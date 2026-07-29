@@ -103,6 +103,9 @@ type Curve = 'up' | 'flat' | 'down';
 
 function BuildTab() {
   const { locale } = useAppState();
+  /* Tonalità scelta sulla ruota: parte da quella del brano iniziale e poi
+     segue i clic dell'utente. */
+  const [wheelKey, setWheelKey] = useState<string | null>(null);
   const tp = (k: string, p?: Record<string, string | number>) =>
     pageText(locale, 'setbuilder', k, p);
   const { run } = useJobs();
@@ -224,7 +227,7 @@ function BuildTab() {
       <div className="grid gap-4 lg:grid-cols-[1fr_340px]">
         <Card>
           <CardHeader>
-            <CardTitle className="text-body">{tp('step1')}</CardTitle>
+            <CardTitle className="text-body font-semibold">{tp('step1')}</CardTitle>
             <CardDescription>{tp('step1Desc')}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -302,11 +305,18 @@ function BuildTab() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-body">{tp('wheelTitle')}</CardTitle>
+            <CardTitle className="text-body font-semibold">{tp('wheelTitle')}</CardTitle>
             <CardDescription>{tp('wheelDesc')}</CardDescription>
           </CardHeader>
           <CardContent>
-            <CamelotWheel value={start?.camelot ?? null} size={260} />
+            {/* La ruota è un controllo, non un disegno: cliccare una tonalità
+                ri-centra l'insieme dei compatibili (§5.2). Senza `onChange` il
+                componente restava inerte pur avendo già tutto il necessario. */}
+            <CamelotWheel
+              value={wheelKey ?? start?.camelot ?? null}
+              onChange={setWheelKey}
+              size={260}
+            />
           </CardContent>
         </Card>
       </div>
@@ -314,7 +324,7 @@ function BuildTab() {
       {built && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-body">
+            <CardTitle className="text-body font-semibold">
               {tp('step2', {
                 n: built.tracks.length,
                 dur: formatDuration(built.totalDurationS)
@@ -327,7 +337,8 @@ function BuildTab() {
               {built.tracks.map((tr, i) => (
                 <div
                   key={tr.id}
-                  className="flex items-center gap-2.5 border-b border-line-subtle px-3 py-1.5 text-caption last:border-b-0"
+                  style={{ height: 'var(--row-h)', fontSize: 'var(--row-font)' }}
+                  className="flex items-center gap-2.5 border-b border-line-subtle px-3 last:border-b-0"
                 >
                   <span className="w-6 shrink-0 text-right font-mono tabular-nums text-ink-lo">
                     {i + 1}
@@ -455,7 +466,7 @@ function PlanTab() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-body">{tp('step1')}</CardTitle>
+          <CardTitle className="text-body font-semibold">{tp('step1')}</CardTitle>
           <CardDescription>{tp('step1Desc')}</CardDescription>
         </CardHeader>
         <CardContent>
@@ -484,7 +495,7 @@ function PlanTab() {
       {analysis && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-body">
+            <CardTitle className="text-body font-semibold">
               {tp('step2', { n: analysis.transitions.length, p: analysis.problems })}
             </CardTitle>
             <CardDescription>

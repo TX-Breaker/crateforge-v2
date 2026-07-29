@@ -267,7 +267,7 @@ function CuesTab() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-body">{tp('step1')}</CardTitle>
+          <CardTitle className="text-body font-semibold">{tp('step1')}</CardTitle>
           <CardDescription>{tp('step1Desc')}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -402,7 +402,7 @@ function CuesTab() {
       {results.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-body">
+            <CardTitle className="text-body font-semibold">
               {tp('step2', { saved: savedCount, tot: results.length })}
             </CardTitle>
             <CardDescription>{tp('step2Desc')}</CardDescription>
@@ -589,7 +589,7 @@ function TagsTab() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-body">{tp('step1')}</CardTitle>
+          <CardTitle className="text-body font-semibold">{tp('step1')}</CardTitle>
           <CardDescription>{tp('step1Desc')}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -619,7 +619,7 @@ function TagsTab() {
       {proposals && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-body">{tp('step2', { n: proposals.length })}</CardTitle>
+            <CardTitle className="text-body font-semibold">{tp('step2', { n: proposals.length })}</CardTitle>
             <CardDescription>{tp('step2Desc')}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -761,7 +761,7 @@ function StemsTab() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-body">{tp('cardTitle')}</CardTitle>
+          <CardTitle className="text-body font-semibold">{tp('cardTitle')}</CardTitle>
           <CardDescription>{tp('cardDesc')}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">

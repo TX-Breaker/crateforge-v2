@@ -24,7 +24,13 @@ const buttonVariants = cva(
         secondary:
           'border border-line bg-surface-3 text-ink-hi shadow-e1 hover:border-line-strong hover:bg-surface-hover',
         ghost: 'text-ink-mid hover:bg-surface-hover hover:text-ink-hi',
-        destructive: 'bg-destructive text-destructive-ink shadow-e1 hover:bg-destructive/88',
+        /* Due stadi: a riposo bordo e testo rossi su fondo appena tinto, a
+           hover il rosso pieno. Un bottone che è già un blocco rosso mentre
+           l'utente sta ancora leggendo la pagina urla prima di avere qualcosa
+           da dire, e a furia di urlare non lo si guarda più. */
+        destructive:
+          'border border-destructive/45 bg-destructive/10 text-destructive font-medium ' +
+          'hover:border-transparent hover:bg-destructive hover:text-destructive-ink hover:font-semibold',
         /* usato solo dove l'azione è già armata da una conferma esplicita */
         warning: 'bg-warning text-warning-ink shadow-e1 hover:bg-warning/88'
       },

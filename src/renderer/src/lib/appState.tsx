@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { Locale } from './i18n';
 
 /**
@@ -95,6 +95,21 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
 
   // Gli assi vivono sull'elemento <html>: il CSS fa il resto senza che i
   // componenti sappiano nulla della palette attiva.
+  /* Marca <html> per i 240ms dello scambio di tema: il CSS estende il
+     cross-fade a tutto l'albero solo in quella finestra. Il primo giro non lo
+     fa, altrimenti l'app "sfumerebbe" all'avvio. */
+  const firstThemePass = useRef(true);
+  useEffect(() => {
+    if (firstThemePass.current) {
+      firstThemePass.current = false;
+      return;
+    }
+    const root = document.documentElement;
+    root.dataset.theming = '';
+    const t = setTimeout(() => delete root.dataset.theming, 260);
+    return () => clearTimeout(t);
+  }, [isDark, themeStyle]);
+
   useEffect(() => {
     const root = document.documentElement;
     root.classList.toggle('dark', isDark);

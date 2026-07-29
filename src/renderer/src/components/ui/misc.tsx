@@ -30,7 +30,7 @@ export const Switch = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <SwitchPrimitives.Root
     className={cn(
-      'peer inline-flex h-[18px] w-8 shrink-0 cursor-pointer items-center rounded-full border border-line',
+      'peer inline-flex h-[21px] w-[38px] shrink-0 cursor-pointer items-center rounded-full border border-line',
       'transition-colors duration-press disabled:cursor-not-allowed disabled:opacity-45',
       'data-[state=checked]:border-accent data-[state=checked]:bg-accent data-[state=unchecked]:bg-surface-3',
       className
@@ -40,9 +40,9 @@ export const Switch = React.forwardRef<
   >
     <SwitchPrimitives.Thumb
       className={cn(
-        'pointer-events-none block h-3.5 w-3.5 translate-x-0.5 rounded-full bg-ink-hi shadow-e1',
+        'pointer-events-none block size-[17px] translate-x-0.5 rounded-full bg-ink-hi shadow-e1',
         'transition-transform duration-press ease-swift',
-        'data-[state=checked]:translate-x-[15px] data-[state=checked]:bg-accent-ink'
+        'data-[state=checked]:translate-x-[19px] data-[state=checked]:bg-accent-ink'
       )}
     />
   </SwitchPrimitives.Root>
@@ -353,13 +353,13 @@ export function Stepper({
 }) {
   const clampV = (v: number) => Math.min(max, Math.max(min, v));
   return (
-    <div className="inline-flex items-center gap-1">
+    <div className="inline-flex h-[34px] items-center overflow-hidden rounded-control border border-line bg-surface-3">
       <button
         type="button"
         aria-label="−"
         onClick={() => onChange(clampV(value - step))}
         disabled={value <= min}
-        className="grid size-7 place-items-center rounded-control border border-line bg-surface-3 text-ink-mid transition-colors duration-press hover:bg-surface-hover hover:text-ink-hi disabled:opacity-40"
+        className="grid h-full w-8 place-items-center border-r border-line text-ink-mid transition-colors duration-press hover:bg-surface-hover hover:text-ink-hi disabled:opacity-40"
       >
         <Minus className="size-3.5" />
       </button>
@@ -370,14 +370,14 @@ export function Stepper({
           const n = Number(e.target.value.replace(/[^\d-]/g, ''));
           if (Number.isFinite(n)) onChange(clampV(n));
         }}
-        className="h-7 w-12 rounded-control border border-line bg-surface-3 text-center font-mono text-data tabular-nums text-ink-hi"
+        className="h-full w-12 bg-transparent text-center font-mono text-data tabular-nums text-ink-hi"
       />
       <button
         type="button"
         aria-label="+"
         onClick={() => onChange(clampV(value + step))}
         disabled={value >= max}
-        className="grid size-7 place-items-center rounded-control border border-line bg-surface-3 text-ink-mid transition-colors duration-press hover:bg-surface-hover hover:text-ink-hi disabled:opacity-40"
+        className="grid h-full w-8 place-items-center border-l border-line text-ink-mid transition-colors duration-press hover:bg-surface-hover hover:text-ink-hi disabled:opacity-40"
       >
         <Plus className="size-3.5" />
       </button>
@@ -528,7 +528,7 @@ export const TabsTrigger = React.forwardRef<
     ref={ref}
     className={cn(
       'relative -mb-px inline-flex items-center gap-2 whitespace-nowrap border-b-2 border-transparent px-3 pb-2 pt-1.5',
-      'text-body font-medium text-ink-lo transition-colors duration-swap hover:text-ink-hi',
+      'text-body font-medium text-ink-mid transition-colors duration-swap hover:text-ink-hi',
       'data-[state=active]:border-accent data-[state=active]:text-ink-hi',
       '[&_svg]:size-3.5',
       className

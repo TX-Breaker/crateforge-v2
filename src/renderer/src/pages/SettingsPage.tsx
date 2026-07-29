@@ -105,13 +105,13 @@ function GeneralTab() {
     <div className="space-y-4">
       <Card>
         <CardHeader>
-          <CardTitle className="text-body">{tp('appearance')}</CardTitle>
+          <CardTitle className="text-body font-semibold">{tp('appearance')}</CardTitle>
           <CardDescription>{tp('appearanceDesc')}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
             <Eyebrow>{tp('styleLabel')}</Eyebrow>
-            <div className="grid gap-3 sm:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-3">
               {styles.map((s) => (
                 <button
                   key={s.id}
@@ -180,7 +180,7 @@ function GeneralTab() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-body">
+          <CardTitle className="flex items-center gap-2 text-body font-semibold">
             <Languages className="size-4" /> {tp('langLabel')}
           </CardTitle>
           <CardDescription>{tp('langDesc')}</CardDescription>
@@ -196,7 +196,7 @@ function GeneralTab() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-body">{tp('onboardingTitle')}</CardTitle>
+          <CardTitle className="text-body font-semibold">{tp('onboardingTitle')}</CardTitle>
           <CardDescription>{tp('onboardingDesc')}</CardDescription>
         </CardHeader>
         <CardContent>
@@ -237,7 +237,7 @@ function SecurityTab() {
     <div className="space-y-4">
       <Card>
         <CardHeader>
-          <CardTitle className="text-body">{tp('modeTitle')}</CardTitle>
+          <CardTitle className="text-body font-semibold">{tp('modeTitle')}</CardTitle>
           <CardDescription>{tp('modeDesc')}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -261,7 +261,7 @@ function SecurityTab() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-body">{tp('gatesTitle')}</CardTitle>
+          <CardTitle className="text-body font-semibold">{tp('gatesTitle')}</CardTitle>
           <CardDescription>{tp('gatesDesc')}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -368,7 +368,7 @@ function VersionCompatCard() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-body">
+        <CardTitle className="flex items-center gap-2 text-body font-semibold">
           <ShieldCheck className="size-4" /> {tp('versionsTitle')}
         </CardTitle>
         <CardDescription>{tp('versionsDesc')}</CardDescription>
@@ -483,7 +483,7 @@ function EngineTab() {
     <div className="space-y-4">
       <Card>
         <CardHeader>
-          <CardTitle className="text-body">{tp('sidecarTitle')}</CardTitle>
+          <CardTitle className="text-body font-semibold">{tp('sidecarTitle')}</CardTitle>
           <CardDescription>{tp('sidecarDesc')}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -502,7 +502,7 @@ function EngineTab() {
                 )}
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-3">
+              <div className="grid gap-4 sm:grid-cols-3">
                 <div className="rounded-card border border-line-subtle bg-surface-3 px-3 py-2">
                   <Eyebrow>{tp('engineRuns')}</Eyebrow>
                   <div className="text-body text-ink-hi">

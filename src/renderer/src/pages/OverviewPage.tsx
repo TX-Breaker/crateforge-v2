@@ -292,7 +292,7 @@ export function OverviewPage() {
             <div className="grid gap-4 lg:grid-cols-2">
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-body">{tp('bpmTitle')}</CardTitle>
+                  <CardTitle className="text-body font-semibold">{tp('bpmTitle')}</CardTitle>
                   <CardDescription>{tp('bpmDesc')}</CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -301,7 +301,7 @@ export function OverviewPage() {
               </Card>
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-body">{tp('keyTitle')}</CardTitle>
+                  <CardTitle className="text-body font-semibold">{tp('keyTitle')}</CardTitle>
                   <CardDescription>
                     {tp('keyDesc', { n: dist.noKey.toLocaleString(locale) })}
                   </CardDescription>
@@ -317,7 +317,7 @@ export function OverviewPage() {
           {suggestions.length > 0 && (
             <Card>
               <CardHeader>
-                <CardTitle className="text-body">{tp('nextTitle')}</CardTitle>
+                <CardTitle className="text-body font-semibold">{tp('nextTitle')}</CardTitle>
                 <CardDescription>{tp('nextDesc')}</CardDescription>
               </CardHeader>
               <CardContent className="grid gap-2 sm:grid-cols-2">
@@ -346,7 +346,7 @@ export function OverviewPage() {
       {/* import */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-body">{tp('importTitle')}</CardTitle>
+          <CardTitle className="text-body font-semibold">{tp('importTitle')}</CardTitle>
           <CardDescription>{tp('importDesc')}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -395,7 +395,7 @@ export function OverviewPage() {
       {/* import da altri software */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-body">
+          <CardTitle className="flex items-center gap-2 text-body font-semibold">
             <Shuffle className="size-4" /> {tp('foreignTitle')}
           </CardTitle>
           <CardDescription>{tp('foreignDesc')}</CardDescription>
