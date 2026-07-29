@@ -1,8 +1,27 @@
 import { app, BrowserWindow, dialog, shell } from 'electron';
+import { appendFileSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { openUdm } from '@core/udm';
 import { isWriteJobRunning, registerIpc } from './ipc';
 import { runPreflight } from './preflight';
+
+/**
+ * Registro di avvio su FILE.
+ *
+ * Un'applicazione che non si apre non ha modo di dire perché: la finestra è
+ * l'unico canale verso l'utente, e se manca quella manca tutto. Questo file è
+ * l'unica cosa che resta in mano a chi assiste — vive in
+ * userData/logs/main.log e non viene mai mostrato all'utente.
+ */
+function logMain(line: string): void {
+  try {
+    const dir = join(app.getPath('userData'), 'logs');
+    mkdirSync(dir, { recursive: true });
+    appendFileSync(join(dir, 'main.log'), `${new Date().toISOString()} ${line}\n`, 'utf-8');
+  } catch {
+    /* se non si può scrivere il log, non è il log a dover far cadere l'app */
+  }
+}
 
 /**
  * Processo main di CrateForge.
@@ -41,7 +60,39 @@ function createWindow(): void {
     }
   });
 
-  mainWindow.on('ready-to-show', () => mainWindow?.show());
+  /* `show: false` evita il lampo bianco all'avvio, ma lega la comparsa della
+     finestra a un evento del renderer: se quello non arriva — bundle rotto,
+     errore prima del primo disegno, processo di rendering morto — la finestra
+     resta nascosta per sempre e l'applicazione sembra non partita, pur essendo
+     viva nel gestore attività. Dopo 5 secondi la mostriamo lo stesso: meglio
+     una finestra vuota con un messaggio che nessuna finestra. */
+  let shown = false;
+  const reveal = (why: string) => {
+    if (shown || !mainWindow) return;
+    shown = true;
+    mainWindow.show();
+    if (why !== 'ready-to-show') logMain(`finestra mostrata per ripiego (${why})`);
+  };
+  mainWindow.on('ready-to-show', () => reveal('ready-to-show'));
+  const revealTimer = setTimeout(() => reveal('timeout di 5s'), 5000);
+  mainWindow.on('closed', () => clearTimeout(revealTimer));
+
+  // Errori del renderer: registrati e, se la finestra non si è mai vista,
+  // mostrati come dialogo — altrimenti non li leggerebbe nessuno.
+  mainWindow.webContents.on('did-fail-load', (_e, code, desc, url) => {
+    logMain(`caricamento fallito (${code} ${desc}) su ${url}`);
+    reveal('caricamento fallito');
+  });
+  mainWindow.webContents.on('render-process-gone', (_e, details) => {
+    logMain(`processo di rendering terminato: ${details.reason} (exitCode ${details.exitCode})`);
+    if (!shown) {
+      dialog.showErrorBox(
+        'CrateForge non è riuscito ad aprirsi',
+        `L'interfaccia si è chiusa durante l'avvio (${details.reason}).\n\n` +
+          `Dettagli in: ${join(app.getPath('userData'), 'logs', 'main.log')}`
+      );
+    }
+  });
   // Apri all'esterno SOLO http/https: uno schema file:/custom da un renderer
   // compromesso diventerebbe apertura/esecuzione arbitraria lato OS.
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -69,23 +120,38 @@ function createWindow(): void {
 // Istanza singola: due processi sullo stesso udm.sqlite (più il sidecar)
 // aumentano il rischio di lock/corruzione.
 if (!app.requestSingleInstanceLock()) {
+  /* Un'altra istanza è già viva: questa esce. È corretto — due processi sullo
+     stesso database aumentano il rischio di lock — ma va detto, perché il
+     sintomo che l'utente vede è "ho aperto il programma e non si apre niente",
+     e senza una riga non c'è modo di distinguerlo da un avvio fallito. */
+  logMain('istanza già in esecuzione: questa esce e passa il comando a quella');
   app.quit();
 } else {
   app.on('second-instance', () => {
     const w = BrowserWindow.getAllWindows()[0];
     if (w) {
       if (w.isMinimized()) w.restore();
+      if (!w.isVisible()) w.show();
       w.focus();
+      return;
     }
+    /* Prima istanza viva ma senza finestra (chiusa, o mai comparsa): invece di
+       non fare nulla — che dall'esterno è indistinguibile da un programma
+       morto — se ne apre una nuova. È il caso che lasciava l'utente a
+       cliccare l'icona senza risultato. */
+    logMain('seconda esecuzione senza finestra nella prima: ne apro una nuova');
+    createWindow();
   });
 
   app.whenReady().then(() => {
+    logMain(`avvio — versione ${app.getVersion()}, impacchettata=${app.isPackaged}`);
     const udmPath = join(app.getPath('userData'), 'udm.sqlite');
     let db;
     try {
       db = openUdm(udmPath);
     } catch (err) {
       // UDM corrotto/lockato o migrazione fallita: messaggio chiaro, non finestra muta.
+      logMain(`UDM non apribile: ${String(err)}`);
       dialog.showErrorBox(
         'CrateForge non può avviarsi',
         `Il database interno non è apribile:\n${String(err)}\n\nPercorso: ${udmPath}`
