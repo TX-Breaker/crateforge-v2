@@ -9,6 +9,7 @@ import {
   Moon,
   RefreshCw,
   Rows3,
+  ShieldCheck,
   Sun
 } from 'lucide-react';
 import {
@@ -324,7 +325,138 @@ function SecurityTab() {
           )}
         </CardContent>
       </Card>
+
+      <VersionCompatCard />
     </div>
+  );
+}
+
+/**
+ * Compatibilità con le versioni dei software DJ.
+ *
+ * Sta qui, tra i gate, perché è esattamente la stessa materia: cosa CrateForge
+ * si permette di scrivere. La regola è che si scrive solo verso versioni che
+ * l'autore ha collaudato guardando i byte; una versione più recente non è
+ * "probabilmente compatibile", è non verificata, e la scrittura si ferma.
+ * Lo sblocco esiste (chi ha provato di persona deve poter procedere) ma è per
+ * singolo software e singola versione, e passa da una conferma di sistema.
+ */
+function VersionCompatCard() {
+  const { locale, mode } = useAppState();
+  const tp = (k: string, p?: Record<string, string | number>) => pageText(locale, 'settings', k, p);
+  type Row = Awaited<ReturnType<typeof window.crateforge.versions.detect>>['rows'][number];
+  const [rows, setRows] = useState<Row[] | null>(null);
+  const [gate, setGate] = useState<'standard' | 'strict'>('standard');
+
+  const load = () =>
+    window.crateforge.versions.detect().then((r) => {
+      setRows(r.rows);
+      setGate(r.gate);
+    });
+  useEffect(() => {
+    void load();
+  }, []);
+
+  const tone: Record<Row['status'], 'success' | 'warning' | 'destructive' | 'neutral'> = {
+    ok: 'success',
+    newer: 'destructive',
+    unknown: 'warning',
+    acknowledged: 'warning'
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-body">
+          <ShieldCheck className="size-4" /> {tp('versionsTitle')}
+        </CardTitle>
+        <CardDescription>{tp('versionsDesc')}</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="overflow-x-auto rounded-card border border-line-subtle">
+          <table className="w-full text-left">
+            <thead className="border-b border-line-subtle bg-surface-3">
+              <tr className="font-mono text-eyebrow uppercase text-ink-lo">
+                <th className="px-3 py-2">{tp('versionsSoftware')}</th>
+                <th className="px-3 py-2">{tp('versionsDetected')}</th>
+                <th className="px-3 py-2">{tp('versionsTested')}</th>
+                <th className="px-3 py-2">{tp('versionsStatus')}</th>
+                <th className="px-3 py-2" />
+              </tr>
+            </thead>
+            <tbody>
+              {(rows ?? []).map((r) => (
+                <tr key={r.software} className="border-b border-line-subtle last:border-b-0">
+                  <td className="px-3 py-1.5 text-caption text-ink-hi">
+                    {r.label}
+                    <span className="block text-caption text-ink-lo">{r.marker}</span>
+                  </td>
+                  <td className="px-3 py-1.5 font-mono text-caption text-ink-mid">
+                    {r.detected ?? (r.libraryFound ? '—' : tp('versionsNotFound'))}
+                  </td>
+                  <td className="px-3 py-1.5 font-mono text-caption text-ink-mid">{r.maxTested}</td>
+                  <td className="px-3 py-1.5">
+                    <Badge variant={tone[r.status]}>{tp(`versionsStatus_${r.status}`)}</Badge>
+                  </td>
+                  <td className="px-3 py-1.5 text-right">
+                    {mode === 'expert' && r.status === 'acknowledged' && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() =>
+                          window.crateforge.versions.revoke(r.software).then(() => void load())
+                        }
+                      >
+                        {tp('versionsRevoke')}
+                      </Button>
+                    )}
+                    {mode === 'expert' && r.status === 'newer' && r.detected && (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() =>
+                          window.crateforge.versions
+                            .acknowledge(r.software, r.detected!)
+                            .then(() => void load())
+                        }
+                      >
+                        {tp('versionsUnlock', { v: r.detected })}
+                      </Button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {(rows ?? []).some((r) => r.status !== 'ok') && (
+          <Notice variant="warning" title={tp('versionsBlockedTitle')}>
+            <ul className="list-disc space-y-1 pl-5">
+              {(rows ?? [])
+                .filter((r) => r.status !== 'ok')
+                .map((r) => (
+                  <li key={r.software}>{r.message}</li>
+                ))}
+            </ul>
+          </Notice>
+        )}
+
+        <div className="space-y-1.5 border-t border-line-subtle pt-3">
+          <Eyebrow>{tp('versionsGateLabel')}</Eyebrow>
+          <p className="text-caption text-ink-lo">{tp('versionsGateDesc')}</p>
+          <Segmented<'standard' | 'strict'>
+            value={gate}
+            onChange={(m) => window.crateforge.versions.setGate(m).then(() => void load())}
+            options={[
+              { value: 'standard', label: tp('versionsGateStandard') },
+              { value: 'strict', label: tp('versionsGateStrict') }
+            ]}
+          />
+        </div>
+        {mode !== 'expert' && <p className="text-caption text-ink-lo">{tp('versionsNeedExpert')}</p>}
+      </CardContent>
+    </Card>
   );
 }
 

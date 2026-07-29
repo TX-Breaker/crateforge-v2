@@ -60,6 +60,16 @@ import { writeSetXml } from '@adapters/rekordbox/setXml';
 import type { TrackRow } from '@core/udm';
 import { ThrottledProgress } from './progress';
 import { networkPathWarning } from './networkPath';
+import {
+  acknowledgeKey,
+  appAcknowledgeKey,
+  evaluateAppVersion,
+  evaluateVersion,
+  TESTED,
+  type DjSoftware,
+  type VersionVerdict
+} from '@core/djVersions';
+import { probeRekordboxApp, probeVersion } from './versionProbe';
 import { checkSidecar, runSidecar, SidecarEvent } from './sidecar';
 import { rekordboxDefaultPaths } from './rekordboxPaths';
 import { detectDjSoftware } from './djSoftwarePaths';
@@ -151,6 +161,122 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
   });
   ipcMain.handle('sidecar:check', () => checkSidecar());
 
+  /* ------------------------------------------------- compatibilità versioni
+   * I formati di libreria non sono documentati: quello che CrateForge sa
+   * scrivere è stato ricavato guardando i byte di una versione precisa. Su una
+   * versione più recente la scrittura non fallirebbe con un errore — produrrebbe
+   * una libreria danneggiata. Perciò la scrittura verso una versione non
+   * collaudata viene RIFIUTATA, mentre la lettura resta possibile (leggere non
+   * può rovinare nulla) salvo che l'utente scelga la modalità severa.
+   */
+  const versionGate = (): 'standard' | 'strict' =>
+    getSetting(db, 'versionGate') === 'strict' ? 'strict' : 'standard';
+
+  const checkVersion = (software: DjSoftware, path: string): VersionVerdict =>
+    evaluateVersion(software, probeVersion(software, path), {
+      acknowledged: getSetting(db, acknowledgeKey(software)),
+      gate: versionGate()
+    });
+
+  /**
+   * Da chiamare PRIMA di ogni scrittura verso la libreria di un software DJ.
+   * Solleva se la versione non è collaudata: meglio un'operazione che non parte
+   * di una libreria da ricostruire a mano.
+   */
+  const assertWritable = (software: DjSoftware, path: string): VersionVerdict => {
+    const v = checkVersion(software, path);
+    if (v.blocksWrite) {
+      logOperation(db, 'version.block', path, 'error', `${software}=${v.detected ?? 'n/d'} ${v.status}`);
+      throw new Error(v.message);
+    }
+    if (v.status === 'acknowledged') {
+      logOperation(db, 'version.acknowledged', path, 'skipped', `${software}=${v.detected}`);
+    }
+    return v;
+  };
+
+  /** Verdetto in lettura: blocca solo in modalità severa, altrimenti avvisa. */
+  const checkReadable = (software: DjSoftware, path: string): VersionVerdict => {
+    const v = checkVersion(software, path);
+    if (v.blocksRead) {
+      logOperation(db, 'version.block', path, 'error', `${software}=${v.detected ?? 'n/d'} lettura`);
+      throw new Error(v.message);
+    }
+    return v;
+  };
+
+  /** Quadro completo per l'interfaccia: cosa è collaudato, cosa no. */
+  ipcMain.handle('versions:detect', () => {
+    const found = detectDjSoftware();
+    const rows = (Object.keys(TESTED) as DjSoftware[]).map((software) => {
+      const det = found.find((f) => f.id === software);
+      const detected = det?.found && det.path ? probeVersion(software, det.path) : null;
+      const v = evaluateVersion(software, detected, {
+        acknowledged: getSetting(db, acknowledgeKey(software)),
+        gate: versionGate()
+      });
+      return {
+        ...v,
+        label: TESTED[software].label,
+        marker: TESTED[software].marker,
+        testedWithApp: TESTED[software].testedWithApp,
+        testedOn: TESTED[software].testedOn,
+        // Versione dell'APP installata: informativa, non normativa (il file può
+        // arrivare da un altro computer).
+        installedApp: software === 'rekordbox' ? probeRekordboxApp() : null,
+        libraryPath: det?.path ?? null,
+        libraryFound: det?.found ?? false
+      };
+    });
+    return { gate: versionGate(), rows };
+  });
+
+  /**
+   * Sblocco manuale di UNA versione di UN software: è la porta prevista per
+   * l'autore quando ha collaudato una versione nuova, o per un utente esperto
+   * che accetta il rischio con cognizione di causa. Conferma nativa nel main
+   * (non falsificabile dal renderer) e traccia nel registro operazioni.
+   */
+  ipcMain.handle('versions:acknowledge', async (e, software: DjSoftware, version: string) => {
+    if (!TESTED[software]) throw new Error('Software non riconosciuto.');
+    if (!/^\d+(?:\.\d+)*$/.test(version)) throw new Error('Versione non valida.');
+    const parent = BrowserWindow.fromWebContents(e.sender) ?? win();
+    const opts = {
+      type: 'warning' as const,
+      buttons: ['Annulla', 'Sblocca'],
+      defaultId: 0,
+      cancelId: 0,
+      title: 'Versione non collaudata',
+      message:
+        `Sbloccare la scrittura verso ${TESTED[software].label} ${version}?\n\n` +
+        `L'ultima versione collaudata è la ${TESTED[software].maxTested}. Il formato di ` +
+        `questa versione non è stato verificato: se è cambiato, la scrittura può ` +
+        `danneggiare la libreria senza segnalare nulla. Sbloccalo solo se hai provato ` +
+        `tu stesso che i dati tornano indietro identici.`
+    };
+    const r = parent ? await dialog.showMessageBox(parent, opts) : await dialog.showMessageBox(opts);
+    if (r.response !== 1) return { ok: false };
+    setSetting(db, acknowledgeKey(software), version);
+    logOperation(db, 'version.unlock', software, 'ok', `sbloccata fino alla ${version}`);
+    return { ok: true, version };
+  });
+
+  /** Revoca dello sblocco: si torna al comportamento prudente. */
+  ipcMain.handle('versions:revoke', (_e, software: DjSoftware) => {
+    if (!TESTED[software]) throw new Error('Software non riconosciuto.');
+    setSetting(db, acknowledgeKey(software), '');
+    logOperation(db, 'version.unlock', software, 'ok', 'sblocco revocato');
+    return { ok: true };
+  });
+
+  /** Modalità del gate: severa = blocca anche la lettura. */
+  ipcMain.handle('versions:setGate', (_e, mode: 'standard' | 'strict') => {
+    const value = mode === 'strict' ? 'strict' : 'standard';
+    setSetting(db, 'versionGate', value);
+    logOperation(db, 'version.gate', null, 'ok', value);
+    return { ok: true, gate: value };
+  });
+
   // Percorsi di default dell'installazione Rekordbox dell'utente (per pre-puntare
   // il file picker del master.db e rilevarlo automaticamente sulla sua macchina).
   ipcMain.handle('rekordbox:defaultPaths', () => rekordboxDefaultPaths());
@@ -230,6 +356,9 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
 
   // ---- ingestion XML (percorso pure-Node, modalità solo-XML) ----
   ipcMain.handle('library:ingestXml', async (_e, xmlPath: string) => {
+    // Il collection XML dichiara la versione del proprio formato: se non e'
+    // quella collaudata l'import prosegue, ma l'utente lo viene a sapere.
+    const versioneXml = checkReadable('rekordbox', xmlPath);
     if (anyJobRunning) throw new Error('Un altro lavoro è già in corso.');
     return withJobLock(async () => {
       const progress = new ThrottledProgress(wc());
@@ -240,7 +369,9 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
         );
         progress.finish({ jobId, phase: 'ingest-xml', done: result.tracks, total: result.tracks });
         logOperation(db, 'ingest.xml', xmlPath, 'ok', JSON.stringify(result));
-        return result;
+        return versioneXml.status === 'ok'
+          ? result
+          : { ...result, warnings: [versioneXml.message] };
       } catch (err) {
         progress.finish({ jobId, phase: 'ingest-xml', done: 1, total: 1 });
         logOperation(db, 'ingest.xml', xmlPath, 'error', String(err));
@@ -256,6 +387,10 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
       const progress = new ThrottledProgress(wc());
       const jobId = randomUUID();
       try {
+        // Versione della libreria di origine: leggere non puo' rovinare nulla,
+        // ma se il formato e' piu' recente di quello collaudato quello che
+        // estraiamo puo' essere incompleto o sbagliato, e va detto.
+        const versione = checkReadable(kind, path);
         const lib =
           kind === 'traktor'
             ? readTraktorNml(path)
@@ -270,6 +405,7 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
         // tentativo potrebbe fallire con un errore incomprensibile.
         const netWarn = networkPathWarning(path);
         if (netWarn) result.warnings.unshift(netWarn);
+        if (versione.status !== 'ok') result.warnings.unshift(versione.message);
         progress.finish({ jobId, phase: `import-${kind}`, done: result.tracks, total: result.tracks });
         logOperation(db, `import.${kind}`, path, 'ok', JSON.stringify(result));
         return { ok: true, ...result };
@@ -359,12 +495,19 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
     if (!check.available) {
       return { ok: false, message: 'Il modulo di lettura non è disponibile su questo computer.' };
     }
+    const versioneSerato = checkReadable('serato', seratoDir);
     const r = await runSidecarJob('read-serato', 'read-serato', ['--serato-dir', seratoDir]);
     logOperation(db, 'import.serato', seratoDir, r.ok ? 'ok' : 'error', r.ok ? JSON.stringify(r.data) : r.message);
     const netWarn = networkPathWarning(seratoDir);
+    const avvisi = [netWarn, versioneSerato.status !== 'ok' ? versioneSerato.message : null].filter(
+      (a): a is string => !!a
+    );
     return r.ok
-      ? { ok: true, ...r.data, ...(netWarn ? { warnings: [netWarn] } : {}) }
-      : { ok: false, message: netWarn ? `${r.message}\n\n${netWarn}` : r.message };
+      ? { ok: true, ...r.data, ...(avvisi.length ? { warnings: avvisi } : {}) }
+      : {
+          ok: false,
+          message: avvisi.length ? [r.message, ...avvisi].join('\n\n') : r.message
+        };
   });
 
   ipcMain.handle('job:cancel', () => {
@@ -542,6 +685,10 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
     'export:engineLibrary',
     (_e, outDir: string, templateDbPath: string, sel?: { playlistIds?: number[] }) => {
       try {
+        // Lo schema della libreria generata viene copiato da questo m.db: se e'
+        // di una versione non collaudata, quello che scriviamo dentro puo' non
+        // corrispondere a cio' che Engine si aspetta.
+        assertWritable('engine', templateDbPath);
         const r = writeEngineLibrary(db, outDir, templateDbPath, sel ?? {});
         logOperation(
           db,
@@ -579,6 +726,14 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
     if (!check.available) {
       return { ok: false, message: 'Modulo sidecar non disponibile.' };
     }
+
+    /* Il formato dei tag Serato lo detta la versione di Serato che li leggerà.
+       Prendiamo come riferimento la libreria installata su questa macchina: se
+       è più recente di quella collaudata — o se non c'è affatto, e quindi non
+       possiamo verificare nulla — non scriviamo dentro i file audio dell'utente.
+       Chi prepara i file per un altro computer può sbloccare la versione a mano. */
+    const seratoLib = detectDjSoftware().find((s) => s.id === 'serato');
+    assertWritable('serato', seratoLib?.path ?? '');
 
     // Un job per file, con i soli hot cue entro gli 8 pad di Serato.
     const where =
@@ -689,6 +844,10 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
     async (_e, seratoDir: string, sel?: { playlistIds?: number[] }) => {
       const check = checkSidecar();
       if (!check.available) return { ok: false, message: 'Modulo sidecar non disponibile.' };
+
+      // Si scrive DENTRO la cartella _Serato_ dell'utente: la versione di quel
+      // database decide se il formato dei crate è quello che sappiamo produrre.
+      assertWritable('serato', seratoDir);
 
       const lists = listPlaylists(db).filter(
         (p) => !sel?.playlistIds?.length || sel.playlistIds.includes(p.id)
@@ -1155,6 +1314,20 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
       if (!check.available) {
         return { ok: false, message: 'Il modulo di lettura/scrittura non è disponibile.' };
       }
+
+      /* È l'unico punto in cui scriviamo dentro il database dell'utente. Il
+         master.db è cifrato e il suo schema non è ispezionabile da fuori:
+         l'unico dato disponibile è quale Rekordbox è installato qui. Se è più
+         recente di quello collaudato ci fermiamo — un errore adesso vale una
+         libreria da ricostruire dopo. */
+      const versioneRb = evaluateAppVersion('rekordbox', probeRekordboxApp(), {
+        acknowledged: getSetting(db, appAcknowledgeKey('rekordbox'))
+      });
+      if (versioneRb.blocksWrite) {
+        logOperation(db, 'version.block', masterDbPath, 'error', `rekordbox=${versioneRb.detected ?? 'n/d'}`);
+        return { ok: false, message: versioneRb.message };
+      }
+
       // Risolvi gli ID contenuto del master.db dai brani UDM (source_id).
       const idStmt = db.prepare(`SELECT source_id FROM tracks WHERE id = ?`);
       const contentIds = trackIds

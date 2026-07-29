@@ -19,6 +19,46 @@ const api = {
     check: () => ipcRenderer.invoke('sidecar:check'),
     downloadKey: () => ipcRenderer.invoke('sidecar:downloadKey')
   },
+  /**
+   * Compatibilità con le versioni dei software DJ. La scrittura verso una
+   * versione mai collaudata viene rifiutata dal main: qui il renderer legge lo
+   * stato per mostrarlo, e può chiedere lo sblocco di una singola versione
+   * (che il main conferma con un dialogo di sistema).
+   */
+  versions: {
+    detect: () =>
+      ipcRenderer.invoke('versions:detect') as Promise<{
+        gate: 'standard' | 'strict';
+        rows: {
+          software: string;
+          label: string;
+          marker: string;
+          status: 'ok' | 'newer' | 'unknown' | 'acknowledged';
+          detected: string | null;
+          maxTested: string;
+          testedWithApp: string | null;
+          testedOn: string;
+          installedApp: string | null;
+          libraryPath: string | null;
+          libraryFound: boolean;
+          message: string;
+          blocksWrite: boolean;
+          blocksRead: boolean;
+        }[];
+      }>,
+    acknowledge: (software: string, version: string) =>
+      ipcRenderer.invoke('versions:acknowledge', software, version) as Promise<{
+        ok: boolean;
+        version?: string;
+      }>,
+    revoke: (software: string) =>
+      ipcRenderer.invoke('versions:revoke', software) as Promise<{ ok: boolean }>,
+    setGate: (mode: 'standard' | 'strict') =>
+      ipcRenderer.invoke('versions:setGate', mode) as Promise<{
+        ok: boolean;
+        gate: 'standard' | 'strict';
+      }>
+  },
   library: {
     page: (q: { offset: number; limit: number; search?: string; needsReview?: boolean }) =>
       ipcRenderer.invoke('library:page', q),
