@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { useAppState } from '@/lib/appState';
-import { CAMELOT_HUES } from './CamelotWheel';
+import { aaSafe, mix, readableInk } from '@/lib/colors';
+import { tokenHex } from '@/lib/themeTokens';
+import { CAMELOT_HUES } from '@/lib/camelotHues';
 
 /**
  * Grafici della panoramica. Nessuna libreria esterna: sono forme semplici, e
@@ -58,7 +60,9 @@ export function HealthRing({
   size?: number;
   label?: React.ReactNode;
 }) {
-  const r = size / 2 - 9;
+  /* Anello 118 con tratto 9, come il documento: il raggio si ricava dal
+     tratto, così cambiando misura l'anello resta proporzionato. */
+  const r = size / 2 - 11;
   const c = 2 * Math.PI * r;
   const tone = score >= 85 ? 'text-success' : score >= 60 ? 'text-accent' : 'text-warning';
   return (
@@ -69,7 +73,7 @@ export function HealthRing({
           cy={size / 2}
           r={r}
           className="stroke-surface-3"
-          strokeWidth={7}
+          strokeWidth={9}
           fill="none"
         />
         <circle
@@ -81,7 +85,7 @@ export function HealthRing({
              l'anello continua. */
           className={cn('transition-[stroke-dashoffset] duration-[600ms] ease-out', tone)}
           stroke="currentColor"
-          strokeWidth={7}
+          strokeWidth={9}
           strokeLinecap="round"
           strokeDasharray={c}
           strokeDashoffset={c * (1 - Math.max(0, Math.min(100, score)) / 100)}
@@ -101,10 +105,13 @@ export function HealthRing({
 /** Istogramma BPM in bucket da 5. */
 export function BpmHistogram({
   data,
-  className
+  className,
+  onSelect
 }: {
   data: { bucket: number; count: number }[];
   className?: string;
+  /** click su una barra: apre l'elenco filtrato su quell'intervallo di tempo */
+  onSelect?: (from: number, to: number) => void;
 }) {
   const { locale } = useAppState();
   const [hover, setHover] = useState<number | null>(null);
@@ -116,23 +123,39 @@ export function BpmHistogram({
     <div className={className}>
       <div className="flex h-24 items-end gap-[2px]">
         {data.map((d) => (
-          <div
+          /* La barra è un CONTROLLO, non un disegno: un grafico che mostra 63
+             brani fra 70 e 75 BPM e non ti lascia arrivare a quei 63 ti fa
+             rifare a mano una selezione che il database ha già in mano. */
+          <button
             key={d.bucket}
-            className="group relative flex-1"
+            type="button"
+            disabled={!onSelect || d.count === 0}
+            aria-label={`${d.bucket}–${d.bucket + 5} BPM · ${d.count}`}
+            onClick={() => onSelect?.(d.bucket, d.bucket + 5)}
+            className={cn(
+              'group relative flex-1 rounded-t-[2px]',
+              onSelect && d.count > 0 ? 'cursor-pointer' : 'cursor-default'
+            )}
             onMouseEnter={() => setHover(d.bucket)}
             onMouseLeave={() => setHover((h) => (h === d.bucket ? null : h))}
           >
-            {/* Un accento solo per schermata (§1.4): le barre sono neutre e
-                l'ambra resta al bucket di picco — e a quello sotto il puntatore,
-                che e' l'altra domanda a cui il grafico risponde. */}
+            {/* Un accento solo per schermata (§1.4): l'ambra sta SOLO sul
+                bucket di picco. Il puntatore schiarisce la barra invece di
+                accenderla — se anche l'hover fosse in accento, per un istante
+                ci sarebbero due picchi e il colore smetterebbe di essere
+                informazione. */}
             <div
               className={cn(
                 'w-full rounded-t-[2px] transition-[height,background-color] duration-swap',
-                d.bucket === peak.bucket || hover === d.bucket ? 'bg-accent' : 'bg-line-strong'
+                d.bucket === peak.bucket
+                  ? 'bg-accent'
+                  : hover === d.bucket
+                    ? 'bg-ink-lo'
+                    : 'bg-line-strong'
               )}
               style={{ height: `${Math.max(2, (d.count / max) * 92)}px` }}
             />
-          </div>
+          </button>
         ))}
       </div>
       {/* Sei tacche equidistanti invece dei soli estremi: senza, per leggere
@@ -156,51 +179,83 @@ export function BpmHistogram({
 /** Copertura tonalità: 24 colonne (12A + 12B) nell'ordine della ruota. */
 export function KeyCoverage({
   data,
-  className
+  className,
+  onSelect
 }: {
   data: { camelot: string; count: number }[];
   className?: string;
+  /** click su una barra: apre l'elenco filtrato su quella tonalità */
+  onSelect?: (camelot: string) => void;
 }) {
-  const { locale } = useAppState();
+  const { locale, themeStyle, isDark } = useAppState();
   const map = new Map(data.map((d) => [d.camelot, d.count]));
   const keys: string[] = [];
   for (let n = 1; n <= 12; n++) keys.push(`${n}A`);
   for (let n = 1; n <= 12; n++) keys.push(`${n}B`);
   const max = Math.max(1, ...keys.map((k) => map.get(k) ?? 0));
 
-  /* Griglia 12x2 come il modello, non un istogramma: la domanda qui non e'
-     "quanti brani per tonalita'" ma "dove ho buchi nella ruota", e una griglia
-     di caselle la risponde a colpo d'occhio. Il riempimento e' la tinta della
-     tonalita' miscelata verso il fondo in proporzione al conteggio: casella
-     spenta = tonalita' che non hai. */
+  /* Inchiostri del tema attivo: la casella è colorata da un DATO, quindi il
+     contrasto della sua etichetta non lo garantisce la palette — va calcolato
+     qui, come nella ruota. */
+  const inks = useMemo(
+    () => ({
+      dark: tokenHex('--canvas', '#0A0B0D'),
+      light: tokenHex('--text-hi', '#EBECEE'),
+      surface: tokenHex('--surface-3', '#1D2126')
+    }),
+    [themeStyle, isDark]
+  );
+
+  /* Barre, una per tonalità, nell'ordine della ruota: 12 minori poi 12
+     maggiori. L'altezza dice quanti brani hai, la tinta dice QUALE tonalità —
+     sono le stesse dodici della ruota di Camelot, così l'occhio le riconosce
+     senza tornare a leggere l'etichetta.
+     Ogni tinta passa da `aaSafe` contro il fondo del pannello: le tinte Mixed
+     In Key sono sature, e dipinte così come sono sarebbero neon (§07). */
   return (
     <div className={className}>
-      <div className="grid grid-cols-12 gap-[3px]">
+      <div className="flex h-24 items-end gap-[2px]">
         {keys.map((k) => {
           const n = parseInt(k, 10);
           const count = map.get(k) ?? 0;
-          const strength = count === 0 ? 0 : 0.25 + (count / max) * 0.75;
+          const hue = aaSafe(mix(CAMELOT_HUES[n - 1], inks.dark, 0.86), inks.dark, inks.light);
           return (
-            <div
+            <button
               key={k}
+              type="button"
+              disabled={!onSelect || count === 0}
               title={`${k} · ${count.toLocaleString(locale)}`}
-              className="flex aspect-square items-center justify-center rounded-[4px] border border-line-subtle transition-colors duration-swap"
+              aria-label={`${k} · ${count.toLocaleString(locale)}`}
+              onClick={() => onSelect?.(k)}
+              className={cn(
+                'group relative flex-1 rounded-t-[2px] transition-[height,background-color] duration-swap',
+                onSelect && count > 0 ? 'cursor-pointer hover:brightness-125' : 'cursor-default'
+              )}
               style={{
-                backgroundColor: CAMELOT_HUES[n - 1],
-                opacity: count === 0 ? 0.1 : strength
+                height: `${Math.max(2, (count / max) * 92)}px`,
+                /* Tonalità che non hai: un moncone neutro, non il vuoto. Uno
+                   spazio bianco si legge come "manca il dato"; un moncone
+                   spento si legge come "questa tonalità non ce l'hai", che è
+                   la risposta vera e il senso di una mappa di copertura. */
+                backgroundColor: count === 0 ? inks.surface : hue
               }}
-            >
-              <span
-                className="font-mono text-[10px] tabular-nums"
-                style={{ color: count === 0 ? 'rgb(var(--text-lo))' : 'rgb(var(--canvas))' }}
-              >
-                {k}
-              </span>
-            </div>
+            />
           );
         })}
       </div>
-      <div className="mt-1.5 font-mono text-caption tabular-nums text-ink-lo">
+      {/* Le etichette stanno FUORI dalle barre: dentro sparirebbero sui
+          monconi bassi, che sono proprio quelli da leggere. */}
+      <div className="mt-1.5 flex gap-[2px]">
+        {keys.map((k) => (
+          <span
+            key={k}
+            className="flex-1 text-center font-mono text-[8.5px] tabular-nums text-ink-lo"
+          >
+            {k}
+          </span>
+        ))}
+      </div>
+      <div className="mt-1 font-mono text-caption tabular-nums text-ink-lo">
         {data.reduce((s, d) => s + d.count, 0).toLocaleString(locale)}
       </div>
     </div>

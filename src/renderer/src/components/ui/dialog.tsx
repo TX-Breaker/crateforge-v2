@@ -2,6 +2,8 @@ import * as React from 'react';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useAppState } from '@/lib/appState';
+import { t } from '@/lib/i18n';
 
 /**
  * Dialog (elevazione e3). Ingresso 280ms con scala leggera, overlay scuro:
@@ -34,7 +36,9 @@ DialogOverlay.displayName = DialogPrimitive.Overlay.displayName;
 const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & { hideClose?: boolean }
->(({ className, children, hideClose, ...props }, ref) => (
+>(({ className, children, hideClose, ...props }, ref) => {
+  const { locale } = useAppState();
+  return (
   <DialogPortal>
     <DialogOverlay />
     <DialogPrimitive.Content
@@ -50,14 +54,17 @@ const DialogContent = React.forwardRef<
     >
       {children}
       {!hideClose && (
-        <DialogPrimitive.Close className="absolute right-4 top-4 rounded-chip p-1 text-ink-lo transition-colors duration-press hover:bg-surface-hover hover:text-ink-hi">
+        <DialogPrimitive.Close
+          aria-label={t(locale, 'common.close')}
+          className="absolute right-4 top-4 grid size-7 place-items-center rounded-chip text-ink-lo transition-colors duration-press hover:bg-surface-hover hover:text-ink-hi"
+        >
           <X className="size-4" />
-          <span className="sr-only">Close</span>
         </DialogPrimitive.Close>
       )}
     </DialogPrimitive.Content>
   </DialogPortal>
-));
+  );
+});
 DialogContent.displayName = DialogPrimitive.Content.displayName;
 
 const DialogHeader = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (

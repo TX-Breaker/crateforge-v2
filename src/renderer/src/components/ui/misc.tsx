@@ -122,9 +122,11 @@ export const Label = React.forwardRef<
   React.ElementRef<typeof LabelPrimitive.Root>,
   React.ComponentPropsWithoutRef<typeof LabelPrimitive.Root>
 >(({ className, ...props }, ref) => (
+  /* `block` per lo stesso motivo di `Eyebrow`: un <label> è inline, e sopra un
+     controllo `inline-flex` finirebbe di fianco invece che sopra. */
   <LabelPrimitive.Root
     ref={ref}
-    className={cn('text-body font-medium text-ink-hi', className)}
+    className={cn('block text-body font-medium text-ink-hi', className)}
     {...props}
   />
 ));
@@ -633,20 +635,35 @@ export function Tooltip({
 }
 
 /* ------------------------------------------------------------- Empty state */
-/** Stato vuoto (§4.7): mai un trattino muto. Sempre motivo + via d'uscita. */
+/**
+ * Stato vuoto (§4.7 e §8.3): mai un trattino muto. Tre parti, sempre tutte e
+ * tre — che cosa non c'è, perché, e l'UNICO bottone che lo cambia.
+ *
+ * `action` è OBBLIGATORIA di proposito. Uno stato vuoto con un titolo e nessuna
+ * azione è un vicolo cieco, e un vicolo cieco in uno strumento di manutenzione
+ * si legge come una funzione rotta. Lasciarla facoltativa significava affidare
+ * la regola alla disciplina di chi scrive la pagina: con il tipo, non si
+ * dimentica.
+ *
+ * `tone="success"` per il caso che NON è uno stato vuoto: "nessun orfano
+ * trovato" è un risultato, e allora l'icona è verde e l'azione propone di
+ * allargare la ricerca, non di iniziarla.
+ */
 export function EmptyState({
   icon,
   title,
   children,
   action,
   className,
+  tone = 'empty',
   watermark = false
 }: {
   icon?: React.ReactNode;
   title: React.ReactNode;
   children?: React.ReactNode;
-  action?: React.ReactNode;
+  action: React.ReactNode;
   className?: string;
+  tone?: 'empty' | 'success';
   /**
    * Filigrana del marchio dietro il contenuto. Spenta ovunque per scelta: gli
    * stati vuoti del design system sono nudi, e ripeterla su tutti avrebbe
@@ -672,7 +689,12 @@ export function EmptyState({
         </span>
       )}
       {icon && (
-        <span className="relative grid size-10 place-items-center rounded-full bg-surface-3 text-ink-lo [&_svg]:size-5">
+        <span
+          className={cn(
+            'relative grid size-10 place-items-center rounded-full [&_svg]:size-5',
+            tone === 'success' ? 'bg-success/15 text-success' : 'bg-surface-3 text-ink-lo'
+          )}
+        >
           {icon}
         </span>
       )}
@@ -680,7 +702,7 @@ export function EmptyState({
         <div className="text-section text-ink-hi">{title}</div>
         {children && <p className="mx-auto max-w-md text-caption text-ink-mid">{children}</p>}
       </div>
-      {action && <div className="relative">{action}</div>}
+      <div className="relative">{action}</div>
     </div>
   );
 }

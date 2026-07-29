@@ -203,11 +203,35 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
   const versionGate = (): 'standard' | 'strict' =>
     getSetting(db, 'versionGate') === 'strict' ? 'strict' : 'standard';
 
-  const checkVersion = (software: DjSoftware, path: string): VersionVerdict =>
-    evaluateVersion(software, probeVersion(software, path), {
+  /**
+   * Il marcatore da leggere dipende da COSA si sta guardando, non solo da quale
+   * software è.
+   *
+   * Il caso che rompeva tutto: per Rekordbox il documento dichiara come
+   * marcatore `DJ_PLAYLISTS@Version`, che sta nel collection XML. Ma la
+   * sorgente rilevata sulla maggior parte delle macchine è `master.db`, che è
+   * uno SQLite CIFRATO: cercarci dentro un attributo XML non fallisce, dà
+   * semplicemente `null` per sempre. Risultato: "versione non rilevata" e
+   * scritture sospese su un'installazione perfettamente collaudata.
+   *
+   * Su master.db l'unico dato onesto è quale rekordbox è installato su questa
+   * macchina — che è esattamente ciò per cui esiste `evaluateAppVersion`.
+   */
+  const isEncryptedRekordboxDb = (software: DjSoftware, path: string): boolean =>
+    software === 'rekordbox' && /\.db$/i.test(path);
+
+  const checkVersion = (software: DjSoftware, path: string): VersionVerdict => {
+    if (isEncryptedRekordboxDb(software, path)) {
+      return evaluateAppVersion('rekordbox', probeRekordboxApp(), {
+        acknowledged: getSetting(db, appAcknowledgeKey('rekordbox')),
+        gate: versionGate()
+      });
+    }
+    return evaluateVersion(software, probeVersion(software, path), {
       acknowledged: getSetting(db, acknowledgeKey(software)),
       gate: versionGate()
     });
+  };
 
   /**
    * Da chiamare PRIMA di ogni scrittura verso la libreria di un software DJ.
@@ -241,21 +265,29 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
     const found = detectDjSoftware();
     const rows = (Object.keys(TESTED) as DjSoftware[]).map((software) => {
       const det = found.find((f) => f.id === software);
-      const detected = det?.found && det.path ? probeVersion(software, det.path) : null;
-      const v = evaluateVersion(software, detected, {
-        acknowledged: getSetting(db, acknowledgeKey(software)),
-        gate: versionGate()
-      });
+      const path = det?.found && det.path ? det.path : null;
+      const onEncryptedDb = path !== null && isEncryptedRekordboxDb(software, path);
+      const v = path ? checkVersion(software, path) : null;
       return {
-        ...v,
+        ...(v ??
+          evaluateVersion(software, null, {
+            acknowledged: getSetting(db, acknowledgeKey(software)),
+            gate: versionGate()
+          })),
         label: TESTED[software].label,
-        marker: TESTED[software].marker,
+        /* Il marcatore dichiarato NON è sempre quello effettivamente letto:
+           su master.db si guarda la versione dell'applicazione. La riga lo
+           dice, altrimenti l'utente legge un numero e crede sia un altro. */
+        marker: onEncryptedDb
+          ? 'versione di rekordbox installata (master.db è cifrato)'
+          : TESTED[software].marker,
         testedWithApp: TESTED[software].testedWithApp,
         testedOn: TESTED[software].testedOn,
-        // Versione dell'APP installata: informativa, non normativa (il file può
-        // arrivare da un altro computer).
-        installedApp: software === 'rekordbox' ? probeRekordboxApp() : null,
-        libraryPath: det?.path ?? null,
+        // Versione dell'APP installata: informativa quando il verdetto viene
+        // dal formato, normativa quando il formato non è ispezionabile.
+        installedApp: det?.app.version ?? (software === 'rekordbox' ? probeRekordboxApp() : null),
+        appInstalled: det?.app.installed ?? false,
+        libraryPath: path,
         libraryFound: det?.found ?? false
       };
     });

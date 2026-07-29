@@ -33,15 +33,25 @@ export function Sidebar({
   const expert = mode === 'expert';
   const routes = visibleRoutes(expert);
 
+  /**
+   * Contatore della destinazione. Lo zero SI MOSTRA, spento (§8.2): un numero
+   * che sparisce quando vale zero costringe a chiedersi se il dato manchi o
+   * sia davvero zero, e sono due risposte diverse. Qui `null` significa una
+   * cosa sola — non lo sappiamo ancora — e allora non si scrive niente,
+   * mai un segnaposto o il conteggio della scansione precedente.
+   */
   const counterFor = (r: RouteDef): string | null => {
     if (!r.counter) return null;
     if (r.counter === 'health') return health ? String(health.score) : null;
     if (r.counter === 'tracks') return stats ? stats.tracks.toLocaleString(locale) : null;
-    if (r.counter === 'review')
-      return stats && stats.needsReview > 0 ? stats.needsReview.toLocaleString(locale) : null;
-    if (r.counter === 'arrivals') return arrivals > 0 ? String(arrivals) : null;
+    if (r.counter === 'review') return stats ? stats.needsReview.toLocaleString(locale) : null;
+    if (r.counter === 'arrivals') return arrivals.toLocaleString(locale);
     return null;
   };
+
+  const counterIsZero = (r: RouteDef): boolean =>
+    (r.counter === 'review' && stats?.needsReview === 0) ||
+    (r.counter === 'arrivals' && arrivals === 0);
 
   return (
     <aside
@@ -137,7 +147,12 @@ export function Sidebar({
                             />
                           )}
                           {counter && (
-                            <span className="shrink-0 font-mono text-[10.5px] tabular-nums text-ink-lo">
+                            <span
+                              className={cn(
+                                'shrink-0 font-mono text-[10.5px] tabular-nums',
+                                counterIsZero(r) ? 'text-ink-disabled' : 'text-ink-lo'
+                              )}
+                            >
                               {counter}
                             </span>
                           )}

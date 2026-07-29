@@ -151,4 +151,54 @@ describe('readVirtualDjXml + import', () => {
     expect(r.tracks).toBe(1);
     expect(r.cues).toBe(2);
   });
+
+  /**
+   * Caso preso da una libreria VirtualDJ 2026 reale (115 brani): `Tags@Bpm` e
+   * `Scan@Bpm` divergono su 113 brani su 115. I valori qui sotto sono quelli
+   * veri del primo brano di quel database.
+   *
+   * Vale il tempo dei TAG, che è quello che VirtualDJ mostra; e la fase, che
+   * appartiene all'analisi con l'altro tempo, va lasciata cadere: una griglia
+   * costruita mescolando le due misure suona a tempo per qualche battuta e poi
+   * scivola, che è il modo peggiore di sbagliare.
+   */
+  it('tempi discordi: tiene quello dei tag e NON importa la griglia', () => {
+    const p = join(dir, 'database.xml');
+    writeFileSync(
+      p,
+      `<?xml version="1.0" encoding="UTF-8"?>
+<VirtualDJ_Database Version="2026">
+ <Song FilePath="C:\\Music\\beat.mp3" FileSize="7743034">
+  <Tags Author="A" Title="T" Bpm="0.444444" />
+  <Infos SongLength="188.13" />
+  <Scan Version="801" Bpm="0.666667" Phase="14.801519" Key="G#" />
+ </Song>
+</VirtualDJ_Database>`,
+      'utf-8'
+    );
+    const lib = readVirtualDjXml(p);
+    const t = lib.tracks[0];
+    expect(Math.round(t.bpm!)).toBe(135); // 60 / 0.444444, non 90
+    expect(t.beatgridAnchorMs).toBeNull();
+    expect(lib.warnings.some((w) => w.includes('due tempi diversi'))).toBe(true);
+  });
+
+  it('tempi concordi: la griglia viene importata', () => {
+    const p = join(dir, 'database.xml');
+    writeFileSync(
+      p,
+      `<?xml version="1.0" encoding="UTF-8"?>
+<VirtualDJ_Database Version="2026">
+ <Song FilePath="C:\\Music\\ok.mp3">
+  <Tags Bpm="0.5" />
+  <Scan Version="801" Bpm="0.5" Phase="2.0" />
+ </Song>
+</VirtualDJ_Database>`,
+      'utf-8'
+    );
+    const lib = readVirtualDjXml(p);
+    expect(lib.tracks[0].bpm).toBe(120);
+    expect(lib.tracks[0].beatgridAnchorMs).toBe(2000);
+    expect(lib.warnings.some((w) => w.includes('due tempi diversi'))).toBe(false);
+  });
 });

@@ -233,7 +233,18 @@ function OrphansTab() {
           </CardHeader>
           <CardContent className="space-y-3">
             {result.orphans.length === 0 ? (
-              <EmptyState icon={<ShieldCheck />} title={tp('noneTitle')}>
+              /* Risultato, non stato vuoto (§8.3): icona verde, e l'azione
+                 propone di ALLARGARE la ricerca, non di iniziarla. */
+              <EmptyState
+                tone="success"
+                icon={<ShieldCheck />}
+                title={tp('noneTitle')}
+                action={
+                  <Button variant="secondary" onClick={() => pickDir(setMusicDir)}>
+                    <FolderSearch /> {tp('noneAction')}
+                  </Button>
+                }
+              >
                 {tp('noneBody', {
                   files: result.scannedFiles.toLocaleString(locale)
                 })}
@@ -496,7 +507,16 @@ function DuplicatesTab() {
           </CardHeader>
           <CardContent className="space-y-3">
             {groups.length === 0 ? (
-              <EmptyState icon={<ShieldCheck />} title={tp('noneTitle')}>
+              <EmptyState
+                tone="success"
+                icon={<ShieldCheck />}
+                title={tp('noneTitle')}
+                action={
+                  <Button variant="secondary" onClick={doRun} working={busy}>
+                    <Fingerprint /> {tp('noneAction')}
+                  </Button>
+                }
+              >
                 {tp('noneBody')}
               </EmptyState>
             ) : (
@@ -676,7 +696,16 @@ function QuarantineTab() {
       </Card>
 
       {folders && folders.length === 0 && (
-        <EmptyState icon={<ShieldCheck />} title={tp('emptyTitle')}>
+        <EmptyState
+          tone="success"
+          icon={<ShieldCheck />}
+          title={tp('emptyTitle')}
+          action={
+            <Button variant="secondary" onClick={pickRoot}>
+              <FolderSearch /> {tp('emptyAction')}
+            </Button>
+          }
+        >
           {tp('emptyBody')}
         </EmptyState>
       )}

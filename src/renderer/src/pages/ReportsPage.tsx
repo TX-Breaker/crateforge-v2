@@ -142,7 +142,16 @@ function ExcelTab() {
             {viewPath ? (
               <ExcelViewer filePath={viewPath} />
             ) : (
-              <EmptyState title={tp('noPreviewTitle')}>{tp('noPreviewBody')}</EmptyState>
+              <EmptyState
+                title={tp('noPreviewTitle')}
+                action={
+                  <Button variant="primary" onClick={doGenerate} working={busy}>
+                    <FileSpreadsheet /> {tp('noPreviewAction')}
+                  </Button>
+                }
+              >
+                {tp('noPreviewBody')}
+              </EmptyState>
             )}
           </CardContent>
         </Card>
@@ -293,7 +302,15 @@ function SiaeTab() {
           </CardHeader>
           <CardContent className="space-y-3">
             {sessions.length === 0 ? (
-              <EmptyState icon={<ListMusic />} title={tp('noSessionsTitle')}>
+              <EmptyState
+                icon={<ListMusic />}
+                title={tp('noSessionsTitle')}
+                action={
+                  <Button variant="secondary" onClick={() => void refreshSessions()}>
+                    <CalendarClock /> {tp('noSessionsAction')}
+                  </Button>
+                }
+              >
                 {tp('noSessionsBody')}
               </EmptyState>
             ) : (
@@ -315,7 +332,9 @@ function SiaeTab() {
                     <button
                       key={s.session_id}
                       onClick={() => setSelected(s.session_id)}
-                      className={`flex w-full items-center gap-2 border-b border-line-subtle px-3 py-2 text-left transition-colors duration-press last:border-b-0 hover:bg-surface-hover ${
+                      /* Densità globale (§8.4), come le altre liste. */
+                      style={{ height: 'var(--row-h)', fontSize: 'var(--row-font)' }}
+                      className={`flex w-full items-center gap-2 border-b border-line-subtle px-3 text-left transition-colors duration-press last:border-b-0 hover:bg-surface-hover ${
                         selected === s.session_id ? 'bg-accent/10' : ''
                       }`}
                     >

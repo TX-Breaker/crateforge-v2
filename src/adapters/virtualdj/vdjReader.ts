@@ -132,6 +132,8 @@ export function readVirtualDjXml(dbPath: string): ForeignLibrary {
 
   const warnings: string[] = [];
   const tracks: NormTrack[] = [];
+  /** brani in cui il tempo dei tag e quello dell'analisi non coincidono */
+  let gridDropped = 0;
   for (const s of asArray<Record<string, unknown>>(root.Song)) {
     const path = (s['@_FilePath'] as string) || null;
     if (!path) continue;
@@ -139,7 +141,20 @@ export function readVirtualDjXml(dbPath: string): ForeignLibrary {
     const infos = (s.Infos ?? {}) as Record<string, string>;
     const scan = (s.Scan ?? {}) as Record<string, string>;
 
-    const bpm = vdjBpm(tags['@_Bpm']) ?? vdjBpm(scan['@_Bpm']);
+    /* VirtualDJ tiene DUE tempi per lo stesso brano: `Tags@Bpm`, che è quello
+       che il programma mostra e usa, e `Scan@Bpm`, scritto dal motore di
+       analisi (qui `Scan@Version="801"`). Su una libreria reale di 115 brani
+       ne divergono 113, quasi sempre di un fattore fisso — cioè non sono
+       arrotondamenti, sono due misure diverse.
+       Si prende `Tags`, che è la verità per l'utente: è il numero che legge
+       nel programma. */
+    const tagsBpm = vdjBpm(tags['@_Bpm']);
+    const scanBpm = vdjBpm(scan['@_Bpm']);
+    const bpm = tagsBpm ?? scanBpm;
+    /* Le due misure sono incoerenti quando distano più di mezzo BPM. Sotto
+       quella soglia sono la stessa misura arrotondata. */
+    const bpmDisagrees =
+      tagsBpm !== null && scanBpm !== null && Math.abs(tagsBpm - scanBpm) > 0.5;
     const key = tags['@_Key'] || scan['@_Key'] || null;
     const year = tags['@_Year'] ? Number(tags['@_Year']) || null : null;
     const durationS = infos['@_SongLength'] ? Number(infos['@_SongLength']) || null : null;
@@ -151,10 +166,17 @@ export function readVirtualDjXml(dbPath: string): ForeignLibrary {
       .map(mapPoi)
       .filter((c): c is NormCue => c !== null);
 
-    // Beatgrid VirtualDJ: Scan@Phase = offset del primo beat in SECONDI (downbeat),
-    // Scan@Bpm dà il tempo. Prima ignorati → la fase si perdeva nella conversione.
+    /* Beatgrid: `Scan@Phase` è l'offset del primo beat in SECONDI, e appartiene
+       alla stessa analisi che ha prodotto `Scan@Bpm`.
+       Quindi quando i due tempi divergono la fase NON si può usare: accoppiata
+       al BPM di `Tags` descriverebbe una griglia che non esiste, e una griglia
+       sbagliata è peggio di nessuna griglia — il brano suona a tempo per otto
+       battute e poi scivola. In quel caso si tiene il tempo e si lascia cadere
+       l'ancoraggio, dicendolo. */
     const phase = scan['@_Phase'] !== undefined ? Number(scan['@_Phase']) : NaN;
-    const beatgridAnchorMs = Number.isFinite(phase) ? phase * 1000 : null;
+    const beatgridAnchorMs =
+      Number.isFinite(phase) && !bpmDisagrees ? phase * 1000 : null;
+    if (bpmDisagrees) gridDropped++;
 
     tracks.push({
       sourceId: path, // FilePath è l'identificatore stabile in VirtualDJ
@@ -175,6 +197,14 @@ export function readVirtualDjXml(dbPath: string): ForeignLibrary {
   }
 
   if (tracks.length === 0) warnings.push('Nessun brano trovato nel database VirtualDJ.');
+  if (gridDropped > 0) {
+    warnings.push(
+      `VirtualDJ: ${gridDropped} brani hanno due tempi diversi (quello dei tag e quello ` +
+        `dell'ultima analisi). È stato tenuto il tempo dei tag, quello che VirtualDJ ` +
+        `mostra; la griglia dei beat non è stata importata per quei brani, perché ` +
+        `l'ancoraggio appartiene all'altra misura e produrrebbe una griglia sbagliata.`
+    );
+  }
 
   // Playlist dai .vdjfolder nella cartella "Folders" accanto al database.
   const { playlists, filters } = readVdjFolders(join(dirname(dbPath), 'Folders'));

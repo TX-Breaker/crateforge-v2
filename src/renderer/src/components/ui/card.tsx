@@ -44,9 +44,18 @@ export const CardFooter = ({ className, ...props }: React.HTMLAttributes<HTMLDiv
   />
 );
 
-/** Etichetta di gruppo in mono maiuscolo: l'unico "settimo livello" ammesso. */
+/**
+ * Etichetta di gruppo in mono maiuscolo: l'unico "settimo livello" ammesso.
+ *
+ * È `block`. Sembra un dettaglio e non lo è: come `<span>` inline finiva sulla
+ * STESSA RIGA del controllo che etichettava — Stepper e Segmented sono
+ * `inline-flex` — e nessun `space-y` del contenitore poteva separarli, perché
+ * fra due elementi in linea non c'è spazio verticale da distribuire. Il
+ * risultato era «LUNGHEZZA − 10 + brani» tutto attaccato.
+ * Dove serve una etichetta in linea si passa `className="inline"`.
+ */
 export const Eyebrow = ({ className, ...props }: React.HTMLAttributes<HTMLSpanElement>) => (
-  <span className={cn('font-mono text-eyebrow uppercase text-ink-lo', className)} {...props} />
+  <span className={cn('block font-mono text-eyebrow uppercase text-ink-lo', className)} {...props} />
 );
 
 /** Intestazione di sezione dentro una pagina. */

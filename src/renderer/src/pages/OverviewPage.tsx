@@ -296,7 +296,13 @@ export function OverviewPage() {
                   <CardDescription>{tp('bpmDesc')}</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <BpmHistogram data={dist.bpm} />
+                  {/* Cliccare una barra porta all'elenco già filtrato su quel
+                      tempo: il grafico risponde "quanti", il click risponde
+                      "quali", ed è sempre la seconda domanda. */}
+                  <BpmHistogram
+                    data={dist.bpm}
+                    onSelect={(from, to) => go('tracks', undefined, { bpm: `${from}-${to}` })}
+                  />
                 </CardContent>
               </Card>
               <Card>
@@ -307,7 +313,10 @@ export function OverviewPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <KeyCoverage data={dist.camelot} />
+                  <KeyCoverage
+                    data={dist.camelot}
+                    onSelect={(camelot) => go('tracks', undefined, { camelot })}
+                  />
                 </CardContent>
               </Card>
             </div>

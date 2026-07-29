@@ -34,6 +34,10 @@ interface Detection {
   modifiedAt: string | null;
   limit?: 'readOnly' | 'external' | 'directWrite';
   kind: 'masterdb' | 'nml' | 'vdjxml' | 'seratoDir' | 'enginedb';
+  /** l'applicazione installata: cosa diversa dall'avere una libreria */
+  app: { installed: boolean; path: string | null; version: string | null };
+  /** cosa cercare se la scelta passa all'utente */
+  hint: { fileName: string | null; typicalPath: string };
 }
 
 const NAMES: Record<SoftwareId, string> = {
@@ -67,6 +71,10 @@ export function FirstRun() {
   const [manual, setManual] = useState<Partial<Record<SoftwareId, string>>>({});
   const [busy, setBusy] = useState(false);
   const [importLog, setImportLog] = useState<{ id: SoftwareId; ok: boolean; text: string }[]>([]);
+  /** nome del file scelto a mano quando non è quello atteso, per software */
+  const [wrongPick, setWrongPick] = useState<Partial<Record<SoftwareId, string>>>({});
+  /** true quando l'utente ha deciso di proseguire NONOSTANTE un import fallito */
+  const [acceptedFailures, setAcceptedFailures] = useState(false);
 
   const detect = useCallback(async () => {
     setBusy(true);
@@ -96,8 +104,22 @@ export function FirstRun() {
     const picked =
       d.kind === 'seratoDir'
         ? await window.crateforge.dialog.openDirectory()
-        : await window.crateforge.dialog.openFile(filters[d.kind]);
+        : // Si apre GIÀ nella cartella giusta: il filtro per estensione non
+          // basta a guidare, e nella cartella di VirtualDJ l'unico .xml è
+          // `settings.xml`, che è il file sbagliato.
+          await window.crateforge.dialog.openFile(filters[d.kind], d.hint.typicalPath);
     if (!picked) return;
+    /* Controllo del nome PRIMA di accettarlo. Non è una validazione del
+       contenuto — quella la fa il lettore — ma intercetta l'errore più comune
+       e lo spiega subito, invece di lasciarlo esplodere tre passi dopo con un
+       messaggio che parla di tag XML. */
+    const expected = d.hint.fileName;
+    const base = picked.split(/[\\/]/).pop() ?? '';
+    if (expected && base.toLowerCase() !== expected.toLowerCase()) {
+      setWrongPick((w) => ({ ...w, [d.id]: base }));
+      return;
+    }
+    setWrongPick((w) => ({ ...w, [d.id]: undefined }));
     setManual((m) => ({ ...m, [d.id]: picked }));
     setChosen((c) => new Set(c).add(d.id));
   };
@@ -132,22 +154,39 @@ export function FirstRun() {
     }
   };
 
+  /**
+   * Import dei software scelti.
+   *
+   * Se qualcosa fallisce il wizard SI FERMA qui. Prima avanzava comunque alla
+   * diagnosi: l'utente vedeva un errore scorrere via e si ritrovava a leggere
+   * la salute di una libreria che non era stata importata. Un passo che va
+   * avanti dopo un errore sta dicendo che l'errore non conta.
+   *
+   * Le tre uscite (riprova, cambia file, prosegui lo stesso) stanno nella
+   * schermata: la scelta è dell'utente, ma va fatta esplicitamente.
+   */
   const runImport = async () => {
     if (!detections) return;
     setBusy(true);
     setImportLog([]);
+    setAcceptedFailures(false);
+    const results: { id: SoftwareId; ok: boolean; text: string }[] = [];
     try {
       for (const d of detections) {
         if (!chosen.has(d.id)) continue;
         const r = await importOne(d);
-        setImportLog((prev) => [...prev, { id: d.id, ...r }]);
+        results.push({ id: d.id, ...r });
+        setImportLog([...results]);
       }
       await refresh();
-      setStep(3);
+      if (results.length > 0 && results.every((r) => r.ok)) setStep(3);
     } finally {
       setBusy(false);
     }
   };
+
+  const failed = importLog.filter((r) => !r.ok);
+  const importDone = importLog.length > 0 && !busy;
 
   const steps = [tp('s1'), tp('s2'), tp('s3'), tp('s4'), tp('s5')];
 
@@ -243,6 +282,11 @@ export function FirstRun() {
                             ) : (
                               <Badge variant="success">{tp('ready')}</Badge>
                             )
+                          ) : d.app.installed ? (
+                            /* Installato ma senza libreria: è uno stato
+                               diverso da "non installato", e porta l'utente a
+                               fare una cosa diversa. */
+                            <Badge variant="warning">{tp('noLibraryYet')}</Badge>
                           ) : (
                             <Badge variant="neutral">{tp('notFound')}</Badge>
                           )}
@@ -287,8 +331,39 @@ export function FirstRun() {
                         ) : (
                           <>
                             <p className="text-caption text-ink-mid">
-                              {d.limit === 'external' ? tp('externalHint') : tp('notFoundHint')}
+                              {d.app.installed
+                                ? tp('installedNoLibrary', {
+                                    app: NAMES[d.id],
+                                    v: d.app.version ?? '—'
+                                  })
+                                : d.limit === 'external'
+                                  ? tp('externalHint')
+                                  : tp('notFoundHint')}
                             </p>
+                            {/* Che cosa deve cercare, per nome e per posto.
+                                Senza questo la selezione manuale è indovinare:
+                                nella cartella di VirtualDJ ci sono più .xml e
+                                uno solo è il database. */}
+                            <p className="text-caption text-ink-lo">
+                              {d.hint.fileName
+                                ? tp('lookFor', { file: d.hint.fileName })
+                                : tp('lookForFolder')}
+                            </p>
+                            <p
+                              className="truncate font-mono text-caption text-ink-lo"
+                              title={d.hint.typicalPath}
+                              data-selectable
+                            >
+                              {shortenPath(d.hint.typicalPath, 52)}
+                            </p>
+                            {wrongPick[d.id] && (
+                              <p className="text-caption text-destructive">
+                                {tp('wrongFile', {
+                                  picked: wrongPick[d.id]!,
+                                  expected: d.hint.fileName ?? '—'
+                                })}
+                              </p>
+                            )}
                             <Button size="sm" variant="secondary" onClick={() => browseFor(d)}>
                               <FolderOpen /> {tp('browse')}
                             </Button>
@@ -360,6 +435,45 @@ export function FirstRun() {
               >
                 <Search /> {tp('runImport')}
               </Button>
+
+              {/* Il wizard si è FERMATO qui perché qualcosa non è entrato.
+                  Dice quale, con l'errore vero, e mette in fila le tre uscite:
+                  riprovare, tornare a scegliere un altro file, oppure andare
+                  avanti sapendo che quella libreria non c'è. */}
+              {importDone && failed.length > 0 && (
+                <Notice
+                  variant="destructive"
+                  title={tp('importStoppedTitle', { n: failed.length })}
+                  actions={
+                    <>
+                      <Button size="sm" variant="secondary" onClick={runImport}>
+                        <RefreshCw /> {tp('retryImport')}
+                      </Button>
+                      <Button size="sm" variant="secondary" onClick={() => setStep(1)}>
+                        <FolderOpen /> {tp('backToPick')}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => {
+                          setAcceptedFailures(true);
+                          setStep(3);
+                        }}
+                      >
+                        {tp('continueAnyway')}
+                      </Button>
+                    </>
+                  }
+                >
+                  <span className="space-y-1">
+                    {failed.map((f) => (
+                      <span key={f.id} className="block">
+                        <span className="text-ink-hi">{NAMES[f.id]}</span> — {f.text}
+                      </span>
+                    ))}
+                  </span>
+                </Notice>
+              )}
             </div>
           )}
 
@@ -477,7 +591,12 @@ export function FirstRun() {
             <Button
               variant="primary"
               onClick={() => setStep((s) => s + 1)}
-              disabled={step === 2 && importLog.length === 0}
+              /* Dal passo import non si esce con un errore aperto: o si
+                 risolve, o si accetta esplicitamente dal riquadro rosso. Il
+                 tasto Avanti non è il posto dove si prendono quelle decisioni. */
+              disabled={
+                step === 2 && (importLog.length === 0 || (failed.length > 0 && !acceptedFailures))
+              }
             >
               {tp('next')} <ArrowRight />
             </Button>

@@ -51,16 +51,27 @@ export function isDeclaredCueColor(hex: string | null | undefined): boolean {
  * colorata: è tutto il senso della tintura — se le colorassimo tutte, non
  * segnalerebbero più niente.
  */
-export const BAND_STYLE: Record<
-  string,
-  { fill: string; fillOpacity: number; label: string }
-> = {
-  intro: { fill: '#6C9BC9', fillOpacity: 0.05, label: '#565C64' },
-  build: { fill: '#5E9E72', fillOpacity: 0.05, label: '#565C64' },
-  drop: { fill: '#E8912E', fillOpacity: 0.07, label: '#B9701F' },
-  breakdown: { fill: '#8F8AC4', fillOpacity: 0.05, label: '#565C64' },
-  drop2: { fill: '#E8912E', fillOpacity: 0.07, label: '#B9701F' },
-  outro: { fill: '#7FA8A0', fillOpacity: 0.05, label: '#565C64' }
+export interface BandStyle {
+  /** tinta del riempimento: è un dato, uguale in tutte le palette */
+  fill: string;
+  /** .05 ovunque, .07 sui due drop — la differenza È il segnale */
+  fillOpacity: number;
+  /**
+   * Ruolo dell'etichetta, non un esadecimale. Il documento la disegna
+   * #565C64 e #B9701F: sono la resa in Studio Dark di `text.lo` e della
+   * gradazione scura dell'accento, e scritte come tinte fisse
+   * sopravviverebbero solo a quel tema. Come ruoli valgono in tutti e sei.
+   */
+  label: 'muted' | 'accent';
+}
+
+export const BAND_STYLE: Record<string, BandStyle> = {
+  intro: { fill: '#6C9BC9', fillOpacity: 0.05, label: 'muted' },
+  build: { fill: '#5E9E72', fillOpacity: 0.05, label: 'muted' },
+  drop: { fill: '#E8912E', fillOpacity: 0.07, label: 'accent' },
+  breakdown: { fill: '#8F8AC4', fillOpacity: 0.05, label: 'muted' },
+  drop2: { fill: '#E8912E', fillOpacity: 0.07, label: 'accent' },
+  outro: { fill: '#7FA8A0', fillOpacity: 0.05, label: 'muted' }
 };
 
 /** Dall'etichetta dell'analizzatore allo slot della palette. */
@@ -71,4 +82,39 @@ export function slotFromLabel(label: string | null | undefined): CueSlot | null 
     CUE_PALETTE.find((c) => c.label.toLowerCase() === l || c.id === l) ??
     (l.startsWith('drop 2') || l.startsWith('second') ? CUE_PALETTE[4] : null)
   );
+}
+
+/**
+ * Colore con cui DISEGNARE un cue — l'unico punto in cui la regola «nessun
+ * colore fuori dagli otto» viene applicata davvero.
+ *
+ * I cue non arrivano solo dall'analizzatore: arrivano anche dalle librerie che
+ * l'utente importa, e lì dentro c'è qualunque cosa (il verde acido di Serato,
+ * il rosso pieno di Rekordbox). Dichiarare la palette e poi passare al canvas
+ * il colore trovato nel file significa non averla dichiarata.
+ *
+ * Precedenza:
+ *  1. l'etichetta, se corrisponde a uno slot — è il significato, e vince sul
+ *     colore che il file si portava dietro;
+ *  2. il colore, se è già uno degli otto;
+ *  3. `null`, cioè "nessun colore": il componente usa il neutro del tema.
+ *     Mai un nono colore inventato al volo.
+ */
+export function cueColor(cue: { label?: string | null; color?: string | null }): string | null {
+  const bySlot = slotFromLabel(cue.label);
+  if (bySlot) return bySlot.hex;
+  if (isDeclaredCueColor(cue.color)) {
+    const up = cue.color!.trim().toUpperCase();
+    return CUE_HEXES.find((h) => h === up) ?? null;
+  }
+  return null;
+}
+
+/**
+ * Stile della banda a partire dallo slot. `undefined` per gli slot che non
+ * sono una sezione (vocal, loop): quella banda non si disegna, e non compare
+ * nessun segnaposto al suo posto.
+ */
+export function bandStyleOf(slot: CueSlot | null): BandStyle | undefined {
+  return slot ? BAND_STYLE[slot.id] : undefined;
 }

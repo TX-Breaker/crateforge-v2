@@ -1,5 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { cn, formatDuration } from '@/lib/utils';
+import { bandStyleOf, cueColor, slotFromLabel } from '@/lib/cuePalette';
+import { useAppState } from '@/lib/appState';
+import { t, type MsgKey } from '@/lib/i18n';
 
 /**
  * Waveform (§5.1) — l'elemento identitario del prodotto.
@@ -24,11 +27,19 @@ export interface WaveCue {
   color: string | null;
 }
 
+/**
+ * Banda di struttura (§8.1). Porta solo il proprio significato e i due bordi:
+ * la tinta NON viaggia col dato, la decide `bandStyleFromLabel` — così una
+ * banda non può arrivare con un colore fuori dal documento, e le stesse bande
+ * si ridisegnano da sole quando cambia il tema.
+ *
+ * I bordi sono in millisecondi assoluti perché è la forma con cui li dà
+ * l'analizzatore, ma restano percentuali della durata: nessun valore fisso.
+ */
 export interface WaveBand {
   label: string;
   fromMs: number;
   toMs: number;
-  color: string;
 }
 
 const H = 132;
@@ -58,6 +69,11 @@ export function Waveform({
   const [drag, setDrag] = useState<number | null>(null);
   const [hoverMs, setHoverMs] = useState<number | null>(null);
   const durationMs = durationS * 1000;
+  /* Il canvas legge i token una volta sola, quando disegna: senza il tema fra
+     le dipendenze resterebbe dipinto con la palette precedente fino al primo
+     ridimensionamento. Non è un dettaglio — al passaggio a una palette chiara
+     l'onda resterebbe chiara su fondo chiaro. */
+  const { locale, themeStyle, isDark } = useAppState();
 
   const draw = useCallback(() => {
     const el = canvas.current;
@@ -82,13 +98,45 @@ export function Waveform({
       const raw = css.getPropertyValue(name).trim() || '120 120 120';
       return `rgb(${raw.split(/\s+/).join(' ')} / ${alpha})`;
     };
+    /* `letterSpacing` sul contesto 2D esiste in Chromium ma non in tutte le
+       versioni di lib.dom: si accede da qui invece di allargare il tipo. */
+    const spaced = ctx as CanvasRenderingContext2D & { letterSpacing: string };
 
-    // bande di struttura
+    /* Bande di struttura (§8.1): sono il risultato dell'analisi reso visibile,
+       ed è ciò che rende la forma d'onda l'elemento identitario invece di una
+       busta grigia con sopra delle bandierine.
+       Riempimento al 5%, 7% sui due drop: la differenza fra i due valori È il
+       segnale, e a tingerle tutte uguali non segnalerebbero più niente. Solo i
+       drop prendono l'etichetta in accento, gli altri in text.lo. */
     for (const b of bands ?? []) {
+      const slot = slotFromLabel(b.label);
+      const style = bandStyleOf(slot);
+      if (!slot || !style) continue;
       const x0 = (b.fromMs / durationMs) * w;
       const x1 = (b.toMs / durationMs) * w;
-      ctx.fillStyle = `${b.color}1F`;
-      ctx.fillRect(x0, 0, Math.max(1, x1 - x0), h);
+      const bw = Math.max(1, x1 - x0);
+      const alpha = Math.round(style.fillOpacity * 255)
+        .toString(16)
+        .padStart(2, '0');
+      ctx.fillStyle = `${style.fill}${alpha}`;
+      ctx.fillRect(x0, 0, bw, h);
+
+      // seme di 1px sul bordo destro: separa due bande senza disegnare un muro
+      ctx.fillStyle = rgb('--line-subtle');
+      ctx.fillRect(Math.round(x0 + bw) - 1, 0, 1, h);
+
+      // etichetta in alto a sinistra, mono 9px +0.1em, solo se la banda la regge
+      ctx.font = "500 9px 'JetBrains Mono', monospace";
+      spaced.letterSpacing = '0.9px';
+      ctx.textBaseline = 'top';
+      /* L'etichetta arriva dall'analizzatore in inglese: qui si scrive quella
+         della lingua attiva, come nella legenda. Il dato resta il suo. */
+      const text = t(locale, `cue.${slot.id}` as MsgKey).toUpperCase();
+      if (ctx.measureText(text).width + 10 <= bw) {
+        ctx.fillStyle = style.label === 'accent' ? rgb('--accent') : rgb('--text-lo');
+        ctx.fillText(text, x0 + 5, 4);
+      }
+      spaced.letterSpacing = '0px';
     }
 
     // griglia beat: battuta (4 beat) tenue, frase (32 beat) più marcata
@@ -128,7 +176,7 @@ export function Waveform({
     ctx.moveTo(0, Math.round(mid) + 0.5);
     ctx.lineTo(w, Math.round(mid) + 0.5);
     ctx.stroke();
-  }, [envelope, durationMs, bands, bpm]);
+  }, [envelope, durationMs, bands, bpm, locale, themeStyle, isDark]);
 
   useEffect(() => {
     draw();
@@ -196,7 +244,11 @@ export function Waveform({
       {/* marker dei cue */}
       {cues.map((c, i) => {
         const left = Math.min(100, Math.max(0, (c.positionMs / durationMs) * 100));
-        const color = c.color ?? '#8A9099';
+        /* Il colore lo decide la palette dichiarata, non il file: un cue
+           importato da Serato o Rekordbox si porta dietro la sua tinta, e
+           passarla dritta al marker vorrebbe dire non aver dichiarato niente.
+           Fuori vocabolario = neutro del tema, mai un nono colore. */
+        const color = cueColor(c) ?? 'rgb(var(--text-lo))';
         const dragging = drag === i;
         return (
           <div
@@ -220,9 +272,9 @@ export function Waveform({
             <span
               className="absolute left-0 top-0 flex items-center gap-1.5 whitespace-nowrap rounded-r-[4px] border px-1.5 py-0.5"
               style={{
-                background: dragging ? color : `${color}26`,
+                background: dragging ? color : `color-mix(in srgb, ${color} 15%, transparent)`,
                 borderColor: color,
-                color: dragging ? '#0A0B0D' : color
+                color: dragging ? 'rgb(var(--canvas))' : color
               }}
             >
               <span className="font-mono text-[9px] font-bold uppercase tracking-[.08em]">

@@ -1,6 +1,11 @@
 import { useMemo, useState } from 'react';
 import { compatibleKeys, isCompatible, parseCamelot } from '@core/harmony';
 import { cn } from '@/lib/utils';
+import { useAppState } from '@/lib/appState';
+import { t } from '@/lib/i18n';
+import { aaSafe, ensureReadable, mix, readableInk } from '@/lib/colors';
+import { tokenHex } from '@/lib/themeTokens';
+import { CAMELOT_HUES as CAM, CAMELOT_KEYNAMES as KEYNAME } from '@/lib/camelotHues';
 
 /**
  * Ruota di Camelot (§5.2) — condivisa da Panoramica, Set Builder e Set Planner.
@@ -17,97 +22,6 @@ import { cn } from '@/lib/utils';
  *    solo colore.
  */
 
-/* tinte campionate dalla ruota Mixed In Key, chiave 1 → 12 */
-const CAM = [
-  '#7FE8B0',
-  '#A8F58A',
-  '#C4E878',
-  '#E2BE78',
-  '#F79486',
-  '#F9849E',
-  '#E484C6',
-  '#C684EE',
-  '#AE8CFF',
-  '#9BBCFF',
-  '#8AEBFC',
-  '#88FFEE'
-];
-
-const KEYNAME: Record<'A' | 'B', string[]> = {
-  A: [
-    'A♭ min',
-    'E♭ min',
-    'B♭ min',
-    'F min',
-    'C min',
-    'G min',
-    'D min',
-    'A min',
-    'E min',
-    'B min',
-    'F♯ min',
-    'D♭ min'
-  ],
-  B: [
-    'B maj',
-    'F♯ maj',
-    'D♭ maj',
-    'A♭ maj',
-    'E♭ maj',
-    'B♭ maj',
-    'F maj',
-    'C maj',
-    'G maj',
-    'D maj',
-    'A maj',
-    'E maj'
-  ]
-};
-
-function mix(hex: string, other: string, t: number): string {
-  const p = (h: string) => [
-    parseInt(h.slice(1, 3), 16),
-    parseInt(h.slice(3, 5), 16),
-    parseInt(h.slice(5, 7), 16)
-  ];
-  const a = p(hex);
-  const b = p(other);
-  return (
-    '#' +
-    a
-      .map((v, i) => Math.round(v * t + b[i] * (1 - t)).toString(16).padStart(2, '0'))
-      .join('')
-  );
-}
-
-function luminance(hex: string): number {
-  const ch = [1, 3, 5].map((i) => {
-    const c = parseInt(hex.slice(i, i + 2), 16) / 255;
-    return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
-  });
-  return 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2];
-}
-
-function ratio(a: string, b: string): number {
-  const la = luminance(a);
-  const lb = luminance(b);
-  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
-}
-
-/**
- * Alcune mescolanze finiscono in una fascia di luminanza morta dove nessuno dei
- * due inchiostri passa AA: si scurisce il riempimento finché uno dei due ce la
- * fa. Serve in circa il 10% degli stati della ruota.
- */
-function aaSafe(bg: string, dark: string, light: string): string {
-  let c = bg;
-  for (let i = 0; i < 24; i++) {
-    if (Math.max(ratio(dark, c), ratio(light, c)) >= 4.6) break;
-    c = mix(c, dark, 0.9);
-  }
-  return c;
-}
-
 export function CamelotWheel({
   value,
   onChange,
@@ -123,26 +37,25 @@ export function CamelotWheel({
   className?: string;
 }) {
   const [hover, setHover] = useState<string | null>(null);
+  const { locale, themeStyle, isDark } = useAppState();
   const sel = parseCamelot(value) ?? { num: 8, letter: 'A' as const };
 
-  // Inchiostri presi dal tema attivo, così la ruota resta AA in tutte le palette.
-  const inks = useMemo(() => {
-    const css = getComputedStyle(document.documentElement);
-    const rgb = (name: string, fallback: string) => {
-      const raw = css.getPropertyValue(name).trim();
-      const p = raw.split(/\s+/).map(Number);
-      if (p.length !== 3 || p.some((n) => !Number.isFinite(n))) return fallback;
-      return `#${p.map((n) => n.toString(16).padStart(2, '0')).join('')}`;
-    };
-    return {
-      dark: rgb('--canvas', '#0A0B0D'),
-      light: rgb('--text-hi', '#EBECEE'),
-      panel: rgb('--surface-1', '#101215'),
-      line: rgb('--line', '#2C3138'),
-      muted: rgb('--text-lo', '#6E757E'),
-      mid: rgb('--text-mid', '#A2A8B0')
-    };
-  }, [value, emphasis]);
+  /* Inchiostri presi dal tema ATTIVO, così la ruota resta AA in tutte le
+     palette. Le dipendenze sono il tema, non il dato: legate a `value` la
+     memoizzazione teneva i colori della palette precedente finché non si
+     cliccava un segmento — e su Studio Light significava testo quasi bianco
+     su fondo chiaro. */
+  const inks = useMemo(
+    () => ({
+      dark: tokenHex('--canvas', '#0A0B0D'),
+      light: tokenHex('--text-hi', '#EBECEE'),
+      panel: tokenHex('--surface-1', '#101215'),
+      line: tokenHex('--line', '#2C3138'),
+      muted: tokenHex('--text-lo', '#6E757E'),
+      mid: tokenHex('--text-mid', '#A2A8B0')
+    }),
+    [themeStyle, isDark]
+  );
 
   const cx = 150;
   const cy = 150;
@@ -179,7 +92,7 @@ export function CamelotWheel({
       // L'anello minore è una tinta più chiara della stessa tonalità.
       const hue = ring === 'A' ? mix(CAM[n - 1], '#FFFFFF', 0.74) : CAM[n - 1];
       const fill = aaSafe(mix(hue, inks.dark, t), inks.dark, inks.light);
-      const ink = ratio(inks.dark, fill) >= ratio(inks.light, fill) ? inks.dark : inks.light;
+      const ink = readableInk(fill, inks.dark, inks.light);
 
       segments.push(
         <path
@@ -258,13 +171,17 @@ export function CamelotWheel({
           fill={inks.muted}
           style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8.5, letterSpacing: '.14em' }}
         >
-          {hover ? 'HOVER' : 'SELECTED'}
+          {(hover ? t(locale, 'wheel.hover') : t(locale, 'wheel.selected')).toUpperCase()}
         </text>
+        {/* La tonalità al centro è scritta nella SUA tinta, ma portata sopra
+            4.5:1 contro il pannello: sulle palette chiare un ciano acceso su
+            carta non si legge, e il numero è l'informazione principale della
+            ruota. */}
         <text
           x={cx}
           y={cy + 10}
           textAnchor="middle"
-          fill={CAM[shownPos.num - 1]}
+          fill={ensureReadable(CAM[shownPos.num - 1], inks.panel, inks.dark, inks.light)}
           style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 22, fontWeight: 700 }}
         >
           {shown}
@@ -274,7 +191,7 @@ export function CamelotWheel({
           y={cy + 26}
           textAnchor="middle"
           fill={inks.mid}
-          style={{ fontFamily: 'Archivo, sans-serif', fontSize: 9.5 }}
+          style={{ fontFamily: "'Be Vietnam Pro', sans-serif", fontSize: 9.5 }}
         >
           {KEYNAME[shownPos.letter][shownPos.num - 1]}
         </text>
@@ -288,4 +205,3 @@ export function CamelotWheel({
   );
 }
 
-export { CAM as CAMELOT_HUES, KEYNAME as CAMELOT_KEYNAMES };

@@ -76,6 +76,41 @@ describe('getTracksPage (paginazione: mai tutta la libreria)', () => {
     expect(search.total).toBe(1);
   });
 
+  /**
+   * Selezione fatta cliccando una barra dei grafici della panoramica. L'estremo
+   * ALTO dell'intervallo è escluso: i bucket dell'istogramma sono contigui, e
+   * con entrambi inclusi un brano a 125 apparterrebbe sia al bucket 120-125 sia
+   * al 125-130 — la somma dei bucket non tornerebbe col totale della libreria.
+   */
+  it('selezione da grafico: una tonalità, o un intervallo di tempo mezzo aperto', () => {
+    const db = memDb();
+    const ins = db.prepare(
+      `INSERT INTO tracks (source, source_id, title, camelot, bpm)
+       VALUES ('xml', ?, ?, ?, ?)`
+    );
+    ins.run('1', 'A', '8A', 124);
+    ins.run('2', 'B', '8A', 125);
+    ins.run('3', 'C', '9A', 129.9);
+    ins.run('4', 'D', '9A', 130);
+    ins.run('5', 'E', null, null);
+
+    const key = getTracksPage(db, { offset: 0, limit: 100, camelot: '8A' });
+    expect(key.total).toBe(2);
+    expect(key.rows.map((r) => r.title).sort()).toEqual(['A', 'B']);
+
+    const bucket = getTracksPage(db, { offset: 0, limit: 100, bpmMin: 125, bpmMax: 130 });
+    expect(bucket.total).toBe(2);
+    expect(bucket.rows.map((r) => r.title).sort()).toEqual(['B', 'C']);
+
+    // I due estremi non si sovrappongono: 125 sta solo nel secondo bucket.
+    const prev = getTracksPage(db, { offset: 0, limit: 100, bpmMin: 120, bpmMax: 125 });
+    expect(prev.rows.map((r) => r.title)).toEqual(['A']);
+
+    // Tonalità e tempo si combinano con gli altri filtri, non li sostituiscono.
+    const combo = getTracksPage(db, { offset: 0, limit: 100, camelot: '9A', bpmMin: 130, bpmMax: 135 });
+    expect(combo.rows.map((r) => r.title)).toEqual(['D']);
+  });
+
   it('i filtri "manca il dato" filtrano nel database, e il totale è quello vero', () => {
     const db = memDb();
     const ins = db.prepare(

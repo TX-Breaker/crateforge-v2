@@ -183,6 +183,7 @@ export const fr: PageDict = {
     emptyAction: 'Aller à la Vue d’ensemble',
     noMatchTitle: 'Aucun titre ne correspond',
     noMatchBody: 'Essayez d’enlever un filtre ou de chercher autre chose.',
+    noMatchAction: 'Effacer recherche et filtres',
     exportSelection: 'Exporter la sélection',
     selectionPlaylist: 'CrateForge — Sélection',
     exportDone: '{n} titres écrits dans {path}.',
@@ -243,6 +244,7 @@ export const fr: PageDict = {
     noneTitle: 'Aucun orphelin',
     noneBody:
       'Chaque fichier audio du disque est référencé par la bibliothèque. {files} fichiers analysés.',
+    noneAction: 'Analyser un autre dossier',
     moveBtn: 'Mettre en quarantaine ({n})',
     delBtn: 'Supprimer définitivement ({n})',
     directNote:
@@ -280,6 +282,7 @@ export const fr: PageDict = {
     openFolder: 'Ouvrir le dossier',
     emptyTitle: 'Quarantaine vide',
     emptyBody: 'Aucun fichier en quarantaine dans ce dossier.',
+    emptyAction: 'Choisir un autre dossier',
     statFolders: 'Dossiers',
     statFiles: 'Fichiers présents',
     statSelected: 'Sélectionnés',
@@ -304,6 +307,7 @@ export const fr: PageDict = {
     stats: '{done} empreintes calculées · {failed} échecs · {missing} fichiers manquants.',
     noneTitle: 'Aucun doublon',
     noneBody: 'Aucun groupe de titres ne partage la même empreinte acoustique.',
+    noneAction: 'Relancer la comparaison',
     noFile: 'fichier introuvable',
     fQuarantine: 'Dossier de quarantaine',
     moveBtn: 'Mettre en quarantaine ({n} · {size})',
@@ -327,6 +331,7 @@ export const fr: PageDict = {
     brokenCount: 'Chemins cassés',
     noBrokenTitle: 'Aucun chemin cassé',
     noBrokenBody: 'Chaque titre pointe vers un fichier existant.',
+    noBrokenAction: 'Vérifier à nouveau',
     moreN: 'et {n} autres.',
     fNewRoot: 'Nouveau dossier à explorer',
     dryBtn: 'Essayer sans écrire',
@@ -391,6 +396,7 @@ export const fr: PageDict = {
     summary: '{n} titres interrogés sur {prov} · {skipped} ignorés.',
     noneTitle: 'Aucune proposition',
     noneBody: 'Aucun résultat fiable pour les titres aux champs manquants.',
+    noneAction: 'Relancer la recherche',
     applyUdmBtn: 'Appliquer à la base interne ({n})',
     applyOriginalBtn: 'Écrire dans les fichiers originaux ({n})',
     outUdm: '{n} valeurs appliquées à la base interne.',
@@ -653,6 +659,7 @@ export const fr: PageDict = {
     previewDesc: 'Les premières lignes du fichier généré, pour ne pas avoir à l’ouvrir.',
     noPreviewTitle: 'Pas encore de rapport',
     noPreviewBody: 'Générez un rapport pour en voir ici le contenu réel.',
+    noPreviewAction: 'Générer le rapport',
     resetCols: 'Réinitialiser les colonnes',
     dragToResize: 'Glissez pour redimensionner',
     viewerErr: 'Impossible de lire le fichier : {msg}'
@@ -680,6 +687,7 @@ export const fr: PageDict = {
     sessionsDesc: 'Chaque soirée enregistrée par Rekordbox est une session.',
     noSessionsTitle: 'Aucune session',
     noSessionsBody: 'Lisez d’abord l’historique depuis le master.db de Rekordbox.',
+    noSessionsAction: 'Relire les soirées',
     statTracks: 'Titres',
     statDate: 'Date',
     previewNote: 'La feuille contient titre, auteur, durée et heure de lecture.'
@@ -860,6 +868,16 @@ export const fr: PageDict = {
     notFound: 'non trouvé',
     notFoundHint:
       'Rien aux emplacements connus pour cette plateforme. Ils varient selon la version — vous pouvez nous indiquer le fichier.',
+    noLibraryYet: 'aucune bibliothèque',
+    installedNoLibrary:
+      '{app} {v} est installé sur cet ordinateur mais n’a pas encore créé de bibliothèque. Il n’y a rien à importer tant que vous n’y ajoutez pas de titres.',
+    lookFor: 'Le fichier à chercher s’appelle {file}.',
+    lookForFolder: 'Il faut le dossier, pas un fichier à l’intérieur.',
+    wrongFile: 'Vous avez choisi {picked} : ce n’est pas le bon fichier. CrateForge a besoin de {expected}.',
+    importStoppedTitle: 'Import arrêté : {n} n’ont pas abouti',
+    retryImport: 'Réessayer',
+    backToPick: 'Choisir un autre fichier',
+    continueAnyway: 'Continuer sans',
     externalHint:
       'Aucune Engine Library sur les disques internes. Si la vôtre est sur une clé USB ou un SSD, branchez-la et relancez.',
     seratoLimit:
@@ -1082,6 +1100,7 @@ export const de: PageDict = {
     emptyAction: 'Zur Übersicht',
     noMatchTitle: 'Kein Track passt',
     noMatchBody: 'Nimm einen Filter heraus oder suche etwas anderes.',
+    noMatchAction: 'Suche und Filter zurücksetzen',
     exportSelection: 'Auswahl exportieren',
     selectionPlaylist: 'CrateForge — Auswahl',
     exportDone: '{n} Tracks nach {path} geschrieben.',
@@ -1142,6 +1161,7 @@ export const de: PageDict = {
     noneTitle: 'Keine verwaisten Dateien',
     noneBody:
       'Jede Audiodatei auf der Platte wird von der Bibliothek referenziert. {files} Dateien geprüft.',
+    noneAction: 'Anderen Ordner prüfen',
     moveBtn: 'In Quarantäne ({n})',
     delBtn: 'Endgültig löschen ({n})',
     directNote:
@@ -1179,6 +1199,7 @@ export const de: PageDict = {
     openFolder: 'Ordner öffnen',
     emptyTitle: 'Quarantäne ist leer',
     emptyBody: 'Keine Dateien in Quarantäne in diesem Ordner.',
+    emptyAction: 'Anderen Ordner wählen',
     statFolders: 'Ordner',
     statFiles: 'Vorhandene Dateien',
     statSelected: 'Ausgewählt',
@@ -1203,6 +1224,7 @@ export const de: PageDict = {
     stats: '{done} Fingerprints berechnet · {failed} fehlgeschlagen · {missing} fehlende Dateien.',
     noneTitle: 'Keine Duplikate',
     noneBody: 'Keine Trackgruppe teilt denselben akustischen Fingerprint.',
+    noneAction: 'Vergleich wiederholen',
     noFile: 'Datei nicht gefunden',
     fQuarantine: 'Quarantäne-Ordner',
     moveBtn: 'In Quarantäne ({n} · {size})',
@@ -1226,6 +1248,7 @@ export const de: PageDict = {
     brokenCount: 'Defekte Pfade',
     noBrokenTitle: 'Keine defekten Pfade',
     noBrokenBody: 'Jeder Track zeigt auf eine existierende Datei.',
+    noBrokenAction: 'Erneut prüfen',
     moreN: 'und {n} weitere.',
     fNewRoot: 'Neuer Ordner zum Durchsuchen',
     dryBtn: 'Ohne Schreiben testen',
@@ -1290,6 +1313,7 @@ export const de: PageDict = {
     summary: '{n} Tracks bei {prov} abgefragt · {skipped} übersprungen.',
     noneTitle: 'Keine Vorschläge',
     noneBody: 'Kein sicherer Treffer für die Tracks mit fehlenden Feldern.',
+    noneAction: 'Erneut suchen',
     applyUdmBtn: 'In die interne Datenbank übernehmen ({n})',
     applyOriginalBtn: 'In die Originaldateien schreiben ({n})',
     outUdm: '{n} Werte in die interne Datenbank übernommen.',
@@ -1552,6 +1576,7 @@ export const de: PageDict = {
     previewDesc: 'Die ersten Zeilen der eben erzeugten Datei — kein Öffnen zum Prüfen nötig.',
     noPreviewTitle: 'Noch kein Bericht',
     noPreviewBody: 'Erzeuge einen Bericht, um hier seinen echten Inhalt zu sehen.',
+    noPreviewAction: 'Bericht erzeugen',
     resetCols: 'Spalten zurücksetzen',
     dragToResize: 'Ziehen zum Anpassen',
     viewerErr: 'Datei nicht lesbar: {msg}'
@@ -1579,6 +1604,7 @@ export const de: PageDict = {
     sessionsDesc: 'Jeder von Rekordbox aufgezeichnete Abend ist eine Session.',
     noSessionsTitle: 'Keine Sessions',
     noSessionsBody: 'Lies zuerst die Historie aus der Rekordbox master.db.',
+    noSessionsAction: 'Sessions neu lesen',
     statTracks: 'Tracks',
     statDate: 'Datum',
     previewNote: 'Das Blatt enthält Titel, Autor, Länge und Spielzeit.'
@@ -1759,6 +1785,16 @@ export const de: PageDict = {
     notFound: 'nicht gefunden',
     notFoundHint:
       'Nichts an den bekannten Orten für diese Plattform. Sie variieren je nach Version — du kannst uns die Datei zeigen.',
+    noLibraryYet: 'keine Bibliothek',
+    installedNoLibrary:
+      '{app} {v} ist auf diesem Rechner installiert, hat aber noch keine Bibliothek angelegt. Es gibt nichts zu importieren, bis du Tracks hinzufügst.',
+    lookFor: 'Die gesuchte Datei heißt {file}.',
+    lookForFolder: 'Es braucht den Ordner, nicht eine Datei darin.',
+    wrongFile: 'Du hast {picked} gewählt: das ist nicht die richtige Datei. CrateForge braucht {expected}.',
+    importStoppedTitle: 'Import gestoppt: {n} sind nicht durchgelaufen',
+    retryImport: 'Erneut versuchen',
+    backToPick: 'Andere Datei wählen',
+    continueAnyway: 'Ohne fortfahren',
     externalHint:
       'Keine Engine Library auf internen Laufwerken. Liegt deine auf USB-Stick oder SSD, schließ sie an und suche erneut.',
     seratoLimit:

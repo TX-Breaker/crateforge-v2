@@ -64,6 +64,11 @@ export interface PageQuery {
   noBpm?: boolean;
   /** solo brani senza genere */
   noGenre?: boolean;
+  /** una sola tonalità Camelot, es. "8A" — usato dai grafici della panoramica */
+  camelot?: string;
+  /** intervallo di tempo, estremi inclusi in basso ed esclusi in alto */
+  bpmMin?: number;
+  bpmMax?: number;
 }
 
 /** Lettura paginata: la UI non riceve mai l'intera libreria in un colpo solo. */
@@ -89,6 +94,22 @@ export function getTracksPage(db: BetterSqlite3.Database, q: PageQuery): { rows:
   if (q.noKey) where.push(`(camelot IS NULL OR camelot = '')`);
   if (q.noBpm) where.push(`(bpm IS NULL OR bpm = 0)`);
   if (q.noGenre) where.push(`(genre IS NULL OR genre = '')`);
+  /* Selezione da un grafico della panoramica: una tonalità, o un intervallo di
+     tempo. L'estremo alto è ESCLUSO perché i bucket dell'istogramma sono
+     contigui — con entrambi inclusi un brano a 125 finirebbe sia nel bucket
+     120-125 sia nel 125-130, e la somma dei bucket non tornerebbe col totale. */
+  if (q.camelot) {
+    where.push(`camelot = :cam`);
+    params.cam = q.camelot;
+  }
+  if (q.bpmMin !== undefined) {
+    where.push(`bpm >= :bpmMin`);
+    params.bpmMin = q.bpmMin;
+  }
+  if (q.bpmMax !== undefined) {
+    where.push(`bpm < :bpmMax`);
+    params.bpmMax = q.bpmMax;
+  }
   const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
   const total = (
     db.prepare(`SELECT COUNT(*) AS c FROM tracks ${whereSql}`).get(params) as { c: number }

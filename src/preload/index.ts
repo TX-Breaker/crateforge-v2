@@ -70,6 +70,11 @@ const api = {
       noKey?: boolean;
       noBpm?: boolean;
       noGenre?: boolean;
+      /* Selezione fatta su un grafico della panoramica: una tonalità, oppure
+         un intervallo di tempo (estremo alto escluso, come i bucket). */
+      camelot?: string;
+      bpmMin?: number;
+      bpmMax?: number;
     }) => ipcRenderer.invoke('library:page', q),
     pageByPlaylist: (playlistId: number, offset: number, limit: number) =>
       ipcRenderer.invoke('library:pageByPlaylist', playlistId, offset, limit),

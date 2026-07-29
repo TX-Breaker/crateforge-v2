@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { BookOpen, FileSearch, Fingerprint, MapPin } from 'lucide-react';
+import { BookOpen, FileSearch, Fingerprint, MapPin, ShieldCheck } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, Eyebrow, StatTile } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { EmptyState, Notice, Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/misc';
@@ -142,7 +142,18 @@ function ByNameTab() {
           </Button>
 
           {broken && broken.length === 0 && (
-            <EmptyState title={tp('noBrokenTitle')}>{tp('noBrokenBody')}</EmptyState>
+            <EmptyState
+              tone="success"
+              icon={<ShieldCheck />}
+              title={tp('noBrokenTitle')}
+              action={
+                <Button variant="secondary" onClick={findBroken} working={busy}>
+                  <FileSearch /> {tp('noBrokenAction')}
+                </Button>
+              }
+            >
+              {tp('noBrokenBody')}
+            </EmptyState>
           )}
 
           {broken && broken.length > 0 && (

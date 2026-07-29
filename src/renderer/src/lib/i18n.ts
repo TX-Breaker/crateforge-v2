@@ -188,7 +188,23 @@ const it = {
   'tracks.colLength': 'Durata',
   'tracks.colStatus': 'Stato',
   'tracks.searchPh': 'Cerca nella libreria…',
-  'tracks.selectionHint': 'shift-click per un intervallo · ctrl/⌘-click per aggiungere'
+  'tracks.selectionHint': 'shift-click per un intervallo · ctrl/⌘-click per aggiungere',
+
+  /* --- palette dei cue (§5.1 e §8.1): otto slot in ordine fisso --- */
+  'cue.legend': 'Palette dei cue',
+  'cue.intro': 'Intro',
+  'cue.build': 'Salita',
+  'cue.drop': 'Drop',
+  'cue.breakdown': 'Stacco',
+  'cue.drop2': 'Secondo drop',
+  'cue.outro': 'Finale',
+  'cue.vocal': 'Voce',
+  'cue.loop': 'Loop',
+
+  /* --- ruota di Camelot --- */
+  'wheel.selected': 'Selezionata',
+  'wheel.hover': 'Puntatore',
+  'common.close': 'Chiudi'
 } as const;
 
 export type MsgKey = keyof typeof it;
@@ -358,7 +374,21 @@ const en: Dict = {
   'tracks.colLength': 'Length',
   'tracks.colStatus': 'Status',
   'tracks.searchPh': 'Search the library…',
-  'tracks.selectionHint': 'shift-click for a range · ctrl/⌘-click to toggle'
+  'tracks.selectionHint': 'shift-click for a range · ctrl/⌘-click to toggle',
+
+  'cue.legend': 'Cue palette',
+  'cue.intro': 'Intro',
+  'cue.build': 'Build',
+  'cue.drop': 'Drop',
+  'cue.breakdown': 'Breakdown',
+  'cue.drop2': 'Second drop',
+  'cue.outro': 'Outro',
+  'cue.vocal': 'Vocal',
+  'cue.loop': 'Loop',
+
+  'wheel.selected': 'Selected',
+  'wheel.hover': 'Hover',
+  'common.close': 'Close'
 };
 
 const fr: Dict = {
@@ -526,7 +556,21 @@ const fr: Dict = {
   'tracks.colLength': 'Durée',
   'tracks.colStatus': 'État',
   'tracks.searchPh': 'Rechercher dans la bibliothèque…',
-  'tracks.selectionHint': 'shift-clic pour une plage · ctrl/⌘-clic pour ajouter'
+  'tracks.selectionHint': 'shift-clic pour une plage · ctrl/⌘-clic pour ajouter',
+
+  'cue.legend': 'Palette des cues',
+  'cue.intro': 'Intro',
+  'cue.build': 'Montée',
+  'cue.drop': 'Drop',
+  'cue.breakdown': 'Break',
+  'cue.drop2': 'Second drop',
+  'cue.outro': 'Outro',
+  'cue.vocal': 'Voix',
+  'cue.loop': 'Boucle',
+
+  'wheel.selected': 'Sélection',
+  'wheel.hover': 'Survol',
+  'common.close': 'Fermer'
 };
 
 const de: Dict = {
@@ -694,7 +738,21 @@ const de: Dict = {
   'tracks.colLength': 'Länge',
   'tracks.colStatus': 'Status',
   'tracks.searchPh': 'Bibliothek durchsuchen…',
-  'tracks.selectionHint': 'Shift-Klick für Bereich · Strg/⌘-Klick zum Umschalten'
+  'tracks.selectionHint': 'Shift-Klick für Bereich · Strg/⌘-Klick zum Umschalten',
+
+  'cue.legend': 'Cue-Palette',
+  'cue.intro': 'Intro',
+  'cue.build': 'Aufbau',
+  'cue.drop': 'Drop',
+  'cue.breakdown': 'Breakdown',
+  'cue.drop2': 'Zweiter Drop',
+  'cue.outro': 'Outro',
+  'cue.vocal': 'Gesang',
+  'cue.loop': 'Loop',
+
+  'wheel.selected': 'Gewählt',
+  'wheel.hover': 'Zeiger',
+  'common.close': 'Schließen'
 };
 
 // Esportato anche per il test di parità chiavi (tests/i18nParity.test.ts).

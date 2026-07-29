@@ -3,7 +3,7 @@ import { ArrowRight, FileEdit, Music2 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { EmptyState, Notice } from '@/components/ui/misc';
-import { TrackList, type TrackFilter } from '@/components/data/TrackList';
+import { TrackList, type TrackFilter, type TrackScope } from '@/components/data/TrackList';
 import { useAppState } from '@/lib/appState';
 import { useLibrary } from '@/lib/library';
 import { useRouter } from '@/lib/router';
@@ -19,10 +19,16 @@ import { pageText } from '@/lib/i18nPages';
  */
 export function TracksPage({
   initialSearch,
-  initialFilter
+  initialFilter,
+  initialCamelot,
+  initialBpm
 }: {
   initialSearch?: string;
   initialFilter?: string;
+  /** tonalità arrivata da una barra della copertura tonalità */
+  initialCamelot?: string;
+  /** intervallo "125-130" arrivato da una barra dell'istogramma BPM */
+  initialBpm?: string;
 }) {
   const { locale } = useAppState();
   const tp = (k: string, p?: Record<string, string | number>) => pageText(locale, 'tracks', k, p);
@@ -35,10 +41,27 @@ export function TracksPage({
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [exported, setExported] = useState<string | null>(null);
 
+  /* Restrizione che arriva dai grafici della panoramica. Vive QUI e non nei
+     filtri: i filtri sono scelte dell'utente dentro questa pagina, questa è
+     una selezione fatta altrove, e si toglie con la sua X. */
+  const parseBpm = (raw?: string): TrackScope | null => {
+    const m = raw?.match(/^(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?)$/);
+    return m ? { bpmMin: Number(m[1]), bpmMax: Number(m[2]) } : null;
+  };
+  const [scope, setScope] = useState<TrackScope | undefined>(
+    initialCamelot ? { camelot: initialCamelot } : (parseBpm(initialBpm) ?? undefined)
+  );
+
   useEffect(() => {
     if (initialSearch !== undefined) setSearch(initialSearch);
     if (initialFilter === 'needsReview') setFilters(new Set(['needsReview']));
-  }, [initialSearch, initialFilter]);
+    if (initialCamelot) setScope({ camelot: initialCamelot });
+    else {
+      const b = parseBpm(initialBpm);
+      if (b) setScope(b);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialSearch, initialFilter, initialCamelot, initialBpm]);
 
   const toggleFilter = (f: TrackFilter) => {
     setFilters((prev) => {
@@ -96,11 +119,32 @@ export function TracksPage({
         onSearchChange={setSearch}
         filters={filters}
         onToggleFilter={toggleFilter}
+        scope={scope}
+        onClearScope={() => setScope(undefined)}
         selected={selected}
         onSelectedChange={setSelected}
         height={520}
         emptyState={
-          <EmptyState title={tp('noMatchTitle')}>{tp('noMatchBody')}</EmptyState>
+          <EmptyState
+            title={tp('noMatchTitle')}
+            action={
+              /* L'uscita da "nessun risultato" è tornare a vedere tutto: senza
+                 questo bottone l'unico modo era ricordarsi quali filtri si
+                 erano accesi. */
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setSearch('');
+                  setFilters(new Set());
+                  setScope(undefined);
+                }}
+              >
+                {tp('noMatchAction')}
+              </Button>
+            }
+          >
+            {tp('noMatchBody')}
+          </EmptyState>
         }
         bulkActions={
           <Button size="sm" variant="secondary" onClick={exportSelection}>

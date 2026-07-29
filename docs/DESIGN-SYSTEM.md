@@ -75,31 +75,33 @@ renderer (`default-src 'self'`) vieta font remoti, e per lo stesso motivo
 `data:` verrebbe bloccato, con il risultato silenzioso di un'app che ricade sui font
 di sistema.
 
-- **Inter** — interfaccia. Scelta per l'altezza-x alta e le aperture larghe: a 13px
-  regge la densità di questa app. Sostituisce Archivo, che è un grottesco stretto
-  disegnato per i titoli e a corpo piccolo chiudeva le contro-forme.
-- **JetBrains Mono** — dati. Obbligatoria per ogni numero: BPM, key Camelot, durata,
-  conteggi, percentuali, ETA, percorsi, hash. Con `tabular-nums` le cifre non
-  ballano mentre un contatore sale.
+- **Be Vietnam Pro** — interfaccia, TUTTE le scritte: prosa, etichette, bottoni,
+  titoli di pagina e header di sezione. Il peso di base è **500**, dichiarato una
+  volta sul `body` di `index.css`; i titoli (`text-display`, `text-title`,
+  `text-section`) salgono a **600**, ed è la differenza di peso a separare un titolo
+  dal testo che gli sta sotto.
+  Il 500 sta sul `body` e NON dentro i token di `fontSize` per un motivo meccanico:
+  in Tailwind le utility di corpo escono dopo quelle di peso, quindi un peso infilato
+  in `text-body` vincerebbe su ogni `font-semibold` scritto nei componenti.
+- **JetBrains Mono** — dati, e solo dati. Obbligatoria per ogni numero: BPM, key
+  Camelot, durata, conteggi, percentuali, ETA, percorsi, hash. Con `tabular-nums` le
+  cifre non ballano mentre un contatore sale. Il tentativo di usarla anche per
+  l'interfaccia è stato fatto e revertito (`c33103d`): a corpo 13 in una lista densa
+  una monospaziata costa larghezza e non aggiunge niente.
 
-Sei ruoli, niente in mezzo (classi Tailwind):
+Sei ruoli, niente in mezzo (classi Tailwind, valori in `tailwind.config.js`):
 
 | Classe | Uso |
 |---|---|
-| `text-display` | 40/46, -0.028em — titoli di primo avvio |
-| `text-title` | 24/31, -0.018em — titolo di dialog e di sezione grande |
-| `text-section` | 15/21 — titolo di card |
-| `text-body` | 13/20, +0.006em — default per tutta la prosa d'interfaccia |
-| `text-caption` | 11.5/17, +0.01em — note, testo d'aiuto, timestamp |
-| `text-eyebrow` | mono 11, 0.13em — etichette di gruppo maiuscole |
-| `text-data`, `text-data-lg`, `text-data-xl` | mono tabellare per i valori |
+| `text-display` | 40/44, -0.03em, 600 — titoli di primo avvio |
+| `text-title` | 24/30, -0.02em, 600 — titolo di pagina |
+| `text-section` | 15/20, 600 — titolo di card, header di sezione, stati vuoti |
+| `text-body` | 13/19, 500 — default per tutta la prosa d'interfaccia |
+| `text-caption` | 11.5/16, 500 — note, testo d'aiuto, timestamp |
+| `text-eyebrow` | mono 11, 0.14em, 500 — etichette di gruppo maiuscole |
+| `text-data`, `text-data-lg`, `text-data-xl` | mono tabellare 12.5 / 27 / 34 per i valori |
 
 > Niente `text-xs` sparso a sentimento. Se serve un settimo livello, il layout è sbagliato.
-
-**Spaziatura tra i caratteri.** I corpi piccoli (body, caption, data) hanno tracking
-POSITIVO: a 11-13px le lettere si toccano e il testo sembra soffocato. I corpi grandi
-restano negativi, perché lì il difetto è l'opposto. Il valore è volutamente piccolo:
-sopra 0.01em una scrittura da interfaccia perde la parola come unità visiva.
 
 ---
 
@@ -216,3 +218,49 @@ e non compete con un avviso vero.
 - Focus ring 2px accento + 2px offset, uguale ovunque.
 - Target minimo 28×28px; 40px sui percorsi distruttivi.
 - Copertura da tastiera completa, ruoli Radix conservati.
+
+---
+
+## 7. Conformance (§08 del documento di riferimento)
+
+Il documento di riferimento chiude con una checklist dei valori che, alla prima
+costruzione, erano **stati specificati e persi in traduzione**. Questa sezione dice
+dove siamo, perché un elenco di difformità senza uno stato è solo una lamentela.
+
+### Chiuse
+
+| Regola | Com'era | Com'è |
+|---|---|---|
+| Palette cue applicata, non solo dichiarata | `cuePalette.ts` non importato da nessun componente | `cueColor()` è l'unico punto che assegna una tinta a un cue: l'etichetta vince sul colore del file, e un colore estraneo diventa neutro invece di passare al disegno |
+| Legenda della palette (§8.1) | assente | `CueLegend`, sotto la forma d'onda, sempre visibile, otto slot in ordine |
+| Bande di struttura | alpha fisso 12%, nessuna etichetta | .05 / .07 sui due drop, etichetta mono 9px +0.1em in alto a sinistra, seme di 1px fra le bande, etichetta in accento solo sui drop |
+| Contrasto delle caselle di copertura | `opacity` sull'intera casella, etichetta fino a 1.5:1 | tinta miscelata verso il fondo e inchiostro scelto per contrasto; casella a zero = superficie neutra, non invisibile |
+| Ruota di Camelot al cambio tema | inchiostri memoizzati sul dato: restavano quelli della palette precedente | memoizzati sul tema |
+| Forma d'onda al cambio tema | ridisegnata solo al resize | il tema è fra le dipendenze del disegno |
+| Anello del punteggio | tratto 7 | tratto 9 su 118, come il documento |
+| Accento sull'istogramma BPM | picco **e** barra sotto il puntatore | solo il picco; il puntatore schiarisce |
+| Contatori a zero | sparivano | restano, spenti a `text-disabled`: "0" è la risposta utile |
+| Densità globale | Tracce, Pulizia, Set | anche Attività e Report |
+| Stati vuoti senza uscita | 8 su 14 | zero: `action` è obbligatoria nel tipo, e `tone="success"` distingue "non c'è niente" da "non ho trovato niente" |
+| Stringhe non localizzate | `SELECTED`/`HOVER` nella ruota, `Close` nei dialog | quattro lingue come tutto il resto |
+| Esadecimali fissi nei componenti | `#0A0B0D`, `#8A9099` nella forma d'onda | token di ruolo |
+| Test di conformità | assertion testuali sul sorgente | le regole che sono funzioni pure vengono **eseguite**: `cueColor` contro colori Serato/Rekordbox, contrasto di ogni tonalità in tutte e cinque le palette |
+
+### Divergenze consapevoli
+
+- **OLED è una quinta palette** che il documento di riferimento non prevede (lui ne
+  conta quattro per sei combinazioni). Nasce da un requisito d'uso — in cabina, al
+  buio, su schermi OLED — e ridefinisce ogni token per intero. Va contata quando si
+  parla di "tutti i temi": i test di contrasto la includono.
+- **Tipografia**: il documento dice Archivo, l'app usa Be Vietnam Pro con base 500.
+  Scelta esplicita del committente, presa dopo il documento.
+
+### Aperto
+
+- **Le bande di struttura non compaiono ancora**, perché l'analizzatore non le emette:
+  `python-sidecar/sidecar.py` propone i cue ma non i bordi delle sezioni. Il renderer è
+  pronto e disegna a specifica non appena `analyze` restituisce `bands`. I bordi devono
+  arrivare da lì — sono un risultato d'analisi, e calcolarli nell'interfaccia
+  significherebbe inventarli.
+- L'analizzatore usa **quattro** degli otto slot (intro, drop, breakdown, outro):
+  build, second drop, vocal e loop sono dichiarati e disegnabili, ma nessuno li propone.

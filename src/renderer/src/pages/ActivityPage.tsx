@@ -167,7 +167,12 @@ export function ActivityPage() {
                             return next;
                           })
                         }
-                        className="flex w-full items-center gap-3 px-3 py-1.5 text-left transition-colors duration-press hover:bg-surface-hover"
+                        /* La densità è globale (§8.4): una riga di registro è
+                           una riga di lista come le altre, e con l'altezza
+                           fissa qui il comando "liste compatte" sembrava non
+                           funzionare a metà applicazione. */
+                        style={{ height: 'var(--row-h)', fontSize: 'var(--row-font)' }}
+                        className="flex w-full items-center gap-3 px-3 text-left transition-colors duration-press hover:bg-surface-hover"
                       >
                         <span className="w-12 shrink-0 font-mono text-caption tabular-nums text-ink-lo">
                           {formatClock(r.ts)}

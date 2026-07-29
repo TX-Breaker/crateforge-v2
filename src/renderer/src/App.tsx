@@ -188,7 +188,14 @@ function Route({ route, params }: { route: string; params?: Record<string, strin
     case 'health':
       return <HealthPage />;
     case 'tracks':
-      return <TracksPage initialSearch={params?.search} initialFilter={params?.filter} />;
+      return (
+        <TracksPage
+          initialSearch={params?.search}
+          initialFilter={params?.filter}
+          initialCamelot={params?.camelot}
+          initialBpm={params?.bpm}
+        />
+      );
     case 'backup':
       return <BackupPage />;
     case 'cleanup':

@@ -26,7 +26,13 @@
     "src/adapters/**/*",
     "tests/**/*",
     "electron.vite.config.ts",
-    "vitest.config.ts"
+    "vitest.config.ts",
+    /* Regole del design system che sono funzioni pure: i test le ESEGUONO
+       invece di cercarle nel sorgente, quindi vanno viste anche da questo
+       progetto. Sono senza DOM di proposito — `lib` qui è solo ES2022. */
+    "src/renderer/src/lib/colors.ts",
+    "src/renderer/src/lib/camelotHues.ts",
+    "src/renderer/src/lib/cuePalette.ts"
   ],
   "exclude": [
     "tests/i18nParity.test.ts"

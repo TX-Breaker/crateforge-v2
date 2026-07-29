@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { Search } from 'lucide-react';
+import { Search, X } from 'lucide-react';
 import { cn, formatDuration } from '@/lib/utils';
 import { useAppState } from '@/lib/appState';
 import { useLibrary } from '@/lib/library';
@@ -36,6 +36,18 @@ export interface Track {
 
 export type TrackFilter = 'needsReview' | 'noKey' | 'noBpm' | 'noGenre';
 
+/**
+ * Restrizione che arriva da FUORI l'elenco — oggi da una barra dei grafici
+ * della panoramica. Non è un chip come gli altri: i chip sono scelte che
+ * l'utente fa qui dentro e che restano sue, questa è un contesto in cui è
+ * entrato da un'altra pagina, e va mostrata come tale con la sua via d'uscita.
+ */
+export interface TrackScope {
+  camelot?: string;
+  bpmMin?: number;
+  bpmMax?: number;
+}
+
 const PAGE = 200;
 
 export function TrackList({
@@ -43,6 +55,8 @@ export function TrackList({
   onSearchChange,
   filters,
   onToggleFilter,
+  scope,
+  onClearScope,
   selected,
   onSelectedChange,
   bulkActions,
@@ -53,6 +67,9 @@ export function TrackList({
   onSearchChange: (v: string) => void;
   filters: Set<TrackFilter>;
   onToggleFilter: (f: TrackFilter) => void;
+  /** restrizione arrivata da un grafico; `onClearScope` è la via d'uscita */
+  scope?: TrackScope;
+  onClearScope?: () => void;
   selected: Set<number>;
   onSelectedChange: (s: Set<number>) => void;
   bulkActions?: React.ReactNode;
@@ -86,6 +103,9 @@ export function TrackList({
   const noKey = filters.has('noKey');
   const noBpm = filters.has('noBpm');
   const noGenre = filters.has('noGenre');
+  /* Chiave stabile: l'oggetto `scope` è nuovo a ogni render del genitore, e
+     come dipendenza rilancerebbe la query all'infinito. */
+  const scopeKey = `${scope?.camelot ?? ''}|${scope?.bpmMin ?? ''}|${scope?.bpmMax ?? ''}`;
 
   // Cambiare ricerca o filtri azzera la finestra: le pagine già scaricate non
   // valgono più.
@@ -100,7 +120,10 @@ export function TrackList({
         needsReview: needsReviewOnly ? true : undefined,
         noKey: noKey || undefined,
         noBpm: noBpm || undefined,
-        noGenre: noGenre || undefined
+        noGenre: noGenre || undefined,
+        camelot: scope?.camelot,
+        bpmMin: scope?.bpmMin,
+        bpmMax: scope?.bpmMax
       })) as { rows: Track[]; total: number };
       const next: (Track | undefined)[] = new Array(r.total);
       r.rows.forEach((row, i) => (next[i] = row));
@@ -110,7 +133,7 @@ export function TrackList({
       setLoading(false);
       scroller.current?.scrollTo({ top: 0 });
     })();
-  }, [debounced, needsReviewOnly, noKey, noBpm, noGenre]);
+  }, [debounced, needsReviewOnly, noKey, noBpm, noGenre, scopeKey]);
 
   const loadPage = useCallback(
     async (page: number) => {
@@ -123,7 +146,10 @@ export function TrackList({
         needsReview: needsReviewOnly ? true : undefined,
         noKey: noKey || undefined,
         noBpm: noBpm || undefined,
-        noGenre: noGenre || undefined
+        noGenre: noGenre || undefined,
+        camelot: scope?.camelot,
+        bpmMin: scope?.bpmMin,
+        bpmMax: scope?.bpmMax
       })) as { rows: Track[]; total: number };
       setRows((prev) => {
         const next = prev.slice();
@@ -131,7 +157,7 @@ export function TrackList({
         return next;
       });
     },
-    [debounced, needsReviewOnly, noKey, noBpm, noGenre]
+    [debounced, needsReviewOnly, noKey, noBpm, noGenre, scopeKey]
   );
 
   const rowH = density === 'compact' ? 30 : 46;
@@ -173,6 +199,13 @@ export function TrackList({
      statistiche, i tre "manca il dato" nella diagnosi — quindi si mostrano.
      Se la diagnosi non è ancora arrivata il chip non porta numero: mai un
      indicatore di caricamento, mai il conteggio della scansione precedente. */
+  /** Etichetta della restrizione: "Tonalità 8A" oppure "125–130 BPM". */
+  const scopeLabel = scope?.camelot
+    ? `${t(locale, 'tracks.colKey')} ${scope.camelot}`
+    : scope?.bpmMin !== undefined
+      ? `${scope.bpmMin}–${scope.bpmMax ?? ''} ${t(locale, 'tracks.colBpm')}`
+      : null;
+
   const filterChips: { id: TrackFilter; label: string; count?: number }[] = useMemo(
     () => [
       { id: 'needsReview', label: t(locale, 'filter.needsReview'), count: stats?.needsReview },
@@ -196,6 +229,22 @@ export function TrackList({
             placeholder={t(locale, 'tracks.searchPh')}
           />
         </div>
+        {/* Restrizione arrivata da un grafico. Sta PRIMA dei chip e porta una
+            X: è il contesto in cui l'utente è entrato, e deve poterne uscire
+            senza tornare indietro a memoria. */}
+        {scopeLabel && (
+          <button
+            type="button"
+            onClick={onClearScope}
+            className={cn(
+              'inline-flex items-center gap-1.5 rounded-full border border-accent bg-accent/15 px-2.5 py-1',
+              'text-caption text-accent transition-colors duration-press hover:bg-accent/25'
+            )}
+          >
+            {scopeLabel}
+            <X className="size-3" />
+          </button>
+        )}
         {filterChips.map((f) => (
           <FilterChip
             key={f.id}

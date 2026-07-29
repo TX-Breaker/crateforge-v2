@@ -38,7 +38,9 @@ import { PathField } from '@/components/ui/fields';
 import { DangerConfirmDialog } from '@/components/DangerConfirmDialog';
 import { SaveTargetNotice, type SaveTarget } from '@/components/SaveTargetNotice';
 import { RekordboxDiff } from '@/components/RekordboxDiff';
-import { Waveform, type WaveCue } from '@/components/data/Waveform';
+import { Waveform, type WaveBand, type WaveCue } from '@/components/data/Waveform';
+import { CueLegend } from '@/components/data/CueLegend';
+import { cueColor } from '@/lib/cuePalette';
 import { useAppState } from '@/lib/appState';
 import { useJobs } from '@/lib/jobs';
 import { useLibrary } from '@/lib/library';
@@ -107,6 +109,12 @@ interface TrackResult {
   error: string | null;
   saved: boolean;
   envelope: number[];
+  /**
+   * Bande di struttura (§8.1). Le calcola l'analizzatore come percentuali
+   * della durata: se non le manda, l'array resta vuoto e sotto l'onda non
+   * viene disegnato nulla — nessun segnaposto, nessuna banda inventata qui.
+   */
+  bands: WaveBand[];
   durationS: number | null;
   bpm: number | null;
 }
@@ -189,6 +197,7 @@ function CuesTab() {
                 error: null,
                 saved: false,
                 envelope: (r.envelope as number[] | undefined) ?? [],
+                bands: (r.bands as WaveBand[] | undefined) ?? [],
                 durationS: (r.durationS as number | undefined) ?? null,
                 bpm: (r.bpm as number | undefined) ?? null
               }
@@ -199,6 +208,7 @@ function CuesTab() {
                 error: r.message,
                 saved: false,
                 envelope: [],
+                bands: [],
                 durationS: null,
                 bpm: null
               }
@@ -211,6 +221,7 @@ function CuesTab() {
           error: String(err),
           saved: false,
           envelope: [],
+          bands: [],
           durationS: null,
           bpm: null
         });
@@ -429,14 +440,22 @@ function CuesTab() {
                 </div>
 
                 {r.envelope.length > 0 && r.durationS && (
-                  <Waveform
-                    envelope={r.envelope}
-                    durationS={r.durationS}
-                    bpm={r.bpm}
-                    snapToBar={snap}
-                    cues={r.cues as WaveCue[]}
-                    onMoveCue={(ci, ms) => updateCue(ri, ci, { positionMs: ms })}
-                  />
+                  <>
+                    <Waveform
+                      envelope={r.envelope}
+                      durationS={r.durationS}
+                      bpm={r.bpm}
+                      bands={r.bands}
+                      snapToBar={snap}
+                      cues={r.cues as WaveCue[]}
+                      onMoveCue={(ci, ms) => updateCue(ri, ci, { positionMs: ms })}
+                    />
+                    {/* §8.1: la legenda sta sotto l'onda e non si nasconde. È
+                        l'unico posto in cui il legame fra tinta e significato
+                        viene dichiarato, e senza di lei le bandierine a 9px
+                        sono otto colori indistinguibili. */}
+                    <CueLegend />
+                  </>
                 )}
 
                 {r.cues.length > 0 && (
@@ -445,7 +464,7 @@ function CuesTab() {
                       <div key={ci} className="flex items-center gap-2">
                         <span
                           className="size-2.5 shrink-0 rounded-[2px]"
-                          style={{ background: c.color ?? '#8A9099' }}
+                          style={{ background: cueColor(c) ?? 'rgb(var(--text-lo))' }}
                         />
                         <Input
                           className="h-7 w-40"
@@ -624,7 +643,16 @@ function TagsTab() {
           </CardHeader>
           <CardContent className="space-y-3">
             {proposals.length === 0 ? (
-              <EmptyState title={tp('noneTitle')}>{tp('noneBody')}</EmptyState>
+              <EmptyState
+                title={tp('noneTitle')}
+                action={
+                  <Button variant="secondary" onClick={doPropose} working={busy}>
+                    <Globe /> {tp('noneAction')}
+                  </Button>
+                }
+              >
+                {tp('noneBody')}
+              </EmptyState>
             ) : (
               <>
                 <div className="max-h-96 overflow-auto rounded-card border border-line-subtle">
