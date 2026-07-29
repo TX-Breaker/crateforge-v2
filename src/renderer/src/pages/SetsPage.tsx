@@ -435,6 +435,7 @@ interface Analysis {
 
 function PlanTab() {
   const { locale } = useAppState();
+  const { go } = useRouter();
   const tp = (k: string, p?: Record<string, string | number>) => pageText(locale, 'planner', k, p);
   const [playlists, setPlaylists] = useState<{ id: number; name: string; trackCount: number }[]>([]);
   const [selected, setSelected] = useState<number | null>(null);
@@ -471,7 +472,16 @@ function PlanTab() {
         </CardHeader>
         <CardContent>
           {playlists.length === 0 ? (
-            <EmptyState title={tp('noPlaylistsTitle')}>{tp('noPlaylistsBody')}</EmptyState>
+            <EmptyState
+              title={tp('noPlaylistsTitle')}
+              action={
+                <Button variant="secondary" onClick={() => go('convert')}>
+                  {tp('noPlaylistsAction')}
+                </Button>
+              }
+            >
+              {tp('noPlaylistsBody')}
+            </EmptyState>
           ) : (
             <div className="flex flex-wrap gap-2">
               {playlists.map((p) => (

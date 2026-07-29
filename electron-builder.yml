@@ -23,17 +23,18 @@ mac:
     - dmg
     - zip
   category: public.app-category.music
-  # Squircle con margine del 10%, generata da scripts/make-icons.cjs a partire
-  # dai quattro disegni del marchio: nessun ricampionamento di un unico PNG.
-  icon: build/icon.png
+  # .icns con dieci slot, ognuno generato dal proprio disegno (§08 della
+  # specifica logo): ricampionare un 1024 lungo la scala rimetterebbe la
+  # poltiglia che i quattro disegni esistono per evitare.
+  icon: build/icon.icns
   # Build locali non firmati: warning Gatekeeper atteso (vedi README).
   identity: null
 win:
   target:
     - nsis
     - portable
-  # .ico multi-misura: 16 e 24 usano il disegno a due dorsi, 32 quello a tratto
-  # pesante, da 48 in su la geometria piena (specifica logo §03).
+  # .ico a sette misure: 16 col disegno a due dorsi, 20 e 24 col disegno
+  # stretto, 32 col tratto pesante, da 48 in su la geometria piena (§08).
   icon: build/icon.ico
 nsis:
   oneClick: false

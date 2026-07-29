@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { FileX2, FolderSync, PackageOpen, RefreshCw } from 'lucide-react';
+import { FileX2, FolderOpen, FolderSync, PackageOpen, RefreshCw } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, StatTile } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge, Checkbox, EmptyState, Notice, Switch } from '@/components/ui/misc';
@@ -168,7 +168,21 @@ export function ArrivalsPage() {
         </CardHeader>
         <CardContent className="space-y-3">
           {items.length === 0 ? (
-            <EmptyState icon={<FolderSync />} title={tp('emptyTitle')}>
+            <EmptyState
+              icon={<FolderSync />}
+              title={tp('emptyTitle')}
+              action={
+                <Button
+                  variant="secondary"
+                  onClick={async () => {
+                    const d = await window.crateforge.dialog.openDirectory();
+                    if (d) setFolder(d);
+                  }}
+                >
+                  <FolderOpen /> {tp('emptyAction')}
+                </Button>
+              }
+            >
               {tp('emptyBody')}
             </EmptyState>
           ) : (

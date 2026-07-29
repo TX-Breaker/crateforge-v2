@@ -444,6 +444,7 @@ const it = {
     queueTitle: 'Coda ({n})',
     queueDesc: 'Analizzati e normalizzati, in attesa di una tua decisione.',
     emptyTitle: 'Nessun nuovo file',
+    emptyAction: 'Scegli la cartella',
     emptyBody: 'Quando arrivano nuovi brani nella cartella sorvegliata, compaiono qui.',
     statNew: 'In coda',
     statSelected: 'Selezionati',
@@ -505,6 +506,7 @@ const it = {
     step1Desc: 'Le playlist arrivano dalla libreria importata.',
     step2: '{n} transizioni · {p} problematiche',
     noPlaylistsTitle: 'Nessuna playlist',
+    noPlaylistsAction: 'Importa una libreria',
     noPlaylistsBody: 'Importa una collection che contenga playlist per usare questa analisi.',
     missingNote: '{n} transizioni con dati mancanti.',
     bridgesNote: 'Per ogni salto problematico viene cercata una traccia-ponte nella libreria.',
@@ -711,6 +713,7 @@ const it = {
     kDetail: 'Dettaglio',
     openTarget: 'Apri la cartella',
     emptyTitle: 'Nessuna voce',
+    emptyAction: 'Esegui una diagnosi',
     emptyBody: 'Con questo filtro non c\'è niente da mostrare.'
   },
 
@@ -1337,6 +1340,7 @@ const en: PageDict = {
     queueTitle: 'Queue ({n})',
     queueDesc: 'Analysed and normalised, waiting for your decision.',
     emptyTitle: 'No new files',
+    emptyAction: 'Choose the folder',
     emptyBody: 'When new tracks land in the watched folder, they show up here.',
     statNew: 'Queued',
     statSelected: 'Selected',
@@ -1400,6 +1404,7 @@ const en: PageDict = {
     step1Desc: 'Playlists come from the imported library.',
     step2: '{n} transitions · {p} problematic',
     noPlaylistsTitle: 'No playlists',
+    noPlaylistsAction: 'Import a library',
     noPlaylistsBody: 'Import a collection that contains playlists to use this analysis.',
     missingNote: '{n} transitions with missing data.',
     bridgesNote: 'For every problematic jump a bridge track is searched for in the library.',
@@ -1607,6 +1612,7 @@ const en: PageDict = {
     kDetail: 'Detail',
     openTarget: 'Open the folder',
     emptyTitle: 'No entries',
+    emptyAction: 'Run a health check',
     emptyBody: 'Nothing to show with this filter.'
   },
 

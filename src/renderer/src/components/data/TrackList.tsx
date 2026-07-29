@@ -3,6 +3,7 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { Search } from 'lucide-react';
 import { cn, formatDuration } from '@/lib/utils';
 import { useAppState } from '@/lib/appState';
+import { useLibrary } from '@/lib/library';
 import { t } from '@/lib/i18n';
 import { Badge, Checkbox, FilterChip, Input, Segmented, Skeleton } from '@/components/ui/misc';
 
@@ -59,6 +60,10 @@ export function TrackList({
   emptyState?: React.ReactNode;
 }) {
   const { locale, density, setDensity } = useAppState();
+  /* Conteggi dei chip: già calcolati altrove (statistiche e diagnosi), qui si
+     leggono soltanto — un chip non deve interrogare il database per sapere
+     come chiamarsi. */
+  const { stats, health } = useLibrary();
   const [rows, setRows] = useState<(Track | undefined)[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -164,14 +169,18 @@ export function TrackList({
     onSelectedChange(next);
   };
 
-  const filterChips: { id: TrackFilter; label: string }[] = useMemo(
+  /* Contatori dei chip (§8.2): i numeri ci sono GIÀ — needs_review sta nelle
+     statistiche, i tre "manca il dato" nella diagnosi — quindi si mostrano.
+     Se la diagnosi non è ancora arrivata il chip non porta numero: mai un
+     indicatore di caricamento, mai il conteggio della scansione precedente. */
+  const filterChips: { id: TrackFilter; label: string; count?: number }[] = useMemo(
     () => [
-      { id: 'needsReview', label: t(locale, 'filter.needsReview') },
-      { id: 'noKey', label: t(locale, 'filter.noKey') },
-      { id: 'noBpm', label: t(locale, 'filter.noBpm') },
-      { id: 'noGenre', label: t(locale, 'filter.noGenre') }
+      { id: 'needsReview', label: t(locale, 'filter.needsReview'), count: stats?.needsReview },
+      { id: 'noKey', label: t(locale, 'filter.noKey'), count: health?.missingKey },
+      { id: 'noBpm', label: t(locale, 'filter.noBpm'), count: health?.missingBpm },
+      { id: 'noGenre', label: t(locale, 'filter.noGenre'), count: health?.missingGenre }
     ],
-    [locale]
+    [locale, stats, health]
   );
 
   return (
@@ -188,7 +197,12 @@ export function TrackList({
           />
         </div>
         {filterChips.map((f) => (
-          <FilterChip key={f.id} active={filters.has(f.id)} onClick={() => onToggleFilter(f.id)}>
+          <FilterChip
+            key={f.id}
+            active={filters.has(f.id)}
+            count={f.count}
+            onClick={() => onToggleFilter(f.id)}
+          >
             {f.label}
           </FilterChip>
         ))}

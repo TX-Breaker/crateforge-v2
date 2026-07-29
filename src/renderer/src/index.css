@@ -316,11 +316,12 @@
 }
 
 @layer components {
-  /* I toast di sonner si muovono di default in 400ms: sopra il tetto di 280
-     dichiarato dal sistema per l'ingresso di un pannello. */
+  /* Toast: 180ms (§8.4). Sonner ne usa 400 di suo — il toast è la notifica
+     più leggera dell'interfaccia e non deve muoversi più a lungo di un cambio
+     di pannello. */
   [data-sonner-toast] {
-    transition-duration: 280ms !important;
-    animation-duration: 280ms !important;
+    transition-duration: 180ms !important;
+    animation-duration: 180ms !important;
   }
 
   .cf-glass {

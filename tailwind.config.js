@@ -49,8 +49,11 @@ module.exports = {
           DEFAULT: token('success'),
           ink: token('success-ink')
         },
-        /* Tinte dei cue: fisse in tutte le palette, desaturate per restare
-           distinguibili anche in scala di grigi (§5.1). */
+        /* Palette dei cue: OTTO slot in ordine fisso (§5.1 e §8.1), uguali in
+           tutte le palette e desaturati sotto la soglia neon, così restano
+           distinguibili anche in scala di grigi. Nessun colore di cue può
+           cadere fuori da questi otto: è la regola che il sidecar deve
+           rispettare quando propone i punti, e c'è un test che la verifica. */
         cue: {
           intro: '#6C9BC9',
           build: '#5E9E72',
@@ -58,8 +61,8 @@ module.exports = {
           breakdown: '#8F8AC4',
           drop2: '#C4776B',
           outro: '#7FA8A0',
-          loop: '#B9A06B',
-          other: '#8A9099'
+          vocal: '#C4768F',
+          loop: '#8F9A5E'
         }
       },
       fontFamily: {

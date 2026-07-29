@@ -442,6 +442,7 @@ export const fr: PageDict = {
     queueTitle: 'File ({n})',
     queueDesc: 'Analysés et normalisés, en attente de votre décision.',
     emptyTitle: 'Aucun nouveau fichier',
+    emptyAction: 'Choisir le dossier',
     emptyBody: 'Quand de nouveaux titres arrivent dans le dossier surveillé, ils apparaissent ici.',
     statNew: 'En file',
     statSelected: 'Sélectionnés',
@@ -505,6 +506,7 @@ export const fr: PageDict = {
     step1Desc: 'Les playlists proviennent de la bibliothèque importée.',
     step2: '{n} transitions · {p} problématiques',
     noPlaylistsTitle: 'Aucune playlist',
+    noPlaylistsAction: 'Importer une bibliothèque',
     noPlaylistsBody: 'Importez une collection contenant des playlists pour utiliser cette analyse.',
     missingNote: '{n} transitions avec données manquantes.',
     bridgesNote: 'Pour chaque saut problématique, un titre-pont est cherché dans la bibliothèque.',
@@ -712,6 +714,7 @@ export const fr: PageDict = {
     kDetail: 'Détail',
     openTarget: 'Ouvrir le dossier',
     emptyTitle: 'Aucune entrée',
+    emptyAction: 'Lancer un diagnostic',
     emptyBody: 'Rien à afficher avec ce filtre.'
   },
 
@@ -1338,6 +1341,7 @@ export const de: PageDict = {
     queueTitle: 'Warteschlange ({n})',
     queueDesc: 'Analysiert und normalisiert, wartet auf deine Entscheidung.',
     emptyTitle: 'Keine neuen Dateien',
+    emptyAction: 'Ordner wählen',
     emptyBody: 'Sobald neue Tracks im überwachten Ordner landen, erscheinen sie hier.',
     statNew: 'In Warteschlange',
     statSelected: 'Ausgewählt',
@@ -1401,6 +1405,7 @@ export const de: PageDict = {
     step1Desc: 'Die Playlists stammen aus der importierten Bibliothek.',
     step2: '{n} Übergänge · {p} problematisch',
     noPlaylistsTitle: 'Keine Playlists',
+    noPlaylistsAction: 'Bibliothek importieren',
     noPlaylistsBody: 'Importiere eine Collection mit Playlists, um diese Analyse zu nutzen.',
     missingNote: '{n} Übergänge mit fehlenden Daten.',
     bridgesNote: 'Für jeden problematischen Sprung wird ein Brücken-Track gesucht.',
@@ -1608,6 +1613,7 @@ export const de: PageDict = {
     kDetail: 'Detail',
     openTarget: 'Ordner öffnen',
     emptyTitle: 'Keine Einträge',
+    emptyAction: 'Diagnose starten',
     emptyBody: 'Mit diesem Filter gibt es nichts zu zeigen.'
   },
 

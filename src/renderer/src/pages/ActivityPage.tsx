@@ -6,6 +6,7 @@ import { Badge, EmptyState, FilterChip, KeyValue } from '@/components/ui/misc';
 import { SaveTargetBadge, type SaveTarget } from '@/components/SaveTargetNotice';
 import { useAppState } from '@/lib/appState';
 import { useNotifications } from '@/lib/notifications';
+import { useRouter } from '@/lib/router';
 import { pageText } from '@/lib/i18nPages';
 import { cn, formatClock } from '@/lib/utils';
 
@@ -28,6 +29,7 @@ type Filter = 'all' | 'backup' | 'import' | 'cleanup' | 'export' | 'failures';
  */
 export function ActivityPage() {
   const { locale } = useAppState();
+  const { go } = useRouter();
   const tp = (k: string, p?: Record<string, string | number>) => pageText(locale, 'log', k, p);
   const { push } = useNotifications();
   const [rows, setRows] = useState<OplogRow[]>([]);
@@ -132,7 +134,16 @@ export function ActivityPage() {
           </div>
 
           {shown.length === 0 ? (
-            <EmptyState title={tp('emptyTitle')}>{tp('emptyBody')}</EmptyState>
+            <EmptyState
+              title={tp('emptyTitle')}
+              action={
+                <Button variant="secondary" onClick={() => go('health')}>
+                  {tp('emptyAction')}
+                </Button>
+              }
+            >
+              {tp('emptyBody')}
+            </EmptyState>
           ) : (
             <div className="overflow-hidden rounded-card border border-line-subtle">
               <div className="flex items-center gap-3 border-b border-line-subtle bg-surface-3 px-3 py-1.5 font-mono text-[9.5px] uppercase tracking-[.12em] text-ink-lo">

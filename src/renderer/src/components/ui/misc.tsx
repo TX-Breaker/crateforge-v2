@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '@/lib/utils';
+import { useAppState } from '@/lib/appState';
 import { CrateWatermark } from '@/components/Brand';
 
 /* Riesportati da card.tsx: i componenti li importano da un posto solo. */
@@ -413,6 +414,38 @@ export function Badge({
 }
 
 /** Chip di filtro attivabile, con contatore opzionale. */
+/**
+ * Numero del chip (§8.2). Sopra 9.999 si abbrevia, altrimenti separatore
+ * locale: un chip largo quanto la frase che contiene smette di essere un chip.
+ */
+function chipCount(n: number, locale: string): string {
+  if (n > 9999) {
+    const k = n / 1000;
+    return `${(k >= 100 ? Math.round(k) : Math.round(k * 10) / 10).toLocaleString(locale)}k`;
+  }
+  return n.toLocaleString(locale);
+}
+
+/**
+ * Chip di filtro con contatore (§8.2).
+ *
+ * Un filtro che non dice quanto nasconderà è un'ipotesi. Il numero però compare
+ * SOLO se è già noto senza lavoro extra: un chip che dovesse interrogare il
+ * database per etichettarsi non mostra niente — mai un indicatore di
+ * caricamento, mai un numero vecchio della scansione precedente.
+ *
+ * Quattro stati:
+ *  - attivo: chip in accento, numero in accento a piena forza;
+ *  - inattivo: numero a `text-lo`, così l'etichetta resta l'enfasi e il numero
+ *    resta disponibile;
+ *  - zero: il chip RESTA, spento a `text-disabled`. Un filtro che sparisce
+ *    quando non trova nulla è un filtro di cui non ci si fida: "0" è la
+ *    risposta utile;
+ *  - sconosciuto: nessun numero.
+ *
+ * I numeri non si animano mai: un contatore che sale a ogni cambio di filtro
+ * trasforma l'intestazione di una lista in un'attesa.
+ */
 export function FilterChip({
   active,
   count,
@@ -424,21 +457,34 @@ export function FilterChip({
   children: React.ReactNode;
   onClick?: () => void;
 }) {
+  const { locale } = useAppState();
+  const zero = count === 0;
   return (
     <button
       type="button"
       aria-pressed={active}
       onClick={onClick}
       className={cn(
-        'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-caption transition-colors duration-press',
+        'inline-flex items-center rounded-full border px-2.5 py-1 text-caption transition-colors duration-press',
         active
           ? 'border-accent bg-accent/15 text-accent'
-          : 'border-line bg-surface-3 text-ink-mid hover:border-line-strong hover:text-ink-hi'
+          : zero
+            ? 'border-line bg-surface-3 text-ink-disabled hover:border-line-strong hover:text-ink-mid'
+            : 'border-line bg-surface-3 text-ink-mid hover:border-line-strong hover:text-ink-hi'
       )}
     >
       {children}
       {count !== undefined && (
-        <span className="font-mono tabular-nums text-ink-lo">{count.toLocaleString()}</span>
+        <span
+          /* 7px di stacco dall'etichetta, mono 500 tabulare: il numero deve
+             restare incolonnato mentre i chip cambiano larghezza. */
+          className={cn(
+            'ml-[7px] font-mono text-[11px] font-medium tabular-nums',
+            active ? 'text-accent' : zero ? 'text-ink-disabled' : 'text-ink-lo'
+          )}
+        >
+          {chipCount(count, locale)}
+        </span>
       )}
     </button>
   );
