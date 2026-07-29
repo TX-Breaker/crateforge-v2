@@ -72,7 +72,7 @@ const MATRIX: { app: string; imp: Cap; impKey: string; exp: Cap; expKey: string 
   { app: 'Rekordbox', imp: 'full', impKey: 'rbImport', exp: 'full', expKey: 'rbExport' },
   { app: 'Traktor', imp: 'full', impKey: 'trImport', exp: 'full', expKey: 'trExport' },
   { app: 'VirtualDJ', imp: 'partial', impKey: 'vdjImport', exp: 'full', expKey: 'vdjExport' },
-  { app: 'Engine DJ', imp: 'full', impKey: 'enImport', exp: 'none', expKey: 'enExport' },
+  { app: 'Engine DJ', imp: 'full', impKey: 'enImport', exp: 'partial', expKey: 'enExport' },
   { app: 'Serato', imp: 'full', impKey: 'srImport', exp: 'none', expKey: 'srExport' }
 ];
 
@@ -139,6 +139,8 @@ export function ConvertPage() {
   const [busy, setBusy] = useState(false);
   const [outcome, setOutcome] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Avvisi del writer: ciò che non è rappresentabile va DETTO, non scartato.
+  const [warnings, setWarnings] = useState<string[]>([]);
   const [guideOpen, setGuideOpen] = useState(false);
   const [srcSel, setSrcSel] = useState<SourceId>('rekordbox-db');
   const [dstSel, setDstSel] = useState<Format>('traktor');
@@ -224,6 +226,50 @@ export function ConvertPage() {
     setPending(dstSel);
   };
 
+  /**
+   * Engine DJ: chiediamo dove creare la libreria NUOVA e un m.db esistente da
+   * usare come modello dello schema, così la libreria generata ha la stessa
+   * versione dell'installazione dell'utente invece di una nostra ipotesi.
+   */
+  const doExportEngine = async () => {
+    const outDir = await window.crateforge.dialog.openDirectory();
+    if (!outDir) return;
+    const template = await window.crateforge.dialog.openFile([
+      { name: 'Engine DJ (m.db)', extensions: ['db'] }
+    ]);
+    if (!template) return;
+    setError(null);
+    setOutcome(null);
+    setWarnings([]);
+    setBusy(true);
+    try {
+      const sel = convertSource ? { source: convertSource } : undefined;
+      const r = await run(tp('jobExport', { fmt: 'Engine DJ' }), () =>
+        window.crateforge.exporter.engineLibrary(outDir, template, sel as never)
+      );
+      if (!r.ok) {
+        setError(r.message ?? tp('convErr'));
+        push({ kind: 'error', job: true, title: tp('title'), body: r.message ?? tp('convErr') });
+        return;
+      }
+      const text = tp('engineOutDone', {
+        n: (r.tracks ?? 0).toLocaleString(locale),
+        cues: r.cues ?? 0,
+        loops: r.loops ?? 0,
+        path: r.dbPath ?? ''
+      });
+      setOutcome(text);
+      if (r.warnings?.length) setWarnings(r.warnings);
+      push({ kind: 'success', job: true, title: tp('title'), body: text });
+    } catch (err) {
+      setError(String(err));
+      push({ kind: 'error', job: true, title: tp('title'), body: String(err) });
+    } finally {
+      setBusy(false);
+      setConvertSource(null);
+    }
+  };
+
   const doExport = async () => {
     if (!pending) return;
     const fmt = FORMATS.find((f) => f.id === pending)!;
@@ -235,6 +281,7 @@ export function ConvertPage() {
     const sel = convertSource ? { source: convertSource } : undefined;
     setError(null);
     setOutcome(null);
+    setWarnings([]);
     setBusy(true);
     try {
       const r = await run(tp('jobExport', { fmt: fmt.title }), () =>
@@ -419,15 +466,29 @@ export function ConvertPage() {
             <CardDescription>{tp('seratoReason')}</CardDescription>
           </CardHeader>
         </Card>
-        <Card className="opacity-80">
+        {/* Engine DJ: genera una libreria NUOVA, mai una modifica della sua. */}
+        <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-body">
-              Engine DJ <Badge variant="neutral">{tp('comingSoon')}</Badge>
-            </CardTitle>
-            <CardDescription>{tp('engineReason')}</CardDescription>
+            <CardTitle className="text-body">{tp('engineExportTitle')}</CardTitle>
+            <CardDescription>{tp('engineExportDesc')}</CardDescription>
           </CardHeader>
+          <CardContent>
+            <Button variant="secondary" onClick={doExportEngine} disabled={busy}>
+              <Download /> {tp('engineExportBtn')}
+            </Button>
+          </CardContent>
         </Card>
       </div>
+
+      {warnings.length > 0 && (
+        <Notice variant="warning" title={tp('warnHeader')}>
+          <ul className="list-disc space-y-1 pl-5">
+            {warnings.map((w) => (
+              <li key={w}>{w}</li>
+            ))}
+          </ul>
+        </Notice>
+      )}
 
       {outcome && (
         <Notice

@@ -577,7 +577,7 @@ const it = {
     vdjImport: 'database.xml (senza griglia completa)',
     vdjExport: 'database.xml',
     enImport: 'Engine Library (m.db)',
-    enExport: 'non ancora',
+    enExport: 'Engine Library nuova (brani, cue, loop, playlist)',
     srImport: 'cartella _Serato_',
     srExport: 'non ancora',
     cellFull: 'completo',
@@ -590,8 +590,12 @@ const it = {
     comingSoon: 'in arrivo',
     seratoReason:
       'La scrittura diretta nelle crate di Serato non è sicura: finché non lo è, non la offriamo.',
-    engineReason:
-      'Il database di Engine DJ cambia struttura tra le versioni: scriverlo alla cieca è troppo rischioso.',
+    engineExportTitle: 'Engine DJ',
+    engineExportDesc:
+      'Engine legge una cartella "Engine Library": ne generiamo una NUOVA dove scegli tu, senza toccare la tua. Ti verrà chiesto anche un m.db esistente, che serve come modello dello schema. Forma d\'onda e griglia le ricalcola Engine alla prima analisi.',
+    engineExportBtn: 'Genera libreria Engine',
+    engineOutDone: 'Libreria Engine creata: {n} brani, {cues} cue, {loops} loop in {path}.',
+    warnHeader: 'Cosa non è passato nella conversione:',
     dlgTitle: 'Limiti dichiarati di questo canale',
     dlgNote: 'Puoi procedere: è importante che tu sappia prima cosa non arriverà a destinazione.',
     limit1: 'L\'import XML aggiunge e aggiorna, ma non rimuove nulla dalla collection.',
@@ -1417,7 +1421,7 @@ const en: PageDict = {
     vdjImport: 'database.xml (grid partially)',
     vdjExport: 'database.xml',
     enImport: 'Engine Library (m.db)',
-    enExport: 'not yet',
+    enExport: 'new Engine Library (tracks, cues, loops, playlists)',
     srImport: '_Serato_ folder',
     srExport: 'not yet',
     cellFull: 'full',
@@ -1430,8 +1434,12 @@ const en: PageDict = {
     comingSoon: 'coming',
     seratoReason:
       'Writing directly into Serato crates is not safe: until it is, we do not offer it.',
-    engineReason:
-      'The Engine DJ database changes structure between versions: writing it blind is too risky.',
+    engineExportTitle: 'Engine DJ',
+    engineExportDesc:
+      'Engine reads an "Engine Library" folder: we generate a NEW one where you choose, without touching yours. You will also be asked for an existing m.db, used as the schema template. Waveform and beat grid are recomputed by Engine on first analysis.',
+    engineExportBtn: 'Generate Engine library',
+    engineOutDone: 'Engine library created: {n} tracks, {cues} cues, {loops} loops in {path}.',
+    warnHeader: 'What did not carry over in the conversion:',
     dlgTitle: 'Declared limits of this channel',
     dlgNote: 'You can proceed: what matters is knowing beforehand what will not arrive.',
     limit1: 'The XML import adds and updates, but never removes anything from the collection.',

@@ -29,6 +29,7 @@ import { writeRekordboxXml } from '@adapters/rekordbox/xmlWriter';
 import { writeRelocationXml } from '@adapters/rekordbox/relocationXml';
 import { writeTraktorNml } from '@adapters/traktor/nmlWriter';
 import { writeVirtualDjXml } from '@adapters/virtualdj/vdjWriter';
+import { writeEngineLibrary } from '@adapters/engine/engineWriter';
 import { REKORDBOX_XML_LIMITS } from '@adapters/common';
 import { SERATO_STATUS } from '@adapters/serato';
 import { ENGINE_STATUS } from '@adapters/engine';
@@ -506,6 +507,36 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
     logOperation(db, 'export.virtualdj-xml', outPath, 'ok', JSON.stringify(r));
     return r;
   });
+
+  /**
+   * Export verso ENGINE DJ: genera una Engine Library NUOVA nella cartella
+   * scelta dall'utente. Non tocchiamo quella esistente — i blob di forma
+   * d'onda e griglia sappiamo leggerli ma non ricrearli per intero, e Engine
+   * li rigenera alla prima analisi.
+   *
+   * Serve un m.db esistente come modello dello schema, così la libreria
+   * generata ha la stessa versione dell'installazione dell'utente.
+   */
+  ipcMain.handle(
+    'export:engineLibrary',
+    (_e, outDir: string, templateDbPath: string, sel?: { playlistIds?: number[] }) => {
+      try {
+        const r = writeEngineLibrary(db, outDir, templateDbPath, sel ?? {});
+        logOperation(
+          db,
+          'export.engine-library',
+          r.dbPath,
+          'ok',
+          JSON.stringify({ tracks: r.tracks, cues: r.cues, loops: r.loops })
+        );
+        return { ok: true, ...r };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        logOperation(db, 'export.engine-library', outDir, 'error', message);
+        return { ok: false, message };
+      }
+    }
+  );
 
   // ---- relocator ----
   ipcMain.handle('relocator:findBroken', () => {

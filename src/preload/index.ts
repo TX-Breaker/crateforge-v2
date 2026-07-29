@@ -91,7 +91,20 @@ const api = {
     traktorNml: (outPath: string, sel?: unknown) =>
       ipcRenderer.invoke('export:traktorNml', outPath, sel),
     virtualdjXml: (outPath: string, sel?: unknown) =>
-      ipcRenderer.invoke('export:virtualdjXml', outPath, sel)
+      ipcRenderer.invoke('export:virtualdjXml', outPath, sel),
+    // Engine DJ: genera una libreria NUOVA nella cartella scelta (non tocca
+    // quella esistente). Serve un m.db come modello dello schema.
+    engineLibrary: (outDir: string, templateDbPath: string, sel?: { playlistIds?: number[] }) =>
+      ipcRenderer.invoke('export:engineLibrary', outDir, templateDbPath, sel) as Promise<{
+        ok: boolean;
+        tracks?: number;
+        cues?: number;
+        loops?: number;
+        playlists?: number;
+        dbPath?: string;
+        warnings?: string[];
+        message?: string;
+      }>
   },
   relocator: {
     findBroken: () => ipcRenderer.invoke('relocator:findBroken'),

@@ -578,7 +578,7 @@ export const fr: PageDict = {
     vdjImport: 'database.xml (grille partielle)',
     vdjExport: 'database.xml',
     enImport: 'Engine Library (m.db)',
-    enExport: 'pas encore',
+    enExport: 'nouvelle Engine Library (titres, cues, boucles, playlists)',
     srImport: 'dossier _Serato_',
     srExport: 'pas encore',
     cellFull: 'complet',
@@ -591,8 +591,12 @@ export const fr: PageDict = {
     comingSoon: 'à venir',
     seratoReason:
       "Écrire directement dans les crates Serato n'est pas sûr : tant que ce ne l'est pas, nous ne le proposons pas.",
-    engineReason:
-      'La base Engine DJ change de structure selon les versions : l’écrire à l’aveugle est trop risqué.',
+    engineExportTitle: 'Engine DJ',
+    engineExportDesc:
+      'Engine lit un dossier « Engine Library » : nous en générons un NOUVEAU là où vous voulez, sans toucher au vôtre. Un m.db existant vous sera demandé comme modèle de schéma. La forme d\'onde et la grille sont recalculées par Engine à la première analyse.',
+    engineExportBtn: 'Générer la bibliothèque Engine',
+    engineOutDone: 'Bibliothèque Engine créée : {n} titres, {cues} cues, {loops} boucles dans {path}.',
+    warnHeader: "Ce qui n'est pas passé dans la conversion :",
     dlgTitle: 'Limites déclarées de ce canal',
     dlgNote: 'Vous pouvez continuer : l’important est de savoir d’avance ce qui n’arrivera pas.',
     limit1: "L'import XML ajoute et met à jour, mais ne retire jamais rien de la collection.",
@@ -1418,7 +1422,7 @@ export const de: PageDict = {
     vdjImport: 'database.xml (Grid teilweise)',
     vdjExport: 'database.xml',
     enImport: 'Engine Library (m.db)',
-    enExport: 'noch nicht',
+    enExport: 'neue Engine Library (Tracks, Cues, Loops, Playlists)',
     srImport: 'Ordner _Serato_',
     srExport: 'noch nicht',
     cellFull: 'vollständig',
@@ -1431,8 +1435,12 @@ export const de: PageDict = {
     comingSoon: 'kommt',
     seratoReason:
       'Direktes Schreiben in Serato-Crates ist nicht sicher: solange das so ist, bieten wir es nicht an.',
-    engineReason:
-      'Die Engine-DJ-Datenbank ändert ihre Struktur zwischen Versionen: blind hineinzuschreiben ist zu riskant.',
+    engineExportTitle: 'Engine DJ',
+    engineExportDesc:
+      'Engine liest einen Ordner „Engine Library": Wir erzeugen einen NEUEN an einem Ort deiner Wahl, ohne deinen anzurühren. Zusätzlich wird eine vorhandene m.db als Schema-Vorlage abgefragt. Wellenform und Beatgrid berechnet Engine bei der ersten Analyse neu.',
+    engineExportBtn: 'Engine-Bibliothek erzeugen',
+    engineOutDone: 'Engine-Bibliothek erstellt: {n} Titel, {cues} Cues, {loops} Loops in {path}.',
+    warnHeader: 'Was bei der Konvertierung nicht mitgekommen ist:',
     dlgTitle: 'Erklärte Grenzen dieses Kanals',
     dlgNote: 'Du kannst fortfahren: wichtig ist, vorher zu wissen, was nicht ankommt.',
     limit1: 'Der XML-Import ergänzt und aktualisiert, entfernt aber nie etwas aus der Collection.',
