@@ -147,12 +147,19 @@ const api = {
       }>,
     // Serato: i cue vivono nei tag dei file audio, non in un file di libreria.
     // Richiede il gate delle scritture dirette; backup+rollback nel sidecar.
-    seratoCues: (sel?: { playlistIds?: number[] }) =>
+    /* `dryRun` conta i file che verrebbero modificati senza toccarne nessuno:
+       il numero va mostrato nella conferma PRIMA di scrivere sugli originali.
+       `source` limita la scrittura ai brani di quella sorgente — senza, una
+       conversione riscriverebbe i tag di tutta la libreria. */
+    seratoCues: (sel?: { playlistIds?: number[]; source?: string; dryRun?: boolean }) =>
       ipcRenderer.invoke('export:seratoCues', sel) as Promise<{
         ok: boolean;
+        dryRun?: boolean;
         written?: number;
         failed?: number;
         files?: number;
+        cues?: number;
+        loops?: number;
         backupDir?: string;
         message?: string;
       }>,

@@ -716,7 +716,9 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
    * traccia, BPM lock, flip…) e annulla la scrittura se nel blob restano byte
    * non riconosciuti: meglio non scrivere che cancellare dati dell'utente.
    */
-  ipcMain.handle('export:seratoCues', async (_e, sel?: { playlistIds?: number[] }) => {
+  ipcMain.handle(
+    'export:seratoCues',
+    async (_e, sel?: { playlistIds?: number[]; source?: string; dryRun?: boolean }) => {
     if (getSetting(db, 'directWrites') !== '1') {
       throw new Error(
         'Serato salva i cue dentro i file audio: serve attivare le scritture dirette in Impostazioni → Esperto.'
@@ -735,14 +737,26 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
     const seratoLib = detectDjSoftware().find((s) => s.id === 'serato');
     assertWritable('serato', seratoLib?.path ?? '');
 
-    // Un job per file, con i soli hot cue entro gli 8 pad di Serato.
-    const where =
-      sel?.playlistIds && sel.playlistIds.length
-        ? `AND t.id IN (SELECT track_id FROM playlist_tracks WHERE playlist_id IN (${sel.playlistIds
-            .map(() => '?')
-            .join(',')}))`
-        : '';
-    const params = sel?.playlistIds && sel.playlistIds.length ? sel.playlistIds : [];
+    /* Un job per file, con i soli hot cue entro gli 8 pad di Serato.
+       Il filtro per SORGENTE va applicato qui come lo applicano tutti gli altri
+       export (iterateTracks in adapters/common.ts): senza, una conversione
+       "da Traktor a Serato" riscriverebbe i tag di ogni brano dell'archivio
+       interno, non solo di quelli appena importati. */
+    const conds: string[] = [];
+    const params: unknown[] = [];
+    if (sel?.source) {
+      conds.push('t.source = ?');
+      params.push(sel.source);
+    }
+    if (sel?.playlistIds && sel.playlistIds.length) {
+      conds.push(
+        `t.id IN (SELECT track_id FROM playlist_tracks WHERE playlist_id IN (${sel.playlistIds
+          .map(() => '?')
+          .join(',')}))`
+      );
+      params.push(...sel.playlistIds);
+    }
+    const where = conds.length ? `AND ${conds.join(' AND ')}` : '';
     const rows = db
       .prepare(
         `SELECT t.path, c.cue_type, c.cue_index, c.position_ms, c.length_ms, c.color, c.label
@@ -804,6 +818,19 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
       };
     }
 
+    /* Prova a vuoto: l'interfaccia chiede PRIMA quanti file verrebbero
+       modificati, e lo mostra all'utente nella conferma. Una scrittura sugli
+       originali non deve mai partire da un numero che l'utente non ha visto. */
+    if (sel?.dryRun) {
+      return {
+        ok: true,
+        dryRun: true,
+        files: jobs.length,
+        cues: jobs.reduce((n, j) => n + j.cues.length, 0),
+        loops: jobs.reduce((n, j) => n + j.loops.length, 0)
+      };
+    }
+
     const backupDir = join(
       app.getPath('userData'),
       'backups',
@@ -831,7 +858,8 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
     return r.ok
       ? { ok: true, ...r.data, files: jobs.length, backupDir }
       : { ok: false, message: r.message };
-  });
+    }
+  );
 
   /**
    * Playlist verso Serato: sono file `.crate` nella cartella Subcrates della

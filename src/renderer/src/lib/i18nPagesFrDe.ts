@@ -602,6 +602,18 @@ export const fr: PageDict = {
     seratoCratesDesc:
       "Les playlists Serato sont des fichiers .crate dans le dossier Subcrates. Les crates existants ne sont jamais écrasés : le format n'a pas encore de round-trip vérifié.",
     seratoCratesDone: '{n} crates écrits dans Subcrates.',
+    seratoConfirmTitle: 'Vous allez modifier vos fichiers audio',
+    seratoConfirmLabel: 'Écrire les cues dans {n} fichiers',
+    seratoConfirmBody:
+      "Les cues Serato vivent dans les fichiers audio : il n'y a pas de fichier de bibliothèque à générer, ce sont les tags des morceaux qui sont réécrits. Chaque fichier est copié dans une sauvegarde vérifiée par hash avant d'être touché, et à la moindre erreur il est restauré. Ce que le programme ne sait pas interpréter est remis à l'identique.",
+    seratoFactFiles: 'Fichiers qui seront modifiés',
+    seratoFactCues: 'Hot cues à écrire',
+    seratoFactLoops: 'Boucles à écrire',
+    seratoFactScope: 'Portée',
+    seratoScopeConverted: 'uniquement la bibliothèque qui vient d\'être convertie',
+    seratoScopeAll: 'TOUS les morceaux de l\'archive interne',
+    seratoFactBackup: 'Sauvegarde vérifiée avant écriture',
+    yes: 'oui',
     seratoCratesSkipped: '{n} crates existaient déjà et ont été laissés intacts : {list}',
     engineExportTitle: 'Engine DJ',
     engineExportDesc:
@@ -1484,6 +1496,18 @@ export const de: PageDict = {
     seratoCratesDesc:
       'Serato-Playlists sind .crate-Dateien im Ordner Subcrates. Vorhandene Crates werden nie überschrieben: das Format hat noch keinen geprüften Round-Trip.',
     seratoCratesDone: '{n} Crates in Subcrates geschrieben.',
+    seratoConfirmTitle: 'Du bist dabei, deine Audiodateien zu verändern',
+    seratoConfirmLabel: 'Cues in {n} Dateien schreiben',
+    seratoConfirmBody:
+      'Serato-Cues stecken in den Audiodateien: Es gibt keine Bibliotheksdatei zu erzeugen, die Tags der Tracks werden neu geschrieben. Von jeder Datei wird vor dem Anfassen ein per Hash geprüftes Backup angelegt, und beim kleinsten Fehler wird sie wiederhergestellt. Was das Programm nicht deuten kann, wird unverändert zurückgelegt.',
+    seratoFactFiles: 'Dateien, die verändert werden',
+    seratoFactCues: 'Zu schreibende Hot Cues',
+    seratoFactLoops: 'Zu schreibende Loops',
+    seratoFactScope: 'Umfang',
+    seratoScopeConverted: 'nur die gerade konvertierte Bibliothek',
+    seratoScopeAll: 'ALLE Tracks im internen Archiv',
+    seratoFactBackup: 'Geprüftes Backup vor dem Schreiben',
+    yes: 'ja',
     seratoCratesSkipped: '{n} Crates gab es bereits und blieben unangetastet: {list}',
     engineExportTitle: 'Engine DJ',
     engineExportDesc:

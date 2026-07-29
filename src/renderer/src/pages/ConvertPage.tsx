@@ -21,6 +21,7 @@ import { Checkbox, Notice, Select } from '@/components/ui/misc';
 import { GuideDialog } from '@/components/GuideDialog';
 import { SaveTargetNotice } from '@/components/SaveTargetNotice';
 import { RekordboxDiff } from '@/components/RekordboxDiff';
+import { DangerConfirmDialog } from '@/components/DangerConfirmDialog';
 import { useAppState } from '@/lib/appState';
 import { useJobs } from '@/lib/jobs';
 import { useLibrary } from '@/lib/library';
@@ -141,6 +142,14 @@ export function ConvertPage() {
   const [error, setError] = useState<string | null>(null);
   // Avvisi del writer: ciò che non è rappresentabile va DETTO, non scartato.
   const [warnings, setWarnings] = useState<string[]>([]);
+  /* Conteggio della prova a vuoto: quanti file verrebbero modificati DAVVERO.
+     La scrittura sugli originali non parte finché l'utente non ha visto
+     questo numero e non ha digitato la parola di conferma. */
+  const [seratoPlan, setSeratoPlan] = useState<{
+    files: number;
+    cues: number;
+    loops: number;
+  } | null>(null);
   const [guideOpen, setGuideOpen] = useState(false);
   const [srcSel, setSrcSel] = useState<SourceId>('rekordbox-db');
   const [dstSel, setDstSel] = useState<Format>('traktor');
@@ -231,7 +240,35 @@ export function ConvertPage() {
    * quindi una scrittura sugli originali: passa dal gate delle scritture
    * dirette, con backup verificato e rollback automatico nel sidecar.
    */
+  /**
+   * Passo 1: si chiede al processo principale QUANTI file verrebbero toccati,
+   * senza toccarne nessuno. Il numero finisce nella conferma.
+   */
+  const planExportSeratoCues = async () => {
+    setError(null);
+    setOutcome(null);
+    setWarnings([]);
+    setBusy(true);
+    try {
+      const r = await window.crateforge.exporter.seratoCues({
+        ...(convertSource ? { source: convertSource } : {}),
+        dryRun: true
+      });
+      if (!r.ok) {
+        setError(r.message ?? tp('convErr'));
+        return;
+      }
+      setSeratoPlan({ files: r.files ?? 0, cues: r.cues ?? 0, loops: r.loops ?? 0 });
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /** Passo 2: la scrittura vera, solo dopo la conferma digitata. */
   const doExportSeratoCues = async () => {
+    setSeratoPlan(null);
     setError(null);
     setOutcome(null);
     setWarnings([]);
@@ -239,7 +276,7 @@ export function ConvertPage() {
     try {
       const sel = convertSource ? { source: convertSource } : undefined;
       const r = await run(tp('jobExport', { fmt: 'Serato' }), () =>
-        window.crateforge.exporter.seratoCues(sel as never)
+        window.crateforge.exporter.seratoCues(sel)
       );
       if (!r.ok) {
         setError(r.message ?? tp('convErr'));
@@ -544,7 +581,7 @@ export function ConvertPage() {
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex flex-wrap gap-2">
-              <Button variant="secondary" onClick={doExportSeratoCues} disabled={busy}>
+              <Button variant="secondary" onClick={planExportSeratoCues} disabled={busy}>
                 <Download /> {tp('seratoExportBtn')}
               </Button>
               <Button variant="secondary" onClick={doExportSeratoCrates} disabled={busy}>
@@ -594,6 +631,30 @@ export function ConvertPage() {
       {error && <Notice variant="destructive">{error}</Notice>}
 
       <GuideDialog kind="importXml" open={guideOpen} onOpenChange={setGuideOpen} />
+
+      {/* Scrittura sugli originali: conferma forte con i numeri davanti.
+          È lo stesso trattamento che ricevono quarantena ed eliminazione —
+          non c'era motivo perché i tag Serato ne avessero uno più leggero. */}
+      <DangerConfirmDialog
+        open={seratoPlan !== null}
+        onOpenChange={(o) => !o && setSeratoPlan(null)}
+        title={tp('seratoConfirmTitle')}
+        confirmWord="SCRIVI"
+        confirmLabel={tp('seratoConfirmLabel', { n: seratoPlan?.files ?? 0 })}
+        onConfirm={doExportSeratoCues}
+        facts={[
+          { label: tp('seratoFactFiles'), value: (seratoPlan?.files ?? 0).toLocaleString(locale) },
+          { label: tp('seratoFactCues'), value: (seratoPlan?.cues ?? 0).toLocaleString(locale) },
+          { label: tp('seratoFactLoops'), value: (seratoPlan?.loops ?? 0).toLocaleString(locale) },
+          {
+            label: tp('seratoFactScope'),
+            value: convertSource ? tp('seratoScopeConverted') : tp('seratoScopeAll'),
+            warn: !convertSource
+          },
+          { label: tp('seratoFactBackup'), value: tp('yes') }
+        ]}
+        description={<p>{tp('seratoConfirmBody')}</p>}
+      />
 
       {/* limiti dichiarati: dialog non ignorabile prima di ogni export */}
       <Dialog open={pending !== null} onOpenChange={(o) => !o && setPending(null)}>

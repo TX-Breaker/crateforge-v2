@@ -601,6 +601,18 @@ const it = {
     seratoCratesDesc:
       'Le playlist di Serato sono file .crate nella cartella Subcrates. I crate già presenti non vengono mai sovrascritti: il formato non ha ancora un round-trip verificato.',
     seratoCratesDone: 'Scritti {n} crate in Subcrates.',
+    seratoConfirmTitle: 'Stai per modificare i tuoi file audio',
+    seratoConfirmLabel: 'Scrivi i cue in {n} file',
+    seratoConfirmBody:
+      'I cue di Serato vivono dentro i file audio: non c\'è un file di libreria da generare, si riscrivono i tag dei brani. Di ogni file viene fatta una copia di sicurezza verificata con hash prima di toccarlo, e al minimo errore il file viene ripristinato. Quello che il programma non sa interpretare viene rimesso identico.',
+    seratoFactFiles: 'File che verranno modificati',
+    seratoFactCues: 'Hot cue da scrivere',
+    seratoFactLoops: 'Loop da scrivere',
+    seratoFactScope: 'Ambito',
+    seratoScopeConverted: 'solo la libreria appena convertita',
+    seratoScopeAll: 'TUTTI i brani dell\'archivio interno',
+    seratoFactBackup: 'Backup verificato prima di scrivere',
+    yes: 'sì',
     seratoCratesSkipped: '{n} crate esistevano già e sono stati lasciati intatti: {list}',
     engineExportTitle: 'Engine DJ',
     engineExportDesc:
@@ -1483,6 +1495,18 @@ const en: PageDict = {
     seratoCratesDesc:
       'Serato playlists are .crate files in the Subcrates folder. Existing crates are never overwritten: the format has no verified round-trip yet.',
     seratoCratesDone: '{n} crates written into Subcrates.',
+    seratoConfirmTitle: 'You are about to modify your audio files',
+    seratoConfirmLabel: 'Write cues into {n} files',
+    seratoConfirmBody:
+      'Serato cues live inside the audio files: there is no library file to generate, the tags of the tracks are rewritten. Every file is copied to a hash-verified backup before being touched, and on the slightest error it is restored. Anything the program cannot interpret is put back identical.',
+    seratoFactFiles: 'Files that will be modified',
+    seratoFactCues: 'Hot cues to write',
+    seratoFactLoops: 'Loops to write',
+    seratoFactScope: 'Scope',
+    seratoScopeConverted: 'only the library just converted',
+    seratoScopeAll: 'ALL tracks in the internal archive',
+    seratoFactBackup: 'Verified backup before writing',
+    yes: 'yes',
     seratoCratesSkipped: '{n} crates already existed and were left untouched: {list}',
     engineExportTitle: 'Engine DJ',
     engineExportDesc:
