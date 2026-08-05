@@ -1751,9 +1751,28 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
   ipcMain.handle('siae:sessions', () => listHistorySessions(db));
   ipcMain.handle(
     'siae:export',
-    async (_e, sessionId: string, outPath: string, venue?: string, eventDate?: string) => {
-      const r = await exportSiaeReport(db, { sessionId, outPath, venue, eventDate });
-      logOperation(db, 'siae.export', outPath, 'ok', `${r.rows} brani`);
+    async (
+      _e,
+      opts: {
+        sessionId: string;
+        outPath: string;
+        venue?: string;
+        eventDate?: string;
+        fromTime?: string;
+        toTime?: string;
+        sampleUnderS?: number;
+      }
+    ) => {
+      const r = await exportSiaeReport(db, opts);
+      /* Nel registro finiscono anche le esclusioni: un programma musicale con
+         meno brani del previsto deve poter essere spiegato mesi dopo. */
+      logOperation(
+        db,
+        'siae.export',
+        opts.outPath,
+        'ok',
+        `${r.rows} brani · ${r.samples} sample · ${r.outOfWindow} fuori fascia · ${r.unknownTime} senza orario`
+      );
       return r;
     }
   );

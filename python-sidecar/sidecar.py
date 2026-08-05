@@ -956,15 +956,24 @@ def cmd_read_history(args: argparse.Namespace) -> None:
                     continue
                 isrc = _get(content, "ISRC")
                 label = _get(_get(content, "Label"), "Name") or _get(content, "LabelName")
+                # Ora del singolo brano: in DjmdSongHistory `created_at` e'
+                # il momento in cui il brano e' entrato nella cronologia, cioe'
+                # quando e' stato suonato. Serve per la fascia oraria del
+                # programma musicale (21:00 -> 06:00 del giorno dopo): senza,
+                # l'unica data e' quella della sessione intera. Se manca resta
+                # None, e chi legge la tratta come "non lo so".
+                played = _get(sh, "created_at", "DateCreated")
                 udm.execute(
                     """INSERT INTO play_history
                        (session_id, session_name, session_date, position, title, artist,
-                        album, genre, year, bpm, musical_key, duration_s, isrc, label, path)
-                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                        album, genre, year, bpm, musical_key, duration_s, isrc, label, path,
+                        played_at)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                     (
                         sid, sname, str(sdate) if sdate is not None else None, idx,
                         t["title"], t["artist"], t["album"], t["genre"], t["year"],
                         t["bpm"], t["musical_key"], t["duration_s"], isrc, label, t["path"],
+                        str(played) if played is not None else None,
                     ),
                 )
                 rows += 1

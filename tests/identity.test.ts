@@ -54,7 +54,11 @@ const canonicalOf = (db: Database.Database, id: number): number =>
 describe('schema v7', () => {
   it('porta il database alla versione con l identità canonica', () => {
     const db = memDb();
-    expect(SCHEMA_VERSION).toBe(7);
+    /* La versione va avanti a ogni migrazione: qui interessa che sia arrivata
+       ALMENO all'identità canonica, non che si sia fermata lì. Un test che
+       fissa il numero esatto si rompe a ogni schema nuovo senza che niente si
+       sia rotto davvero. */
+    expect(SCHEMA_VERSION).toBeGreaterThanOrEqual(7);
     const cols = (db.prepare('PRAGMA table_info(tracks)').all() as { name: string }[]).map(
       (c) => c.name
     );

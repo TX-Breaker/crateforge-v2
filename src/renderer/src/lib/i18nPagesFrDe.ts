@@ -733,6 +733,25 @@ export const fr: PageDict = {
     howBody:
       'De l’historique de lecture que Rekordbox enregistre déjà dans sa base. Aucune capture live : vous obtenez ce que vous avez réellement joué.',
     liveTitle: 'Capture live indisponible',
+    readFrom: 'Lecture depuis {sw}',
+    readDetected: 'Rekordbox est installé ici : l\'historique se lit là, sans chercher le fichier.',
+    readNotFound: 'Rekordbox est introuvable sur cet ordinateur : choisissez le master.db.',
+    readOther: 'Choisir un autre fichier',
+    onlyRekordbox:
+      'Seul Rekordbox tient un historique que nous savons lire. Traktor, Serato, VirtualDJ et Engine en écrivent un, mais dans des formats que CrateForge n\'a pas encore vérifiés : les montrer sans vérification reviendrait à signer des chiffres non contrôlés.',
+    windowTitle: 'Plage horaire de la soirée',
+    windowDesc:
+      'Une soirée ne tient pas dans une journée : 21:00 → 06:00 passe minuit, et c\'est le cas normal. Sans plage, toute la session entre.',
+    windowOn: 'Filtrer par horaire',
+    windowFrom: 'De',
+    windowTo: 'À',
+    windowCrosses: 'La plage passe minuit : elle finit le lendemain.',
+    sampleOn: 'Exclure les samples (moins de {n} secondes)',
+    sampleDesc:
+      'Jingles, cuts et effets ne sont pas des œuvres jouées. Ils sont exclus, mais le nombre figure dans la feuille : une liste qui cache une décision vaut moins qu\'une liste plus courte.',
+    exportCounts: '{n} morceaux · {samples} samples exclus · {out} hors plage',
+    exportNoTime:
+      '{n} morceaux sans horaire dans l\'historique : gardés dans la liste, car les écarter aurait retiré des morceaux réellement joués.',
     liveBody:
       'La capture en temps réel via PRO DJ LINK n’est pas implémentée. Nous préférons le dire plutôt que d’afficher un bouton inutile.',
     step1: 'Lire l’historique',
@@ -1714,6 +1733,25 @@ export const de: PageDict = {
     howBody:
       'Aus der Wiedergabe-Historie, die Rekordbox ohnehin in seiner Datenbank führt. Keine Live-Aufzeichnung: du bekommst, was du wirklich gespielt hast.',
     liveTitle: 'Live-Aufzeichnung nicht verfügbar',
+    readFrom: 'Gelesen aus {sw}',
+    readDetected: 'Rekordbox ist hier installiert: Der Verlauf wird von dort gelesen, ohne Dateisuche.',
+    readNotFound: 'Rekordbox wurde auf diesem Rechner nicht gefunden: Wähle die master.db selbst.',
+    readOther: 'Andere Datei wählen',
+    onlyRekordbox:
+      'Nur Rekordbox führt einen Verlauf, den wir lesen können. Traktor, Serato, VirtualDJ und Engine schreiben auch einen, aber in Formaten, die CrateForge noch nicht geprüft hat: sie ungeprüft zu zeigen hieße, Zahlen zu unterschreiben, die wir nie kontrolliert haben.',
+    windowTitle: 'Zeitfenster des Abends',
+    windowDesc:
+      'Ein Abend passt nicht in einen Kalendertag: 21:00 → 06:00 überschreitet Mitternacht, und das ist der Normalfall. Ohne Fenster kommt die ganze Session hinein.',
+    windowOn: 'Nach Uhrzeit filtern',
+    windowFrom: 'Von',
+    windowTo: 'Bis',
+    windowCrosses: 'Das Fenster überschreitet Mitternacht: Es endet am nächsten Tag.',
+    sampleOn: 'Samples ausschließen (unter {n} Sekunden)',
+    sampleDesc:
+      'Jingles, Stabs und Effekte sind keine aufgeführten Werke. Sie fallen raus, aber die Zahl steht im Blatt: Eine Liste, die eine Entscheidung verschweigt, ist schlechter als eine kürzere.',
+    exportCounts: '{n} Titel · {samples} Samples ausgeschlossen · {out} außerhalb des Fensters',
+    exportNoTime:
+      '{n} Titel ohne Uhrzeit im Verlauf: in der Liste behalten, denn sie zu streichen hätte wirklich gespielte Titel entfernt.',
     liveBody:
       'Die Echtzeit-Aufzeichnung über PRO DJ LINK ist nicht umgesetzt. Wir sagen das lieber, als einen Knopf zu zeigen, der nichts tut.',
     step1: 'Historie lesen',

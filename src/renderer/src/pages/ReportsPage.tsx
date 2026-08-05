@@ -11,7 +11,9 @@ import {
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import {
+  Checkbox,
   EmptyState,
+  Field,
   Input,
   Notice,
   Switch,
@@ -20,7 +22,6 @@ import {
   TabsList,
   TabsTrigger
 } from '@/components/ui/misc';
-import { Field } from '@/components/ui/misc';
 import { ExcelViewer } from '@/components/ExcelViewer';
 import { SaveTargetNotice } from '@/components/SaveTargetNotice';
 import { RekordboxDiff } from '@/components/RekordboxDiff';
@@ -168,7 +169,12 @@ interface HistorySession {
   session_name: string | null;
   session_date: string | null;
   tracks: number;
+  first_played_at: string | null;
+  last_played_at: string | null;
 }
+
+/** Sotto questa durata un brano è un sample, non un'opera riprodotta. */
+const SAMPLE_UNDER_S = 30;
 
 function SiaeTab() {
   const { locale, mode } = useAppState();
@@ -182,6 +188,27 @@ function SiaeTab() {
   const [eventDate, setEventDate] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+
+  /* La cronologia sta dentro l'installazione di Rekordbox: se il programma è su
+     questo computer, il file lo sappiamo già. Chiederlo lo stesso significava
+     far cercare all'utente un master.db dentro AppData — cioè fargli fare la
+     parte che il programma può fare da solo. */
+  const [rbPath, setRbPath] = useState<string | null>(null);
+
+  /* Fascia oraria della serata. I valori predefiniti sono quelli di una serata
+     vera, e passano la mezzanotte: 21:00 → 06:00 del giorno dopo. */
+  const [useWindow, setUseWindow] = useState(false);
+  const [fromTime, setFromTime] = useState('21:00');
+  const [toTime, setToTime] = useState('06:00');
+  const [dropSamples, setDropSamples] = useState(true);
+
+  useEffect(() => {
+    void window.crateforge.rekordbox
+      .defaultPaths()
+      .then((rb) => setRbPath(rb.masterDbExists ? rb.masterDb : null))
+      .catch(() => setRbPath(null));
+  }, []);
 
   const refreshSessions = async () => {
     const s = (await window.crateforge.siae.sessions()) as HistorySession[];
@@ -197,12 +224,16 @@ function SiaeTab() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const doRead = async () => {
-    const rb = await window.crateforge.rekordbox.defaultPaths();
-    const dbPath = await window.crateforge.dialog.openFile(
-      [{ name: 'Rekordbox master.db', extensions: ['db'] }],
-      rb.masterDbExists ? rb.masterDb : rb.dir
-    );
+  /** `pick` = l'utente vuole scegliere il file a mano invece del rilevato. */
+  const doRead = async (pick = false) => {
+    let dbPath: string | null = rbPath;
+    if (pick || !dbPath) {
+      const rb = await window.crateforge.rekordbox.defaultPaths();
+      dbPath = await window.crateforge.dialog.openFile(
+        [{ name: 'Rekordbox master.db', extensions: ['db'] }],
+        rb.masterDbExists ? rb.masterDb : rb.dir
+      );
+    }
     if (!dbPath) return;
     setMsg(null);
     setBusy(true);
@@ -236,26 +267,46 @@ function SiaeTab() {
     ]);
     if (!outPath) return;
     setMsg(null);
+    setNote(null);
     setBusy(true);
     try {
-      const r = (await run(tp('exportBtn'), () =>
-        window.crateforge.siae.export(selected, outPath, venue || undefined, eventDate || undefined)
-      )) as { rows: number; outPath: string };
-      const text = tp('exportOk', { n: r.rows, path: r.outPath });
+      const r = await run(tp('exportBtn'), () =>
+        window.crateforge.siae.export({
+          sessionId: selected,
+          outPath,
+          venue: venue || undefined,
+          eventDate: eventDate || undefined,
+          fromTime: useWindow ? fromTime : undefined,
+          toTime: useWindow ? toTime : undefined,
+          sampleUnderS: dropSamples ? SAMPLE_UNDER_S : 0
+        })
+      );
+      /* Quanti sono entrati E quanti sono stati tolti: il secondo numero è
+         quello che l'utente deve poter spiegare, quindi si mostra sempre. */
+      const text =
+        tp('exportOk', { n: r.rows, path: r.outPath }) +
+        ' ' +
+        tp('exportCounts', { n: r.rows, samples: r.samples, out: r.outOfWindow });
       setMsg({ kind: 'ok', text });
+      if (r.unknownTime > 0) setNote(tp('exportNoTime', { n: r.unknownTime }));
       push({ kind: 'success', job: true, title: tp('title'), body: text });
     } finally {
       setBusy(false);
     }
   };
 
+  /** Una fascia che finisce prima di quando comincia passa la mezzanotte. */
+  const crossesMidnight = useWindow && toTime <= fromTime;
+
   const current = sessions.find((s) => s.session_id === selected);
 
   return (
     <div className="space-y-4">
       <Notice variant="info" title={tp('howTitle')}>
-        {tp('howBody')}
+        {tp('howBody')} {tp('onlyRekordbox')}
       </Notice>
+
+      {note && <Notice variant="warning">{note}</Notice>}
 
       {mode === 'expert' && (
         <Notice variant="warning" title={tp('liveTitle')}>
@@ -270,9 +321,73 @@ function SiaeTab() {
             <CardDescription>{tp('step1Desc')}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            <Button variant="primary" onClick={doRead} working={busy}>
-              <Database /> {tp('readBtn')}
+            <Button variant="primary" onClick={() => void doRead()} working={busy}>
+              <Database /> {rbPath ? tp('readFrom', { sw: 'Rekordbox' }) : tp('readBtn')}
             </Button>
+            <p className="text-caption text-ink-lo">
+              {rbPath ? tp('readDetected') : tp('readNotFound')}
+            </p>
+            {rbPath && (
+              <>
+                <p className="break-all font-mono text-caption text-ink-lo">{rbPath}</p>
+                <Button variant="ghost" size="sm" onClick={() => void doRead(true)} disabled={busy}>
+                  {tp('readOther')}
+                </Button>
+              </>
+            )}
+
+            {/* Fascia oraria: la serata, non il giorno di calendario. */}
+            <div className="space-y-2 rounded-card border border-line p-3">
+              <label className="flex cursor-pointer items-start gap-2.5 text-caption text-ink-mid">
+                <Checkbox
+                  className="mt-px"
+                  checked={useWindow}
+                  onCheckedChange={(v) => setUseWindow(v === true)}
+                />
+                <span>
+                  <span className="text-ink-hi">{tp('windowOn')}</span>
+                  <br />
+                  {tp('windowDesc')}
+                </span>
+              </label>
+              {useWindow && (
+                <div className="flex flex-wrap items-end gap-3">
+                  <Field label={tp('windowFrom')}>
+                    <Input
+                      type="time"
+                      value={fromTime}
+                      onChange={(e) => setFromTime(e.target.value)}
+                      mono
+                    />
+                  </Field>
+                  <Field label={tp('windowTo')}>
+                    <Input
+                      type="time"
+                      value={toTime}
+                      onChange={(e) => setToTime(e.target.value)}
+                      mono
+                    />
+                  </Field>
+                </div>
+              )}
+              {crossesMidnight && (
+                <p className="text-caption text-accent">{tp('windowCrosses')}</p>
+              )}
+            </div>
+
+            {/* Sample: si escludono, ma il numero finisce nel foglio. */}
+            <label className="flex cursor-pointer items-start gap-2.5 text-caption text-ink-mid">
+              <Checkbox
+                className="mt-px"
+                checked={dropSamples}
+                onCheckedChange={(v) => setDropSamples(v === true)}
+              />
+              <span>
+                <span className="text-ink-hi">{tp('sampleOn', { n: SAMPLE_UNDER_S })}</span>
+                <br />
+                {tp('sampleDesc')}
+              </span>
+            </label>
 
             <Field label={tp('fVenue')}>
               <Input value={venue} onChange={(e) => setVenue(e.target.value)} placeholder={tp('fVenuePh')} />

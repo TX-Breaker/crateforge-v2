@@ -307,8 +307,28 @@ const api = {
   siae: {
     readHistory: (masterDbPath: string) => ipcRenderer.invoke('siae:readHistory', masterDbPath),
     sessions: () => ipcRenderer.invoke('siae:sessions'),
-    export: (sessionId: string, outPath: string, venue?: string, eventDate?: string) =>
-      ipcRenderer.invoke('siae:export', sessionId, outPath, venue, eventDate)
+    /**
+     * `fromTime`/`toTime` sono la fascia della serata (`21:00` → `06:00`, che
+     * passa la mezzanotte); `sampleUnderS` la durata sotto cui un brano è un
+     * sample e non entra nell'elenco. I conteggi delle esclusioni tornano col
+     * risultato: vanno mostrati, non nascosti.
+     */
+    export: (opts: {
+      sessionId: string;
+      outPath: string;
+      venue?: string;
+      eventDate?: string;
+      fromTime?: string;
+      toTime?: string;
+      sampleUnderS?: number;
+    }) =>
+      ipcRenderer.invoke('siae:export', opts) as Promise<{
+        rows: number;
+        outPath: string;
+        outOfWindow: number;
+        samples: number;
+        unknownTime: number;
+      }>
   },
   health: {
     /* `sources` = librerie della sessione di lavoro; assente = vista unificata,

@@ -14,7 +14,7 @@ import type BetterSqlite3 from 'better-sqlite3';
  *    I due percorsi non girano mai in concorrenza: Node serializza i job.
  *  - settings / jobs / oplog → SOLO Node.
  */
-export const SCHEMA_VERSION = 7;
+export const SCHEMA_VERSION = 8;
 
 const MIGRATIONS: Record<number, string> = {
   1: `
@@ -259,6 +259,19 @@ const MIGRATIONS: Record<number, string> = {
   7: `
     ALTER TABLE tracks ADD COLUMN canonical_id INTEGER REFERENCES tracks(id) ON DELETE SET NULL;
     CREATE INDEX IF NOT EXISTS idx_tracks_canonical ON tracks(canonical_id);
+  `,
+  /* Ora di riproduzione del singolo brano.
+   *
+   * La cronologia aveva una data per SESSIONE e nient'altro: bastava a dire
+   * "questa serata", non a dire "dalle 21:00 alle 06:00". Ma una serata non sta
+   * dentro un giorno di calendario, e il programma musicale si compila per
+   * fascia oraria — quindi l'orario deve stare sulla riga, non sul gruppo.
+   *
+   * Resta NULL per tutto ciò che è già stato letto e per le cronologie che non
+   * lo espongono: chi legge deve trattare l'assenza come "non lo so", mai come
+   * "fuori orario". */
+  8: `
+    ALTER TABLE play_history ADD COLUMN played_at TEXT;
   `
 };
 
