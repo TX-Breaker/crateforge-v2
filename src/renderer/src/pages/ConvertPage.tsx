@@ -234,6 +234,82 @@ export function ConvertPage() {
   /** conteggio della destinazione VERA, calcolato prima di aprire la conferma */
   const [pendingPlan, setPendingPlan] = useState<SyncPlan | null>(null);
 
+  /* Export verso tutti i software trovati sul computer. La cartella si sceglie
+     una volta sola; i nomi dei file li mette CrateForge, perché sono tre e
+     lasciarli scegliere uno per uno era esattamente la fatica da togliere. */
+  const [detected, setDetected] = useState<SoftwareId[] | null>(null);
+  const [allDir, setAllDir] = useState<string | null>(null);
+  const [allPlans, setAllPlans] = useState<{ id: SoftwareId; plan: SyncPlan | null }[]>([]);
+
+  useEffect(() => {
+    void window.crateforge.detect
+      .djSoftware()
+      .then((list) =>
+        setDetected(
+          (list as { id: string; found: boolean }[])
+            .filter((d) => d.found)
+            .map((d) => d.id as SoftwareId)
+        )
+      )
+      .catch(() => setDetected([]));
+  }, []);
+
+  /** Le destinazioni che il pulsante "verso tutti" tocca davvero. */
+  const allTargets = (detected ?? []).filter((d) => d !== 'engine' && d !== 'serato');
+
+  const startExportAll = async () => {
+    if (!allTargets.length) return;
+    const dir = await window.crateforge.dialog.openDirectory();
+    if (!dir) return;
+    setError(null);
+    setOutcome(null);
+    setWarnings([]);
+    // I numeri per OGNI destinazione, calcolati prima di aprire la conferma.
+    setAllPlans(
+      await Promise.all(allTargets.map(async (id) => ({ id, plan: await planFor(id) })))
+    );
+    setAllDir(dir);
+  };
+
+  const doExportAll = async () => {
+    const dir = allDir;
+    setAllDir(null);
+    if (!dir) return;
+    setBusy(true);
+    try {
+      const r = await run(tp('jobExport', { fmt: tp('allBtn') }), () =>
+        window.crateforge.exportAll(dir, {
+          source: convertSource ?? undefined,
+          sync: syncOrigin
+            ? { originSources: SOURCES_OF[syncOrigin], mode: syncMode }
+            : undefined
+        })
+      );
+      const done = r.results.filter((x) => x.ok);
+      const text = tp('allDone', { n: done.length, dir: r.outDir });
+      setOutcome(text);
+      setWarnings([
+        ...r.results
+          .filter((x) => !x.ok)
+          .map((x) => tp('allFailed', { sw: SOFTWARE_LABEL[x.id as SoftwareId], msg: x.message ?? '' })),
+        ...done.flatMap((x) => x.warnings ?? []),
+        ...r.skipped.map((x) =>
+          x.reason === 'needs-template'
+            ? tp('allSkipEngine')
+            : x.reason === 'writes-originals'
+              ? tp('allSkipSerato')
+              : tp('allSkipNotFound', { sw: SOFTWARE_LABEL[x.id as SoftwareId] })
+        )
+      ]);
+      push({ kind: 'success', job: true, title: tp('title'), body: text });
+    } catch (err) {
+      setError(String(err));
+      push({ kind: 'error', job: true, title: tp('title'), body: String(err) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
   /**
    * La selezione da passare a un export. Vale `undefined` — cioè comportamento
    * normale — quando non c'è origine, o quando origine e destinazione sono lo
@@ -678,6 +754,38 @@ export function ConvertPage() {
         </CardContent>
       </Card>
 
+      {/* Un colpo solo verso tutto quello che c'è su questo computer. */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-body font-semibold">
+            <Download className="size-4" /> {tp('allTitle')}
+          </CardTitle>
+          <CardDescription>{tp('allDesc')}</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {detected !== null && allTargets.length === 0 ? (
+            <p className="text-caption text-ink-lo">{tp('allNone')}</p>
+          ) : (
+            <>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button variant="primary" onClick={() => void startExportAll()} disabled={busy}>
+                  <Download /> {tp('allBtn')}
+                </Button>
+                {allTargets.map((id) => (
+                  <span
+                    key={id}
+                    className="rounded-full border border-line px-2 py-0.5 text-caption text-ink-mid"
+                  >
+                    {SOFTWARE_LABEL[id]}
+                  </span>
+                ))}
+              </div>
+              <SaveTargetNotice target="xml" />
+            </>
+          )}
+        </CardContent>
+      </Card>
+
       {/* mappa dei campi: contenuto primario, non nota a piè di pagina */}
       <Card>
         <CardHeader>
@@ -891,6 +999,50 @@ export function ConvertPage() {
         ]}
         description={<p>{tp('seratoConfirmBody')}</p>}
       />
+
+      {/* Verso tutti: la conferma elenca le destinazioni una per una, con i
+          loro numeri. Un pulsante che scrive tre file deve mostrarne tre. */}
+      <Dialog open={allDir !== null} onOpenChange={(o) => !o && setAllDir(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{tp('allConfirmTitle', { n: allTargets.length })}</DialogTitle>
+            <DialogDescription asChild>
+              <div className="space-y-2 pt-1">
+                <p className="text-caption text-ink-mid">{tp('allConfirmBody')}</p>
+                <p className="break-all font-mono text-caption text-ink-lo">{allDir}</p>
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            {allPlans.map(({ id, plan }) => (
+              <div key={id} className="space-y-1.5">
+                <Eyebrow>{SOFTWARE_LABEL[id]}</Eyebrow>
+                {plan ? (
+                  <SyncFacts plan={plan} locale={locale} tp={tp} />
+                ) : (
+                  <p className="text-caption text-ink-lo">{tp('syncOriginNone')}</p>
+                )}
+                {plan && plan.destroys && plan.lost > 0 && (
+                  <Notice variant="warning" title={tp('syncLossTitle')}>
+                    {tp('syncLossBody', {
+                      fmt: SOFTWARE_LABEL[id],
+                      n: plan.lost.toLocaleString(locale)
+                    })}
+                  </Notice>
+                )}
+              </div>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setAllDir(null)}>
+              {t(locale, 'common.cancel')}
+            </Button>
+            <Button variant="primary" onClick={() => void doExportAll()}>
+              {tp('allBtn')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* limiti dichiarati: dialog non ignorabile prima di ogni export */}
       <Dialog open={pending !== null} onOpenChange={(o) => !o && setPending(null)}>

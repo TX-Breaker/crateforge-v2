@@ -867,6 +867,13 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
   );
 
   // ---- export ----
+  /** Chiama il writer giusto e restituisce sempre la stessa forma di esito. */
+  const writeSel = (
+    t: { write: (out: string, sel: object) => unknown },
+    outPath: string,
+    sel: object
+  ) => t.write(outPath, sel) as { tracks: number; warnings?: string[] };
+
   ipcMain.handle('export:rekordboxXml', (_e, outPath: string, sel) => {
     const r = writeRekordboxXml(db, outPath, sel ?? {});
     logOperation(db, 'export.rekordbox-xml', outPath, 'ok', JSON.stringify(r));
@@ -882,6 +889,88 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
     logOperation(db, 'export.virtualdj-xml', outPath, 'ok', JSON.stringify(r));
     return r;
   });
+
+  /**
+   * Un export per ogni software DJ TROVATO su questo computer, nella stessa
+   * cartella. Non è una scorciatoia per pigrizia: è il caso normale di chi usa
+   * più software e finora doveva ripetere la stessa scelta tre volte, con tre
+   * finestre di salvataggio e tre occasioni di sbagliare cartella.
+   *
+   * Restano fuori due destinazioni, e il motivo viaggia col risultato invece
+   * di restare in un commento:
+   *  - Engine DJ vuole un m.db esistente come modello dello schema, e sceglierlo
+   *    è una decisione dell'utente — indovinarlo significherebbe generare una
+   *    libreria con una versione che la sua installazione non legge;
+   *  - Serato scrive i cue DENTRO i file audio, e quella è una modifica agli
+   *    originali: ha la sua scheda, il suo backup e la sua conferma da digitare.
+   *    Nessuna scrittura sui file dell'utente deve poter partire da un pulsante
+   *    che ne fa anche altre tre.
+   */
+  ipcMain.handle(
+    'export:allDetected',
+    (
+      _e,
+      outDir: string,
+      opts?: {
+        source?: string;
+        sync?: { originSources: string[]; mode: 'fill' | 'overwrite' };
+      }
+    ) => {
+      const detected = new Set(
+        detectDjSoftware()
+          .filter((s) => s.found)
+          .map((s) => s.id)
+      );
+
+      const targets: { id: string; file: string; write: (out: string, sel: object) => unknown }[] = [
+        { id: 'rekordbox', file: 'crateforge-rekordbox.xml', write: (o, sel) => writeRekordboxXml(db, o, sel) },
+        { id: 'traktor', file: 'crateforge-traktor.nml', write: (o, sel) => writeTraktorNml(db, o, sel) },
+        { id: 'virtualdj', file: 'crateforge-virtualdj.xml', write: (o, sel) => writeVirtualDjXml(db, o, sel) }
+      ];
+
+      const results: {
+        id: string;
+        ok: boolean;
+        path?: string;
+        tracks?: number;
+        warnings?: string[];
+        message?: string;
+      }[] = [];
+      const skipped: { id: string; reason: string }[] = [];
+
+      for (const t of targets) {
+        if (!detected.has(t.id as never)) {
+          skipped.push({ id: t.id, reason: 'not-detected' });
+          continue;
+        }
+        const outPath = join(outDir, t.file);
+        /* La sincronizzazione è per DESTINAZIONE: la stessa origine dà piani
+           diversi verso software con capacità diverse. Verso sé stessa non si
+           applica — una libreria non si sincronizza con sé. */
+        const sync =
+          opts?.sync && !opts.sync.originSources.includes(t.id)
+            ? { ...opts.sync, destination: t.id }
+            : undefined;
+        const sel = { source: opts?.source, sync };
+        try {
+          const r = writeSel(t, outPath, sel);
+          logOperation(db, `export.all.${t.id}`, outPath, 'ok', JSON.stringify(r));
+          results.push({ id: t.id, ok: true, path: outPath, tracks: r.tracks, warnings: r.warnings });
+        } catch (err) {
+          /* Un formato che fallisce non deve annullare gli altri: chi esporta
+             verso tre software vuole i due che sono riusciti, e sapere quale no. */
+          logOperation(db, `export.all.${t.id}`, outPath, 'error', String(err));
+          results.push({ id: t.id, ok: false, message: String(err) });
+        }
+      }
+
+      for (const id of ['engine', 'serato']) {
+        if (detected.has(id as never)) skipped.push({ id, reason: id === 'engine' ? 'needs-template' : 'writes-originals' });
+      }
+
+      return { outDir, results, skipped };
+    }
+  );
 
   /**
    * Export verso ENGINE DJ: genera una Engine Library NUOVA nella cartella

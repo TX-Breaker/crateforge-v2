@@ -558,6 +558,19 @@ export const fr: PageDict = {
     title: 'Convertir',
     directTitle: 'Conversion directe',
     syncTitle: 'Synchroniser les points',
+    allTitle: 'Exporter vers tous les logiciels détectés',
+    allDesc:
+      'Un fichier par logiciel DJ trouvé sur cet ordinateur, tous dans le même dossier. Engine DJ et Serato restent dehors : le premier veut un m.db existant comme modèle, le second écrit dans les fichiers audio et a sa propre confirmation.',
+    allBtn: 'Exporter vers tous',
+    allNone: 'Aucun logiciel DJ détecté sur cet ordinateur.',
+    allConfirmTitle: 'Vous allez écrire {n} fichiers',
+    allConfirmBody:
+      'Des fichiers NEUFS sont créés dans le dossier choisi : aucune bibliothèque existante n\'est touchée. Un fichier du même nom déjà présent est remplacé.',
+    allSkipEngine: 'Engine DJ : exclu, il faut un m.db existant comme modèle de schéma.',
+    allSkipSerato: 'Serato : exclu, ses cues s\'écrivent dans les fichiers audio.',
+    allSkipNotFound: '{sw} : non détecté sur cet ordinateur.',
+    allDone: '{n} fichiers écrits dans {dir}.',
+    allFailed: '{sw} : échec — {msg}',
     syncDesc:
       'Apporte les hot cues, les boucles et les points mémoire d\'une bibliothèque dans l\'export, pour les morceaux que les deux bibliothèques ont en commun. La correspondance passe par les doublons liés : sans liaison, il n\'y a rien à synchroniser ici.',
     syncOriginLabel: 'Prendre les points depuis',
@@ -1523,6 +1536,19 @@ export const de: PageDict = {
     title: 'Konvertieren',
     directTitle: 'Direkte Konvertierung',
     syncTitle: 'Punkte synchronisieren',
+    allTitle: 'In jede erkannte Software exportieren',
+    allDesc:
+      'Eine Datei pro DJ-Software, die auf diesem Rechner gefunden wurde, alle im selben Ordner. Engine DJ und Serato bleiben außen vor: Die erste braucht eine vorhandene m.db als Vorlage, die zweite schreibt in die Audiodateien und hat ihre eigene Bestätigung.',
+    allBtn: 'In alle exportieren',
+    allNone: 'Keine DJ-Software auf diesem Rechner erkannt.',
+    allConfirmTitle: 'Gleich werden {n} Dateien geschrieben',
+    allConfirmBody:
+      'Im gewählten Ordner entstehen NEUE Dateien: Keine vorhandene Bibliothek wird angefasst. Eine gleichnamige Datei dort wird ersetzt.',
+    allSkipEngine: 'Engine DJ: ausgenommen, es braucht eine vorhandene m.db als Schema-Vorlage.',
+    allSkipSerato: 'Serato: ausgenommen, seine Cues werden in die Audiodateien geschrieben.',
+    allSkipNotFound: '{sw}: auf diesem Rechner nicht erkannt.',
+    allDone: '{n} Dateien nach {dir} geschrieben.',
+    allFailed: '{sw}: fehlgeschlagen — {msg}',
     syncDesc:
       'Bringt Hot Cues, Loops und Memory-Punkte aus einer Bibliothek in den Export, für die Titel, die beide Bibliotheken gemeinsam haben. Die Zuordnung läuft über verknüpfte Duplikate: ohne Verknüpfung gibt es hier nichts zu synchronisieren.',
     syncOriginLabel: 'Punkte holen aus',

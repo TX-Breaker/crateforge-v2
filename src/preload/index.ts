@@ -135,6 +135,26 @@ const api = {
         destroys: boolean;
       }>
   },
+  /**
+   * Un export per ogni software trovato su questo computer, nella stessa
+   * cartella. Engine e Serato restano fuori e il perché torna in `skipped`.
+   */
+  exportAll: (
+    outDir: string,
+    opts?: { source?: string; sync?: { originSources: string[]; mode: 'fill' | 'overwrite' } }
+  ) =>
+    ipcRenderer.invoke('export:allDetected', outDir, opts) as Promise<{
+      outDir: string;
+      results: {
+        id: string;
+        ok: boolean;
+        path?: string;
+        tracks?: number;
+        warnings?: string[];
+        message?: string;
+      }[];
+      skipped: { id: string; reason: string }[];
+    }>,
   backup: {
     plan: (opts: unknown) => ipcRenderer.invoke('backup:plan', opts),
     execute: (planId: string) => ipcRenderer.invoke('backup:execute', planId)

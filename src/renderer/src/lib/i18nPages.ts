@@ -558,6 +558,19 @@ const it = {
     title: 'Converti',
     directTitle: 'Conversione diretta',
     syncTitle: 'Sincronizza i punti',
+    allTitle: 'Esporta verso tutti i software rilevati',
+    allDesc:
+      'Un file per ogni software DJ trovato su questo computer, tutti nella stessa cartella. Engine DJ e Serato restano fuori: il primo vuole un m.db esistente come modello, il secondo scrive dentro i file audio e ha la sua conferma.',
+    allBtn: 'Esporta verso tutti',
+    allNone: 'Nessun software DJ rilevato su questo computer.',
+    allConfirmTitle: 'Stai per scrivere {n} file',
+    allConfirmBody:
+      'Vengono creati file NUOVI nella cartella scelta: nessuna libreria esistente viene toccata. Se un file con lo stesso nome è già lì, viene sostituito.',
+    allSkipEngine: 'Engine DJ: escluso, serve un m.db esistente come modello dello schema.',
+    allSkipSerato: 'Serato: escluso, i suoi cue si scrivono dentro i file audio.',
+    allSkipNotFound: '{sw}: non rilevato su questo computer.',
+    allDone: '{n} file scritti in {dir}.',
+    allFailed: '{sw}: non riuscito — {msg}',
     syncDesc:
       'Porta hot cue, loop e memory da una libreria dentro l\'export, per i brani che le due librerie hanno in comune. Il riconoscimento passa dai doppioni collegati: se non li hai collegati, qui non c\'è niente da sincronizzare.',
     syncOriginLabel: 'Prendi i punti da',
@@ -1523,6 +1536,19 @@ const en: PageDict = {
     title: 'Convert',
     directTitle: 'Direct conversion',
     syncTitle: 'Sync cue points',
+    allTitle: 'Export to every detected software',
+    allDesc:
+      'One file per DJ software found on this computer, all in the same folder. Engine DJ and Serato stay out: the first needs an existing m.db as a template, the second writes inside the audio files and has its own confirmation.',
+    allBtn: 'Export to all',
+    allNone: 'No DJ software detected on this computer.',
+    allConfirmTitle: 'About to write {n} files',
+    allConfirmBody:
+      'NEW files are created in the chosen folder: no existing library is touched. A file with the same name already there gets replaced.',
+    allSkipEngine: 'Engine DJ: excluded, it needs an existing m.db as a schema template.',
+    allSkipSerato: 'Serato: excluded, its cues are written inside the audio files.',
+    allSkipNotFound: '{sw}: not detected on this computer.',
+    allDone: '{n} files written to {dir}.',
+    allFailed: '{sw}: failed — {msg}',
     syncDesc:
       'Brings hot cues, loops and memory points from one library into the export, for the tracks the two libraries share. Matching goes through linked duplicates: if you have not linked them, there is nothing to sync here.',
     syncOriginLabel: 'Take cue points from',
