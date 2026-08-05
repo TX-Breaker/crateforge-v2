@@ -13,6 +13,7 @@ import {
 import { ingestCollectionXml } from '@core/xmlCollection';
 import { importForeignLibrary } from '@core/foreignImport';
 import { linkCanonicalTracks } from '@core/identity';
+import { planSync } from '@core/sync';
 import { readTraktorNml } from '@adapters/traktor/nmlReader';
 import { readVirtualDjXml } from '@adapters/virtualdj/vdjReader';
 import { readEngineLibrary } from '@adapters/engine/engineReader';
@@ -480,6 +481,24 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
    * verranno collegate. Nessuna riga viene cancellata: l'unione è un
    * puntatore, quindi resta annullabile.
    */
+  /**
+   * Prova a vuoto della sincronizzazione: quanti brani, quanti punti, e quante
+   * perdite NON recuperabili. Va chiamata prima di ogni scrittura — un'azione
+   * che tocca il lavoro fatto a mano si autorizza sapendo quanto costa.
+   */
+  ipcMain.handle(
+    'sync:plan',
+    (
+      _e,
+      opts: {
+        originSources: string[];
+        destinationSources: string[];
+        destination: string;
+        mode: 'fill' | 'overwrite';
+      }
+    ) => planSync(db, opts)
+  );
+
   ipcMain.handle('library:linkIdentity', () => {
     const r = linkCanonicalTracks(db);
     logOperation(

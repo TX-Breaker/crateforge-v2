@@ -89,7 +89,7 @@ export function writeTraktorNml(
     // Pad hot già occupati: un loop su un pad già usato da un hot cue viene
     // degradato a HOTCUE=-1 (in Traktor un pad tiene un solo elemento).
     const usedHot = new Set<number>();
-    for (const c of getCuesForTrack(db, t.id)) {
+    for (const c of getCuesForTrack(db, t.id, sel.sync)) {
       if (c.color) colouredCues++;
       if (c.cue_type === 'hot' && c.cue_index !== null && c.cue_index < 8) {
         usedHot.add(c.cue_index);

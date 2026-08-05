@@ -78,7 +78,7 @@ export function writeVirtualDjXml(
     if (t.musical_key) scan.Key = t.musical_key;
     if (Object.keys(scan).length) song.ele('Scan', scan);
 
-    for (const c of getCuesForTrack(db, t.id)) {
+    for (const c of getCuesForTrack(db, t.id, sel.sync)) {
       const pos = (c.position_ms / 1000).toFixed(4);
       const color = vdjColorAttr(c.color);
       if (c.cue_type === 'hot' && c.cue_index !== null) {

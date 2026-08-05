@@ -63,7 +63,7 @@ export function writeRekordboxXml(
       });
     }
     // Max 8 hot cue: il limite va applicato QUI, non lasciato all'import.
-    const cues = getCuesForTrack(db, t.id);
+    const cues = getCuesForTrack(db, t.id, sel.sync);
     // Num del pad hot (0-7) allocato SENZA collisioni tra hot cue e hot loop
     // (in Rekordbox XML due POSITION_MARK con lo stesso Num sono invalidi e uno
     // sovrascrive l'altro). Prova l'indice sorgente se libero e valido,

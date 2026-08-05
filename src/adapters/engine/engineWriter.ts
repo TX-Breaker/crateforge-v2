@@ -315,7 +315,7 @@ export function writeEngineLibrary(
 
         // Cue e loop: gli 8 pad di Engine.
         const sampleRate = 44100; // ricalcolata da Engine all'analisi
-        const cues = getCuesForTrack(db, t.id);
+        const cues = getCuesForTrack(db, t.id, sel.sync);
         const slots: ({ label: string; positionSamples: number; color: string } | null)[] = new Array(
           ENGINE_SLOTS
         ).fill(null);

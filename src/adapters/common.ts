@@ -1,5 +1,6 @@
 import type BetterSqlite3 from 'better-sqlite3';
 import type { TrackRow } from '@core/udm';
+import { DEST_CAPABILITY, resolveCues, type SyncMode } from '@core/sync';
 
 export interface CueRow {
   id: number;
@@ -26,6 +27,12 @@ export interface ExportSelection {
   /** limita l'export ai brani/playlist di questa sorgente (per conversione X→Y);
    *  vuoto = tutta la libreria UDM (hub) */
   source?: string;
+  /**
+   * Sincronizzazione: i punti arrivano da un'altra libreria dello stesso brano,
+   * con la regola di risoluzione dei conflitti. Assente = ogni riga porta i
+   * propri.
+   */
+  sync?: SyncSelection;
 }
 
 /** Limiti del canale XML Rekordbox (§4): da mostrare PRIMA di ogni export. */
@@ -70,10 +77,61 @@ export function* iterateTracks(
   }
 }
 
-export function getCuesForTrack(db: BetterSqlite3.Database, trackId: number): CueRow[] {
-  return db
+/**
+ * Sincronizzazione richiesta per questo export: i punti non arrivano dalla riga
+ * che si sta scrivendo, ma da un'altra libreria dello STESSO brano reale.
+ */
+export interface SyncSelection {
+  /** valori di `tracks.source` da cui prendere i punti */
+  originSources: string[];
+  /** software che riceve, per sapere quanti pad ha e se sa retrocedere */
+  destination: string;
+  mode: SyncMode;
+}
+
+export function getCuesForTrack(
+  db: BetterSqlite3.Database,
+  trackId: number,
+  sync?: SyncSelection
+): CueRow[] {
+  const own = db
     .prepare(`SELECT * FROM cues WHERE track_id = ? ORDER BY cue_type, cue_index, position_ms`)
     .all(trackId) as CueRow[];
+  if (!sync) return own;
+
+  /* In sincronizzazione i punti arrivano dalla libreria di origine, per lo
+     stesso brano reale: è per questo che esiste l'identità canonica. Se il
+     brano non esiste nell'origine non c'è niente da portare, e la riga resta
+     con i suoi punti — mai svuotata. */
+  const originRows = db
+    .prepare(
+      `SELECT o.id FROM tracks o
+         JOIN tracks d ON COALESCE(o.canonical_id, o.id) = COALESCE(d.canonical_id, d.id)
+        WHERE d.id = ? AND o.id <> d.id
+          AND o.source IN (${sync.originSources.map(() => '?').join(',')})`
+    )
+    .all(trackId, ...sync.originSources) as { id: number }[];
+  if (originRows.length === 0) return own;
+
+  const stmt = db.prepare(
+    `SELECT * FROM cues WHERE track_id = ? ORDER BY cue_type, cue_index, position_ms`
+  );
+  const origin = originRows.flatMap((r) => stmt.all(r.id) as CueRow[]);
+  const cap = DEST_CAPABILITY[sync.destination];
+  if (!cap) return own;
+
+  const resolved = resolveCues(origin, own, sync.mode, cap);
+  // I writer leggono solo i campi del punto: id e track_id non servono loro.
+  return resolved.cues.map((c, i) => ({
+    id: -1 - i,
+    track_id: trackId,
+    cue_type: c.cue_type,
+    cue_index: c.cue_index,
+    position_ms: c.position_ms,
+    length_ms: c.length_ms,
+    color: c.color,
+    label: c.label
+  }));
 }
 
 export function getPlaylists(db: BetterSqlite3.Database, sel: ExportSelection): PlaylistRow[] {

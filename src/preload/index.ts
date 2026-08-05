@@ -114,6 +114,27 @@ const api = {
     // Serato (sperimentale): riceve la cartella "_Serato_".
     importSerato: (seratoDir: string) => ipcRenderer.invoke('library:importSerato', seratoDir)
   },
+  /**
+   * Sincronizzazione dei punti fra librerie. `plan` non scrive niente: conta.
+   * La scrittura passa dagli export già esistenti, che ricevono `sync` nella
+   * selezione e risolvono i conflitti con la stessa regola.
+   */
+  sync: {
+    plan: (opts: {
+      originSources: string[];
+      destinationSources: string[];
+      destination: string;
+      mode: 'fill' | 'overwrite';
+    }) =>
+      ipcRenderer.invoke('sync:plan', opts) as Promise<{
+        tracks: number;
+        filled: number;
+        replaced: number;
+        demoted: number;
+        lost: number;
+        destroys: boolean;
+      }>
+  },
   backup: {
     plan: (opts: unknown) => ipcRenderer.invoke('backup:plan', opts),
     execute: (planId: string) => ipcRenderer.invoke('backup:execute', planId)
