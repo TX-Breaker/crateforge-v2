@@ -1,22 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Command } from 'cmdk';
-import {
-  ArrowRight,
-  Import,
-  Languages,
-  Lock,
-  Moon,
-  Rows3,
-  Search,
-  Sun,
-  Wand2
-} from 'lucide-react';
+import { ArrowRight, Import, Keyboard, Languages, Lock, Moon, Rows3, Search, Sun, Wand2 } from 'lucide-react';
 import { cn, formatDuration } from '@/lib/utils';
 import { useAppState } from '@/lib/appState';
 import { useRouter } from '@/lib/router';
 import { useLibrary } from '@/lib/library';
 import { useJobs } from '@/lib/jobs';
 import { useNotifications } from '@/lib/notifications';
+import { shortcut } from '@/lib/platform';
 import { t } from '@/lib/i18n';
 import { GROUPS, ROUTE_BY_ID, visibleRoutes } from '@/app/routes';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
@@ -175,6 +166,16 @@ export function CommandPalette({
         run: () => {
           setMode(expert ? 'simple' : 'expert');
           close();
+        }
+      },
+      {
+        id: 'shortcuts',
+        label: t(locale, 'action.shortcuts'),
+        hint: '?',
+        icon: <Keyboard />,
+        run: () => {
+          close();
+          window.dispatchEvent(new Event('crateforge:shortcuts'));
         }
       },
       {

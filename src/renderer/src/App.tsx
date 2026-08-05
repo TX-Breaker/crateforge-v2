@@ -64,6 +64,16 @@ function Shell() {
   const [collapsed, setCollapsed] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+
+  /* La finestra delle scorciatoie si apre da tre punti: il tasto `?`, la
+     palette e le Impostazioni. Gli ultimi due sono lontani da qui nell'albero,
+     e passare una funzione fin laggiù avrebbe legato mezza interfaccia a un
+     dialogo: un evento del documento li tiene indipendenti. */
+  useEffect(() => {
+    const open = () => setShortcutsOpen(true);
+    window.addEventListener('crateforge:shortcuts', open);
+    return () => window.removeEventListener('crateforge:shortcuts', open);
+  }, []);
   const scroller = useRef<HTMLDivElement | null>(null);
   const prevRoute = useRef(route);
 

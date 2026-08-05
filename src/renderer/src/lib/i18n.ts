@@ -166,6 +166,9 @@ const it = {
 
   /* --- scorciatoie --- */
   'shortcut.title': 'Scorciatoie da tastiera',
+  'action.shortcuts': 'Mostra le scorciatoie da tastiera',
+  'shortcut.os': 'Su questo computer il tasto è {key} ({os}).',
+  'shortcut.open': 'Apri l\'elenco',
   'shortcut.subtitle': 'Nessuna scorciatoia esegue un\'azione irreversibile.',
   'shortcut.palette': 'Apri la palette comandi',
   'shortcut.sidebar': 'Riduci o espandi la sidebar',
@@ -353,6 +356,9 @@ const en: Dict = {
   'action.writeMasterDb': 'Write playlist into master.db',
 
   'shortcut.title': 'Keyboard shortcuts',
+  'action.shortcuts': 'Show keyboard shortcuts',
+  'shortcut.os': 'On this computer the key is {key} ({os}).',
+  'shortcut.open': 'Open the list',
   'shortcut.subtitle': 'No shortcut performs an irreversible action.',
   'shortcut.palette': 'Open the command palette',
   'shortcut.sidebar': 'Collapse or expand the sidebar',
@@ -535,6 +541,9 @@ const fr: Dict = {
   'action.writeMasterDb': 'Écrire la playlist dans master.db',
 
   'shortcut.title': 'Raccourcis clavier',
+  'action.shortcuts': 'Afficher les raccourcis clavier',
+  'shortcut.os': 'Sur cet ordinateur, la touche est {key} ({os}).',
+  'shortcut.open': 'Ouvrir la liste',
   'shortcut.subtitle': "Aucun raccourci n'exécute une action irréversible.",
   'shortcut.palette': 'Ouvrir la palette de commandes',
   'shortcut.sidebar': 'Réduire ou déployer la barre latérale',
@@ -717,6 +726,9 @@ const de: Dict = {
   'action.writeMasterDb': 'Playlist in master.db schreiben',
 
   'shortcut.title': 'Tastenkürzel',
+  'action.shortcuts': 'Tastenkürzel anzeigen',
+  'shortcut.os': 'Auf diesem Rechner ist die Taste {key} ({os}).',
+  'shortcut.open': 'Liste öffnen',
   'shortcut.subtitle': 'Kein Kürzel führt eine unumkehrbare Aktion aus.',
   'shortcut.palette': 'Befehlspalette öffnen',
   'shortcut.sidebar': 'Seitenleiste ein- oder ausklappen',

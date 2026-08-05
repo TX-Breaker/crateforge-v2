@@ -834,6 +834,9 @@ const it = {
     langLabel: 'Lingua',
     langDesc: 'Vale per ogni stringa, notifiche comprese.',
     onboardingTitle: 'Primo avvio',
+    shortcutsTitle: 'Scorciatoie da tastiera',
+    shortcutsDesc:
+      'Nessuna scorciatoia esegue un\'azione irreversibile: le più veloci aprono, cercano e selezionano, non cancellano.',
     onboardingDesc: 'Rivedi il rilevamento dei software DJ e le preferenze iniziali.',
     onboardingBtn: 'Ripeti la procedura guidata',
     modeTitle: 'Modalità utente',
@@ -1813,6 +1816,9 @@ const en: PageDict = {
     langLabel: 'Language',
     langDesc: 'Applies to every string, notifications included.',
     onboardingTitle: 'First run',
+    shortcutsTitle: 'Keyboard shortcuts',
+    shortcutsDesc:
+      'No shortcut performs an irreversible action: the fast ones open, search and select — they do not delete.',
     onboardingDesc: 'Review the DJ software detection and the initial preferences.',
     onboardingBtn: 'Run the wizard again',
     modeTitle: 'User mode',

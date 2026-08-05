@@ -835,6 +835,9 @@ export const fr: PageDict = {
     langLabel: 'Langue',
     langDesc: 'Vaut pour chaque texte, notifications comprises.',
     onboardingTitle: 'Premier lancement',
+    shortcutsTitle: 'Raccourcis clavier',
+    shortcutsDesc:
+      'Aucun raccourci n\'exécute une action irréversible : les plus rapides ouvrent, cherchent et sélectionnent, ils ne suppriment pas.',
     onboardingDesc: 'Revoir la détection des logiciels DJ et les préférences initiales.',
     onboardingBtn: 'Relancer l’assistant',
     modeTitle: 'Mode utilisateur',
@@ -1813,6 +1816,9 @@ export const de: PageDict = {
     langLabel: 'Sprache',
     langDesc: 'Gilt für jeden Text, Benachrichtigungen eingeschlossen.',
     onboardingTitle: 'Erster Start',
+    shortcutsTitle: 'Tastenkürzel',
+    shortcutsDesc:
+      'Kein Kürzel führt eine unumkehrbare Aktion aus: Die schnellen öffnen, suchen und wählen aus — sie löschen nicht.',
     onboardingDesc: 'Erkennung der DJ-Software und die ersten Einstellungen erneut ansehen.',
     onboardingBtn: 'Assistenten erneut starten',
     modeTitle: 'Benutzermodus',

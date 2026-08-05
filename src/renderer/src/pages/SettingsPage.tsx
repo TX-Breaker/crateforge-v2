@@ -1,17 +1,5 @@
 import { useEffect, useState } from 'react';
-import {
-  Brush,
-  Info,
-  KeyRound,
-  Languages,
-  Lock,
-  Monitor,
-  Moon,
-  RefreshCw,
-  Rows3,
-  ShieldCheck,
-  Sun
-} from 'lucide-react';
+import { Brush, Info, KeyRound, Keyboard, Languages, Lock, Monitor, Moon, RefreshCw, Rows3, ShieldCheck, Sun } from 'lucide-react';
 import {
   Card,
   CardContent,
@@ -36,6 +24,7 @@ import { useAppState, type Theme, type ThemeStyle } from '@/lib/appState';
 import { useLibrary } from '@/lib/library';
 import { useRouter } from '@/lib/router';
 import { LOCALES, t } from '@/lib/i18n';
+import { isMac, isWindows, modKey } from '@/lib/platform';
 import { pageText } from '@/lib/i18nPages';
 import logoUrl from '../../../../assets/branding/rekordbox-dj-italia-logo.svg';
 import { CrateStack } from '@/components/Brand';
@@ -191,6 +180,29 @@ function GeneralTab() {
             onChange={setLocale}
             options={LOCALES.map((l) => ({ value: l.id, label: l.label }))}
           />
+        </CardContent>
+      </Card>
+
+      {/* Le scorciatoie erano raggiungibili solo premendo `?`: una scorciatoia
+          per scoprire le scorciatoie. Qui c'è il modo di trovarle guardando, e
+          il tasto giusto per QUESTO computer scritto in chiaro. */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-body font-semibold">{tp('shortcutsTitle')}</CardTitle>
+          <CardDescription>{tp('shortcutsDesc')}</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <Button
+            variant="secondary"
+            onClick={() => window.dispatchEvent(new Event('crateforge:shortcuts'))}
+          >
+            <Keyboard /> {t(locale, 'shortcut.open')}
+          </Button>
+          <p className="text-caption text-ink-lo">
+            {t(locale, 'shortcut.os')
+              .replace('{key}', modKey)
+              .replace('{os}', isMac ? 'macOS' : isWindows ? 'Windows' : 'Linux')}
+          </p>
         </CardContent>
       </Card>
 
