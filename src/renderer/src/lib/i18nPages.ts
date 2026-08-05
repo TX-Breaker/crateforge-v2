@@ -557,6 +557,30 @@ const it = {
   converter: {
     title: 'Converti',
     directTitle: 'Conversione diretta',
+    syncTitle: 'Sincronizza i punti',
+    syncDesc:
+      'Porta hot cue, loop e memory da una libreria dentro l\'export, per i brani che le due librerie hanno in comune. Il riconoscimento passa dai doppioni collegati: se non li hai collegati, qui non c\'è niente da sincronizzare.',
+    syncOriginLabel: 'Prendi i punti da',
+    syncOriginNone: 'Nessuna — ogni libreria esporta i suoi',
+    syncModeLabel: 'Se il pad è già occupato',
+    syncFill: 'Riempi i vuoti',
+    syncFillHint: 'Non tocca i punti che hai già nella libreria di arrivo.',
+    syncOverwrite: 'Sovrascrivi',
+    syncOverwriteHint: 'Vince la libreria di partenza; quello che c\'era retrocede a memory dove il formato lo permette.',
+    syncPreviewFor: 'Verso {fmt}',
+    syncCalc: 'Conta',
+    syncNothing: 'Nessun brano in comune fra le due librerie.',
+    syncFactTracks: 'Brani toccati',
+    syncFactFilled: 'Pad vuoti riempiti',
+    syncFactReplaced: 'Pad sostituiti',
+    syncFactDemoted: 'Scesi a memory (conservati)',
+    syncFactLost: 'Persi (non recuperabili)',
+    syncLossTitle: 'Qui si perde qualcosa',
+    syncLossBody:
+      '{fmt} ha solo gli otto pad e nessun contenitore fuori: {n} punti non entrano e spariscono. In Rekordbox, Traktor e VirtualDJ verrebbero conservati come memory.',
+    syncSeratoNote:
+      'I cue Serato vivono dentro i file audio: quell\'export ha la sua scheda e la sua conferma, e non passa da qui.',
+    syncBadge: 'Punti da {sw}',
     directDesc:
       'Importa la libreria di partenza e la riscrive nel formato di arrivo. La libreria originale viene solo letta.',
     srcLabel: 'Da',
@@ -1498,6 +1522,30 @@ const en: PageDict = {
   converter: {
     title: 'Convert',
     directTitle: 'Direct conversion',
+    syncTitle: 'Sync cue points',
+    syncDesc:
+      'Brings hot cues, loops and memory points from one library into the export, for the tracks the two libraries share. Matching goes through linked duplicates: if you have not linked them, there is nothing to sync here.',
+    syncOriginLabel: 'Take cue points from',
+    syncOriginNone: 'None — each library exports its own',
+    syncModeLabel: 'When the pad is already taken',
+    syncFill: 'Fill the gaps',
+    syncFillHint: 'Never touches the points already in the destination library.',
+    syncOverwrite: 'Overwrite',
+    syncOverwriteHint: 'The source library wins; what was there falls back to a memory point where the format allows it.',
+    syncPreviewFor: 'To {fmt}',
+    syncCalc: 'Count',
+    syncNothing: 'No tracks in common between the two libraries.',
+    syncFactTracks: 'Tracks affected',
+    syncFactFilled: 'Empty pads filled',
+    syncFactReplaced: 'Pads replaced',
+    syncFactDemoted: 'Moved to memory (kept)',
+    syncFactLost: 'Lost (not recoverable)',
+    syncLossTitle: 'Something is lost here',
+    syncLossBody:
+      '{fmt} only has the eight pads and no container outside them: {n} points do not fit and disappear. In Rekordbox, Traktor and VirtualDJ they would be kept as memory points.',
+    syncSeratoNote:
+      'Serato cues live inside the audio files: that export has its own card and its own confirmation, and does not go through here.',
+    syncBadge: 'Points from {sw}',
     directDesc:
       'Imports the source library and rewrites it in the destination format. The source library is only read.',
     srcLabel: 'From',

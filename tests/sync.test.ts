@@ -3,7 +3,7 @@ import Database from 'better-sqlite3';
 import { migrate } from '@core/schema';
 import { linkCanonicalTracks } from '@core/identity';
 import { DEST_CAPABILITY, planSync, resolveCues, type SyncMode } from '@core/sync';
-import type { CueRow } from '@adapters/common';
+import { getCuesForTrack, type CueRow } from '@adapters/common';
 
 /**
  * Sincronizzazione dei punti fra software.
@@ -249,6 +249,55 @@ describe('prova a vuoto sulla libreria', () => {
       mode: 'fill'
     });
     expect(plan.tracks).toBe(0);
+  });
+
+  it('quello che conta il piano è quello che scriveranno i writer', () => {
+    const db = libraryWithBoth();
+    const sync = {
+      originSources: ['masterdb', 'xml'],
+      destination: 'traktor',
+      mode: 'fill' as SyncMode
+    };
+    const plan = planSync(db, { ...sync, destinationSources: ['traktor'] });
+    const destId = (
+      db.prepare(`SELECT id FROM tracks WHERE source = 'traktor'`).get() as { id: number }
+    ).id;
+    const cues = getCuesForTrack(db, destId, sync);
+    // Il piano dice 1 riempito + 1 retrocesso: nei punti scritti si ritrovano
+    // esattamente quelli, più il cue che la destinazione aveva già.
+    expect(plan.filled + plan.demoted).toBe(2);
+    expect(cues).toHaveLength(3);
+    expect(cues.filter((c) => c.cue_type === 'memory')).toHaveLength(1);
+    // Il pad conteso è rimasto della destinazione: "riempi i vuoti" non tocca.
+    expect(cues.find((c) => c.cue_type === 'hot' && c.cue_index === 1)?.position_ms).toBe(9999);
+  });
+
+  it('un brano che nell’origine non esiste non viene svuotato', () => {
+    const db = libraryWithBoth();
+    const solo = (
+      db.prepare(`SELECT id FROM tracks WHERE source_id = 'r2'`).get() as { id: number }
+    ).id;
+    const cues = getCuesForTrack(db, solo, {
+      originSources: ['traktor'],
+      destination: 'rekordbox',
+      mode: 'overwrite'
+    });
+    expect(cues).toHaveLength(1);
+    expect(cues[0].position_ms).toBe(500);
+  });
+
+  it('destinazione sconosciuta: si torna al comportamento normale, non si indovina', () => {
+    const db = libraryWithBoth();
+    const destId = (
+      db.prepare(`SELECT id FROM tracks WHERE source = 'traktor'`).get() as { id: number }
+    ).id;
+    const cues = getCuesForTrack(db, destId, {
+      originSources: ['masterdb'],
+      destination: 'ableton',
+      mode: 'overwrite'
+    });
+    expect(cues).toHaveLength(1); // solo i suoi
+    expect(cues[0].position_ms).toBe(9999);
   });
 
   it('verso Serato dichiara che le perdite non sono recuperabili', () => {

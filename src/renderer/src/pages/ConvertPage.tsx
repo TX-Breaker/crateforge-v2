@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { AlertTriangle, ArrowRightLeft, BookOpen, Download } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { AlertTriangle, ArrowRightLeft, BookOpen, Download, Waypoints } from 'lucide-react';
 import {
   Card,
   CardContent,
@@ -25,12 +25,34 @@ import { DangerConfirmDialog } from '@/components/DangerConfirmDialog';
 import { useAppState } from '@/lib/appState';
 import { useJobs } from '@/lib/jobs';
 import { useLibrary } from '@/lib/library';
+import {
+  SOFTWARE,
+  SOFTWARE_LABEL,
+  SOURCES_OF,
+  useWorkspace,
+  type SoftwareId
+} from '@/lib/workspace';
 import { useNotifications } from '@/lib/notifications';
 import { pageText } from '@/lib/i18nPages';
 import { t } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 
 type Format = 'rekordbox' | 'traktor' | 'virtualdj';
+
+/* Sincronizzazione dei punti fra librerie: la regola vive in core/sync.ts, qui
+   servono solo i due tipi che attraversano l'IPC. Le destinazioni sono quelle
+   che hanno un writer collegato — Serato scrive dentro i file audio e ha la sua
+   scheda, con la sua conferma. */
+type SyncMode = 'fill' | 'overwrite';
+interface SyncPlan {
+  tracks: number;
+  filled: number;
+  replaced: number;
+  demoted: number;
+  lost: number;
+  destroys: boolean;
+}
+const SYNC_DESTS: SoftwareId[] = ['rekordbox', 'traktor', 'virtualdj', 'engine'];
 
 const FORMATS: { id: Format; title: string; descKey: string; ext: string; defaultName: string }[] = [
   {
@@ -127,6 +149,47 @@ const CAP_MARK: Record<Cap, string> = { full: '●', partial: '◐', none: '○'
  * quindi la pagina è costruita attorno a ciò che NON sopravviverà: la mappa dei
  * campi è contenuto primario, sopra l'azione, non una nota a piè di pagina.
  */
+/**
+ * I numeri della sincronizzazione, sempre gli stessi cinque e sempre nello
+ * stesso ordine: quanti brani, quanto entra, quanto viene sostituito, quanto
+ * scende a memory, quanto si perde. L'ultimo è l'unico che conta davvero, ed è
+ * per questo che è marcato anche quando vale zero.
+ */
+function SyncFacts({
+  plan,
+  locale,
+  tp
+}: {
+  plan: SyncPlan;
+  locale: string;
+  tp: (k: string, p?: Record<string, string | number>) => string;
+}) {
+  const rows: { k: string; v: number; warn?: boolean }[] = [
+    { k: 'syncFactTracks', v: plan.tracks },
+    { k: 'syncFactFilled', v: plan.filled },
+    { k: 'syncFactReplaced', v: plan.replaced },
+    { k: 'syncFactDemoted', v: plan.demoted },
+    { k: 'syncFactLost', v: plan.lost, warn: plan.lost > 0 }
+  ];
+  return (
+    <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 rounded-md border border-line bg-surface-2 px-3 py-2">
+      {rows.map((r) => (
+        <div key={r.k} className="col-span-2 grid grid-cols-subgrid">
+          <dt className="text-caption text-ink-mid">{tp(r.k)}</dt>
+          <dd
+            className={cn(
+              'text-right font-mono text-caption tabular-nums',
+              r.warn ? 'text-warning' : 'text-ink-hi'
+            )}
+          >
+            {r.v.toLocaleString(locale)}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
 export function ConvertPage() {
   const { locale } = useAppState();
   const tp = (k: string, p?: Record<string, string | number>) =>
@@ -134,6 +197,7 @@ export function ConvertPage() {
   const { run } = useJobs();
   const { refresh } = useLibrary();
   const { push } = useNotifications();
+  const { scope, target } = useWorkspace();
 
   const [pending, setPending] = useState<Format | null>(null);
   const [acknowledged, setAcknowledged] = useState(false);
@@ -155,9 +219,62 @@ export function ConvertPage() {
   const [dstSel, setDstSel] = useState<Format>('traktor');
   const [convertSource, setConvertSource] = useState<string | null>(null);
 
-  const startExport = (fmt: Format) => {
+  /* Da quale libreria arrivano i punti. Preselezionata con la libreria della
+     sessione: se stai lavorando "da Rekordbox", è da lì che li vuoi. Il modo
+     predefinito è quello che non distrugge niente. */
+  const [syncOrigin, setSyncOrigin] = useState<SoftwareId | null>(
+    scope === 'all' ? null : scope
+  );
+  const [syncMode, setSyncMode] = useState<SyncMode>('fill');
+  const [syncDest, setSyncDest] = useState<SoftwareId>(
+    target !== 'ask' && SYNC_DESTS.includes(target) ? target : 'traktor'
+  );
+  /** conteggio mostrato nella scheda: cambia con origine, modo e destinazione */
+  const [syncPreview, setSyncPreview] = useState<SyncPlan | null>(null);
+  /** conteggio della destinazione VERA, calcolato prima di aprire la conferma */
+  const [pendingPlan, setPendingPlan] = useState<SyncPlan | null>(null);
+
+  /**
+   * La selezione da passare a un export. Vale `undefined` — cioè comportamento
+   * normale — quando non c'è origine, o quando origine e destinazione sono lo
+   * stesso software: sincronizzare una libreria con sé stessa non significa
+   * niente, e con due righe dello stesso file finirebbe per fondersi da sola.
+   */
+  const syncFor = (dest: SoftwareId) =>
+    !syncOrigin || syncOrigin === dest
+      ? undefined
+      : { originSources: SOURCES_OF[syncOrigin], destination: dest, mode: syncMode };
+
+  const planFor = async (dest: SoftwareId): Promise<SyncPlan | null> => {
+    const sync = syncFor(dest);
+    if (!sync) return null;
+    try {
+      return await window.crateforge.sync.plan({
+        originSources: sync.originSources,
+        destinationSources: SOURCES_OF[dest],
+        destination: dest,
+        mode: syncMode
+      });
+    } catch {
+      /* Il conteggio è un'informazione in più: se non arriva, l'export resta
+         possibile e la conferma lo dirà mostrando nulla invece di un numero. */
+      return null;
+    }
+  };
+
+  useEffect(() => {
+    let alive = true;
+    void planFor(syncDest).then((p) => alive && setSyncPreview(p));
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [syncOrigin, syncMode, syncDest]);
+
+  const startExport = async (fmt: Format) => {
     setConvertSource(null);
     setAcknowledged(false);
+    setPendingPlan(await planFor(fmt));
     setPending(fmt);
   };
 
@@ -360,7 +477,7 @@ export function ConvertPage() {
     setWarnings([]);
     setBusy(true);
     try {
-      const sel = convertSource ? { source: convertSource } : undefined;
+      const sel = { source: convertSource ?? undefined, sync: syncFor('engine') };
       const r = await run(tp('jobExport', { fmt: 'Engine DJ' }), () =>
         window.crateforge.exporter.engineLibrary(outDir, template, sel as never)
       );
@@ -395,7 +512,8 @@ export function ConvertPage() {
       { name: fmt.title, extensions: [fmt.ext] }
     ]);
     if (!outPath) return;
-    const sel = convertSource ? { source: convertSource } : undefined;
+    const sync = syncFor(fmt.id);
+    const sel = convertSource || sync ? { source: convertSource ?? undefined, sync } : undefined;
     setError(null);
     setOutcome(null);
     setWarnings([]);
@@ -469,6 +587,94 @@ export function ConvertPage() {
             </Button>
           </div>
           <SaveTargetNotice target="xml" />
+        </CardContent>
+      </Card>
+
+      {/* Sincronizzazione dei punti fra librerie: chi vince il pad, e che fine
+          fa chi perde. Il numero delle perdite si vede PRIMA di scrivere. */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-body font-semibold">
+            <Waypoints className="size-4" /> {tp('syncTitle')}
+          </CardTitle>
+          <CardDescription>{tp('syncDesc')}</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="space-y-1.5">
+              <Eyebrow>{tp('syncOriginLabel')}</Eyebrow>
+              <Select
+                className="min-w-[260px]"
+                value={syncOrigin ?? 'none'}
+                label={tp('syncOriginLabel')}
+                onValueChange={(v) => setSyncOrigin(v === 'none' ? null : (v as SoftwareId))}
+                disabled={busy}
+                options={[
+                  { value: 'none', label: tp('syncOriginNone') },
+                  ...SOFTWARE.map((sw) => ({ value: sw, label: SOFTWARE_LABEL[sw] }))
+                ]}
+              />
+            </div>
+            {syncOrigin && (
+              <div className="space-y-1.5">
+                <Eyebrow>{tp('syncModeLabel')}</Eyebrow>
+                <div className="flex gap-1.5">
+                  <Button
+                    size="sm"
+                    variant={syncMode === 'fill' ? 'primary' : 'secondary'}
+                    onClick={() => setSyncMode('fill')}
+                    disabled={busy}
+                  >
+                    {tp('syncFill')}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={syncMode === 'overwrite' ? 'primary' : 'secondary'}
+                    onClick={() => setSyncMode('overwrite')}
+                    disabled={busy}
+                  >
+                    {tp('syncOverwrite')}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+          {syncOrigin && (
+            <>
+              <p className="text-caption text-ink-lo">
+                {syncMode === 'fill' ? tp('syncFillHint') : tp('syncOverwriteHint')}
+              </p>
+              {/* La destinazione qui serve solo al conteggio: l'export vero
+                  ricalcola sul software di arrivo e lo mostra nella conferma. */}
+              <div className="flex flex-wrap items-center gap-1.5">
+                {SYNC_DESTS.filter((d) => d !== syncOrigin).map((d) => (
+                  <Button
+                    key={d}
+                    size="sm"
+                    variant={syncDest === d ? 'primary' : 'ghost'}
+                    onClick={() => setSyncDest(d)}
+                  >
+                    {tp('syncPreviewFor', { fmt: SOFTWARE_LABEL[d] })}
+                  </Button>
+                ))}
+              </div>
+              {syncPreview && syncPreview.tracks === 0 && (
+                <p className="text-caption text-ink-lo">{tp('syncNothing')}</p>
+              )}
+              {syncPreview && syncPreview.tracks > 0 && (
+                <SyncFacts plan={syncPreview} locale={locale} tp={tp} />
+              )}
+              {syncPreview && syncPreview.destroys && syncPreview.lost > 0 && (
+                <Notice variant="warning" title={tp('syncLossTitle')}>
+                  {tp('syncLossBody', {
+                    fmt: SOFTWARE_LABEL[syncDest],
+                    n: syncPreview.lost.toLocaleString(locale)
+                  })}
+                </Notice>
+              )}
+              <p className="text-caption text-ink-lo">{tp('syncSeratoNote')}</p>
+            </>
+          )}
         </CardContent>
       </Card>
 
@@ -568,10 +774,16 @@ export function ConvertPage() {
               <CardTitle className="text-body font-semibold">{f.title}</CardTitle>
               <CardDescription>{tp(f.descKey)}</CardDescription>
             </CardHeader>
-            <CardContent>
-              <Button variant="secondary" onClick={() => startExport(f.id)} disabled={busy}>
+            <CardContent className="space-y-2">
+              <Button variant="secondary" onClick={() => void startExport(f.id)} disabled={busy}>
                 <Download /> {tp('exportBtn')}
               </Button>
+              {syncFor(f.id) && (
+                <p className="flex items-center gap-1.5 text-caption text-accent">
+                  <Waypoints className="size-3.5 shrink-0" />
+                  {tp('syncBadge', { sw: SOFTWARE_LABEL[syncOrigin as SoftwareId] })}
+                </p>
+              )}
             </CardContent>
           </Card>
         ))}
@@ -610,6 +822,12 @@ export function ConvertPage() {
             <Button variant="secondary" onClick={doExportEngine} disabled={busy}>
               <Download /> {tp('engineExportBtn')}
             </Button>
+            {syncFor('engine') && (
+              <p className="mt-2 flex items-center gap-1.5 text-caption text-accent">
+                <Waypoints className="size-3.5 shrink-0" />
+                {tp('syncBadge', { sw: SOFTWARE_LABEL[syncOrigin as SoftwareId] })}
+              </p>
+            )}
             <SaveTargetNotice target="copy" />
           </CardContent>
         </Card>
@@ -689,6 +907,21 @@ export function ConvertPage() {
                   ))}
                 </ul>
                 <p className="text-caption text-ink-mid">{tp('dlgNote')}</p>
+                {/* Se questo export porta i punti di un'altra libreria, i conti
+                    stanno qui: sono quelli della destinazione scelta davvero. */}
+                {pendingPlan && (
+                  <div className="space-y-2">
+                    <SyncFacts plan={pendingPlan} locale={locale} tp={tp} />
+                    {pendingPlan.destroys && pendingPlan.lost > 0 && (
+                      <Notice variant="warning" title={tp('syncLossTitle')}>
+                        {tp('syncLossBody', {
+                          fmt: pending ? SOFTWARE_LABEL[pending as SoftwareId] : '',
+                          n: pendingPlan.lost.toLocaleString(locale)
+                        })}
+                      </Notice>
+                    )}
+                  </div>
+                )}
               </div>
             </DialogDescription>
           </DialogHeader>
