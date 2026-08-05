@@ -73,7 +73,14 @@ function createWindow(): void {
     mainWindow.show();
     if (why !== 'ready-to-show') logMain(`finestra mostrata per ripiego (${why})`);
   };
-  mainWindow.on('ready-to-show', () => reveal('ready-to-show'));
+  const t0 = Date.now();
+  mainWindow.on('ready-to-show', () => {
+    logMain(`ready-to-show dopo ${Date.now() - t0}ms`);
+    reveal('ready-to-show');
+  });
+  mainWindow.webContents.on('did-finish-load', () =>
+    logMain(`renderer caricato dopo ${Date.now() - t0}ms`)
+  );
   const revealTimer = setTimeout(() => reveal('timeout di 5s'), 5000);
   mainWindow.on('closed', () => clearTimeout(revealTimer));
 
