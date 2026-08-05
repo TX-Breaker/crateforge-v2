@@ -39,9 +39,12 @@ import {
 export function SessionDialog() {
   const { locale } = useAppState();
   const tp = (k: string, p?: Record<string, string | number>) => pageText(locale, 'session', k, p);
-  const { asking, counts, scope, target, choose } = useWorkspace();
+  const { asking, counts, scope, target, choose, refreshCounts } = useWorkspace();
 
   const [pickScope, setPickScope] = useState<Scope>(scope);
+  /* Esito del collegamento dei doppioni, quando l'utente lo chiede da qui. */
+  const [linking, setLinking] = useState(false);
+  const [linked, setLinked] = useState<number | null>(null);
   const [pickTarget, setPickTarget] = useState<Target>(target);
 
   // Riallinea la proposta ogni volta che il dialogo si riapre.
@@ -57,6 +60,9 @@ export function SessionDialog() {
   const n = (v: number) => v.toLocaleString(locale);
   const tracksOf = (id: SoftwareId) => counts?.bySoftware?.[id]?.tracks ?? 0;
   const unified = counts?.unified ?? { tracks: 0, shared: 0 };
+  const perSoftware = SOFTWARE.map((id) => tracksOf(id));
+  const totalRows = perSoftware.reduce((a, b) => a + b, 0);
+  const librariesWithTracks = perSoftware.filter((v) => v > 0).length;
 
   return (
     <Dialog open onOpenChange={() => choose(pickScope, pickTarget)}>
@@ -128,6 +134,39 @@ export function SessionDialog() {
             })}
           </div>
         </div>
+
+        {/* I doppioni fra librerie si collegano su richiesta, mai da soli sui
+            dati già importati: è la scelta fatta con l'utente. Senza il
+            collegamento la vista unificata mostra la stessa canzone una volta
+            per software, e il numero qui sopra lo dice invece di nasconderlo. */}
+        {pickScope === 'all' && counts && unified.shared === 0 && librariesWithTracks > 1 && (
+          <div className="flex flex-wrap items-center gap-3 rounded-card border border-line bg-surface-3 px-3.5 py-3">
+            <p className="min-w-0 flex-1 text-caption text-ink-mid">
+              {linked === null
+                ? tp('linkHint', { rows: n(totalRows), tracks: n(unified.tracks) })
+                : tp('linkDone', { n: n(linked) })}
+            </p>
+            {linked === null && (
+              <Button
+                size="sm"
+                variant="secondary"
+                working={linking}
+                onClick={async () => {
+                  setLinking(true);
+                  try {
+                    const r = await window.crateforge.library.linkIdentity();
+                    setLinked(r.linked);
+                    await refreshCounts();
+                  } finally {
+                    setLinking(false);
+                  }
+                }}
+              >
+                {tp('linkAction')}
+              </Button>
+            )}
+          </div>
+        )}
 
         {/* ---------------- verso dove scrivo ---------------- */}
         <div className="space-y-2 border-t border-line-subtle pt-3">

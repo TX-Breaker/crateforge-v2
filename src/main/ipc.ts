@@ -471,6 +471,28 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
    * l'utente vedrà davvero scegliendo la vista unificata, ed è più piccolo
    * della somma proprio perché i doppioni fra software vengono uniti.
    */
+  /**
+   * Collega i doppioni fra librerie, su richiesta esplicita.
+   *
+   * Le righe importate PRIMA di questa funzione restano ognuna il proprio
+   * brano: la migrazione non le ha toccate, come concordato. Chi vuole la
+   * vista unificata senza doppioni lo chiede da qui, sapendo quante righe
+   * verranno collegate. Nessuna riga viene cancellata: l'unione è un
+   * puntatore, quindi resta annullabile.
+   */
+  ipcMain.handle('library:linkIdentity', () => {
+    const r = linkCanonicalTracks(db);
+    logOperation(
+      db,
+      'identity.link',
+      null,
+      'ok',
+      `${r.linked} righe collegate (percorso ${r.byRule.path}, file ${r.byRule.fileMatch}, ` +
+        `impronta ${r.byRule.acoustic}); ${r.shared} brani in più software`
+    );
+    return r;
+  });
+
   ipcMain.handle('library:sources', () => {
     const rows = db
       .prepare(`SELECT source, COUNT(*) c FROM tracks GROUP BY source`)

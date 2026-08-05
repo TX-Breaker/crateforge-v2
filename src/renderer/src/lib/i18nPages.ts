@@ -42,6 +42,10 @@ const it = {
     start: 'Inizia',
     from: 'da',
     to: 'a',
+    linkHint:
+      'Le tue librerie contengono {rows} righe per {tracks} brani: i doppioni fra software non sono ancora stati collegati, quindi qui una stessa canzone compare una volta per programma.',
+    linkAction: 'Collega i doppioni',
+    linkDone: 'Collegate {n} righe. Da ora la vista unificata conta ogni brano una volta sola.',
     changeHint: 'Cambia libreria di lavoro'
   },
   tabs: {
@@ -977,6 +981,10 @@ const en: PageDict = {
     start: 'Start',
     from: 'from',
     to: 'to',
+    linkHint:
+      'Your libraries hold {rows} rows for {tracks} tracks: duplicates across apps have not been linked yet, so the same song shows up once per program here.',
+    linkAction: 'Link duplicates',
+    linkDone: '{n} rows linked. From now on the unified view counts each track once.',
     changeHint: 'Change working library'
   },
   tabs: {

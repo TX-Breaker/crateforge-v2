@@ -38,6 +38,10 @@ export const fr: PageDict = {
     start: 'Commencer',
     from: 'de',
     to: 'à',
+    linkHint:
+      'Vos bibliothèques contiennent {rows} lignes pour {tracks} titres : les doublons entre logiciels ne sont pas encore liés, donc un même morceau apparaît une fois par programme.',
+    linkAction: 'Lier les doublons',
+    linkDone: '{n} lignes liées. Désormais la vue unifiée compte chaque titre une seule fois.',
     changeHint: 'Changer de bibliothèque de travail'
   },
   tabs: {
@@ -975,6 +979,10 @@ export const de: PageDict = {
     start: 'Starten',
     from: 'von',
     to: 'nach',
+    linkHint:
+      'Deine Bibliotheken enthalten {rows} Zeilen für {tracks} Titel: Doppelte zwischen Programmen sind noch nicht verknüpft, deshalb erscheint derselbe Song hier einmal pro Programm.',
+    linkAction: 'Doppelte verknüpfen',
+    linkDone: '{n} Zeilen verknüpft. Ab jetzt zählt die vereinte Ansicht jeden Titel einmal.',
     changeHint: 'Arbeitsbibliothek wechseln'
   },
   tabs: {

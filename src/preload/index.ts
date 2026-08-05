@@ -84,6 +84,14 @@ const api = {
     stats: (sources?: string[] | null) => ipcRenderer.invoke('library:stats', sources),
     /* Che cosa c'è nell'archivio, software per software: alimenta la scelta di
        inizio sessione. `unified` conta i brani reali, non le righe. */
+    /* Collega i doppioni fra librerie: richiesto dall'utente, mai automatico
+       sui dati già importati. */
+    linkIdentity: () =>
+      ipcRenderer.invoke('library:linkIdentity') as Promise<{
+        linked: number;
+        shared: number;
+        byRule: { path: number; fileMatch: number; acoustic: number };
+      }>,
     sources: () =>
       ipcRenderer.invoke('library:sources') as Promise<{
         bySoftware: Record<string, { tracks: number; playlists: number; sources: string[] }>;
