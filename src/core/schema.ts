@@ -14,7 +14,7 @@ import type BetterSqlite3 from 'better-sqlite3';
  *    I due percorsi non girano mai in concorrenza: Node serializza i job.
  *  - settings / jobs / oplog → SOLO Node.
  */
-export const SCHEMA_VERSION = 6;
+export const SCHEMA_VERSION = 7;
 
 const MIGRATIONS: Record<number, string> = {
   1: `
@@ -240,6 +240,25 @@ const MIGRATIONS: Record<number, string> = {
     ALTER TABLE tracks ADD COLUMN track_color TEXT;
     ALTER TABLE tracks ADD COLUMN beatgrid_bpm REAL;
     ALTER TABLE tracks ADD COLUMN beatgrid_anchor_ms REAL;
+  `,
+  /* Identità canonica della traccia.
+   *
+   * Fino a qui l'identità era `(source, source_id)`: lo STESSO file importato da
+   * Rekordbox e da Traktor produceva due righe senza alcun legame fra loro.
+   * Finché ogni libreria si guardava da sola non si notava; nel momento in cui
+   * si vogliono vedere insieme, la stessa canzone compare due volte e nessuna
+   * sincronizzazione fra software è possibile — non c'è modo di dire "questi due
+   * sono lo stesso brano".
+   *
+   * `canonical_id` punta alla riga che rappresenta il file reale. NULL significa
+   * "sono io il canonico": è il valore di partenza di tutte le righe già
+   * esistenti, che quindi NON vengono toccate dalla migrazione. Le fusioni le fa
+   * la regola di identità in core/identity.ts, sui dati nuovi, e sono sempre
+   * reversibili perché nessuna riga viene cancellata.
+   */
+  7: `
+    ALTER TABLE tracks ADD COLUMN canonical_id INTEGER REFERENCES tracks(id) ON DELETE SET NULL;
+    CREATE INDEX IF NOT EXISTS idx_tracks_canonical ON tracks(canonical_id);
   `
 };
 

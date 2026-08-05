@@ -11,6 +11,7 @@ import {
 } from '@core/udm';
 import { ingestCollectionXml } from '@core/xmlCollection';
 import { importForeignLibrary } from '@core/foreignImport';
+import { linkCanonicalTracks } from '@core/identity';
 import { readTraktorNml } from '@adapters/traktor/nmlReader';
 import { readVirtualDjXml } from '@adapters/virtualdj/vdjReader';
 import { readEngineLibrary } from '@adapters/engine/engineReader';
@@ -137,6 +138,35 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
   const win = (): BrowserWindow | undefined =>
     BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
   const wc = (): BrowserWindow['webContents'] | undefined => win()?.webContents;
+
+  /**
+   * Ricollega l'identità canonica delle tracce dopo un import.
+   *
+   * Va fatto QUI e non dentro i singoli lettori perché le righe nuove arrivano
+   * da quattro strade diverse (XML, master.db via sidecar, altri software,
+   * Serato) e la regola di identità deve essere una sola. È idempotente: se non
+   * è cambiato niente non tocca niente.
+   */
+  const relinkIdentity = (origine: string): void => {
+    try {
+      const r = linkCanonicalTracks(db);
+      if (r.linked > 0) {
+        logOperation(
+          db,
+          'identity.link',
+          origine,
+          'ok',
+          `${r.linked} righe collegate a un brano già presente ` +
+            `(percorso ${r.byRule.path}, file ${r.byRule.fileMatch}, impronta ${r.byRule.acoustic}); ` +
+            `${r.shared} brani presenti in più software`
+        );
+      }
+    } catch (err) {
+      // Un'identità non ricalcolata non invalida l'import appena riuscito:
+      // le righe restano ognuna il proprio canonico, cioè lo stato di prima.
+      logOperation(db, 'identity.link', origine, 'error', String(err));
+    }
+  };
 
   // Chiavi di sicurezza che NON possono essere scritte dal canale generico:
   // sono i gate delle scritture (§3), altrimenti un renderer compromesso le
@@ -432,6 +462,7 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
         );
         progress.finish({ jobId, phase: 'ingest-xml', done: result.tracks, total: result.tracks });
         logOperation(db, 'ingest.xml', xmlPath, 'ok', JSON.stringify(result));
+        relinkIdentity('ingest.xml');
         return versioneXml.status === 'ok'
           ? result
           : { ...result, warnings: [versioneXml.message] };
@@ -471,6 +502,7 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
         if (versione.status !== 'ok') result.warnings.unshift(versione.message);
         progress.finish({ jobId, phase: `import-${kind}`, done: result.tracks, total: result.tracks });
         logOperation(db, `import.${kind}`, path, 'ok', JSON.stringify(result));
+        relinkIdentity(`import.${kind}`);
         return { ok: true, ...result };
       } catch (err) {
         progress.finish({ jobId, phase: `import-${kind}`, done: 1, total: 1 });
@@ -543,6 +575,7 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
           };
         }
         logOperation(db, 'ingest.masterdb', masterDbPath, 'ok');
+        relinkIdentity('ingest.masterdb');
         return { ok: true };
       } finally {
         currentCancel = null;
@@ -561,6 +594,7 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
     const versioneSerato = checkReadable('serato', seratoDir);
     const r = await runSidecarJob('read-serato', 'read-serato', ['--serato-dir', seratoDir]);
     logOperation(db, 'import.serato', seratoDir, r.ok ? 'ok' : 'error', r.ok ? JSON.stringify(r.data) : r.message);
+    if (r.ok) relinkIdentity('import.serato');
     const netWarn = networkPathWarning(seratoDir);
     const avvisi = [netWarn, versioneSerato.status !== 'ok' ? versioneSerato.message : null].filter(
       (a): a is string => !!a

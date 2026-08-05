@@ -39,6 +39,53 @@ funzioni vanno agganciate alle pagine corrispondenti già esistenti
 Prima di scrivere codice nel renderer, **leggi** `redesign-v2.MD` e il design
 system in `docs/`: rispetta i componenti, i pattern e il tono già stabiliti.
 
+## PRIORITÀ ZERO — tre difetti già trovati, da correggere PRIMA di tutto il resto
+
+Una review del codice V2 (con verifica avversariale) ha confermato questi
+problemi. Riguardano la scrittura sui file dell'utente: vanno chiusi prima di
+aggiungere qualunque funzione nuova.
+
+**1. `export:seratoCues` ignora il filtro e riscrive TUTTA la libreria** — grave
+`src/renderer/src/pages/ConvertPage.tsx:240` passa `{ source: convertSource }`
+con un cast `as never`, ma `src/main/ipc.ts:584-590` filtra solo su
+`sel.playlistIds` e **ignora `source`**. Conseguenza: l'utente converte una
+libreria e CrateForge riscrive i tag ID3 di *tutti* i file audio dell'UDM.
+Il cast `as never` esiste proprio per zittire l'errore di tipo che segnalava
+questo. Fix: onorare `sel.source` nell'handler (come fa già
+`src/adapters/common.ts:49-51`) e togliere il cast, oppure allineare i tipi.
+Aggiungere un test che verifica che con `source` valorizzato vengano toccati
+solo i file di quella sorgente.
+
+**2. La scrittura nei file originali non ha conferma** — serio
+`ConvertPage.tsx:547`: la scrittura dei cue dentro gli MP3 parte da un semplice
+`<Button variant="secondary">`. Niente `DangerConfirmDialog`, niente conteggio
+dei file coinvolti, nessuna verifica del gate `directWrites` lato UI. La V1 per
+la stessa azione richiede gate + conferma da digitare. Fix: doppia conferma con
+numero di file, coerente con il resto della V2.
+
+**3. `PROGRESS.md` è un fossile della V1 e mente sullo stato** — grave
+Non è mai stato aggiornato dopo il fork (`git log -- PROGRESS.md` → solo il
+commit di baseline). Dice `[ ] Export Engine/Serato: RIMANDATO` mentre nella V2
+sono implementati; dice "10 pagine" (sono 13), "it/en" (sono 4 lingue),
+"176 test" (sono 231). E dichiara `[x]` l'icona dell'app mentre la cartella
+`build/` non esiste e **l'eseguibile spedito porta l'icona di default di
+Electron** (verificato estraendo le risorse dal binario).
+Fix: riscrivere `PROGRESS.md` sullo stato reale della V2, e creare
+`build/icon.png` (≥512px, meglio 1024) + `build/icon.ico`.
+
+Difetti minori confermati, da sistemare quando si tocca quell'area:
+- `components/data/TrackList.tsx:232`: i filtri "Senza key/BPM/genere" agiscono
+  solo sulla finestra scaricata → buchi vuoti nella lista e contatore sbagliato.
+  Vanno spinti nell'IPC (`library:page`) o va corretto il conteggio.
+- `pages/ReportsPage.tsx:177`: le sessioni SIAE non si caricano al mount (manca
+  `useEffect`) → sembra che non ci siano dati. *Difetto ereditato dalla V1.*
+- `pages/ReportsPage.tsx`: perso il pulsante "Apri un file esistente" del
+  visualizzatore Excel presente nella V1.
+- `lib/library.tsx:96`: scarica l'intera inbox solo per contarne gli elementi
+  (viola "mai bulk data su IPC"): serve un IPC che restituisca il conteggio.
+- `CommandPalette.tsx:111`: `useMemo` senza `navigate`/`close` nelle dipendenze.
+- Versione applicazione hardcoded in `SettingsPage.tsx:428` e `Sidebar.tsx:62`.
+
 ## Cosa manca nella V2 (verificato file per file)
 
 ### A. File assenti — vanno portati dalla V1
@@ -184,6 +231,10 @@ Entry: `nome NUL` + `uint32 BE lunghezza` + payload.
 
 ## Ordine di lavoro consigliato
 
+0. **I tre difetti di "PRIORITÀ ZERO"**, in quest'ordine: filtro Serato ignorato,
+   conferma sulla scrittura negli originali, `PROGRESS.md` + icona. Sono i due
+   che toccano i file dell'utente più quello che mente sullo stato: vanno chiusi
+   prima di aggiungere funzioni.
 1. Fix `engineReader` (bug dei path) — è quello che rompe tutto il resto.
 2. `engineCodec` + `engineWriter` + IPC + aggancio a `ConvertPage`.
 3. Fix `vdjWriter` e `xmlWriter` (perdite silenziose).
