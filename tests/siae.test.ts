@@ -7,7 +7,11 @@ import {
   minutesOfDay,
   minutesOfTimestamp
 } from '@services/siae/siaeWindow';
-import { listHistorySessions } from '@services/siae/siaeReport';
+import { exportSiaeReport, listHistorySessions } from '@services/siae/siaeReport';
+import ExcelJS from 'exceljs';
+import { rmSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
 
 /**
  * Programma musicale SIAE.
@@ -147,6 +151,53 @@ describe('chi entra nel programma musicale', () => {
       { sampleUnderS: 30 }
     );
     expect(r.rows.map((x) => x.title)).toEqual(['Intro corta']);
+  });
+});
+
+describe('il foglio che l’utente consegna', () => {
+  /* Il criterio è testato sopra come funzione pura. Qui si controlla che finisca
+     DAVVERO dentro il file: le esclusioni scritte in testa e l'ora di ogni
+     brano. Un conteggio giusto che non arriva nel foglio non serve a nessuno. */
+  it('scrive in testa la fascia usata e quello che ha tolto', async () => {
+    const db = new Database(':memory:');
+    migrate(db);
+    const ins = db.prepare(
+      `INSERT INTO play_history
+         (session_id, session_name, position, title, artist, duration_s, played_at)
+       VALUES ('s1', 'Sabato', ?, ?, ?, ?, ?)`
+    );
+    ins.run(0, 'Apertura', 'Tizio', 320, '2026-08-05 22:10:00');
+    ins.run(1, 'Notte', 'Caio', 400, '2026-08-06 01:30:00');
+    ins.run(2, 'Prova audio', 'Sempronio', 300, '2026-08-05 18:00:00');
+    ins.run(3, 'Jingle', 'Radio', 4, '2026-08-06 00:45:00');
+
+    const out = join(tmpdir(), `crateforge-siae-${process.pid}.xlsx`);
+    const r = await exportSiaeReport(db, {
+      sessionId: 's1',
+      outPath: out,
+      venue: 'Locale X',
+      fromTime: '21:00',
+      toTime: '06:00',
+      sampleUnderS: 30
+    });
+    expect(r.rows).toBe(2);
+    expect(r.samples).toBe(1);
+    expect(r.outOfWindow).toBe(1);
+
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.readFile(out);
+    const ws = wb.getWorksheet('SIAE')!;
+    const cell = (row: number, col: number) => String(ws.getRow(row).getCell(col).value ?? '');
+    // Le esclusioni sono in testa, non in fondo: si vedono aprendo il file.
+    const head = Array.from({ length: 8 }, (_, i) => `${cell(i + 1, 1)}|${cell(i + 1, 2)}`).join('\n');
+    expect(head).toContain('Fascia oraria|21:00 → 06:00');
+    expect(head).toContain('Esclusi come sample|1 (durata sotto 30s)');
+    expect(head).toContain('Esclusi fuori fascia|1');
+    // E ogni riga porta la sua ora, che prima non esisteva.
+    const body = ws.getSheetValues().map((row) => (row as unknown[])?.join('|') ?? '');
+    expect(body.some((l) => l.includes('22:10') && l.includes('Apertura'))).toBe(true);
+    expect(body.some((l) => l.includes('Prova audio'))).toBe(false);
+    rmSync(out, { force: true });
   });
 });
 
