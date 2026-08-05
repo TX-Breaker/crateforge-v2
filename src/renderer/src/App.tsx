@@ -5,6 +5,8 @@ import { useAppState } from '@/lib/appState';
 import { RouterProvider, useRouter } from '@/lib/router';
 import { JobsProvider } from '@/lib/jobs';
 import { LibraryProvider } from '@/lib/library';
+import { WorkspaceProvider } from '@/lib/workspace';
+import { SessionDialog } from '@/components/SessionDialog';
 import { NotificationsProvider } from '@/lib/notifications';
 import { TooltipProvider } from '@/components/ui/misc';
 import { hasMod } from '@/lib/platform';
@@ -39,6 +41,9 @@ import { SettingsPage } from '@/pages/SettingsPage';
 export function App() {
   return (
     <TooltipProvider delayDuration={350}>
+      {/* La sessione sta sopra la libreria: è la libreria a dover sapere da
+          quale software sta leggendo, non il contrario. */}
+      <WorkspaceProvider>
       <LibraryProvider>
         <NotificationsProvider>
           <JobsProvider>
@@ -48,6 +53,7 @@ export function App() {
           </JobsProvider>
         </NotificationsProvider>
       </LibraryProvider>
+      </WorkspaceProvider>
     </TooltipProvider>
   );
 }
@@ -160,6 +166,8 @@ function Shell() {
         </div>
       </div>
 
+      {/* Prima cosa a ogni avvio: su quale libreria si lavora. */}
+      <SessionDialog />
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
       <ShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
       <Toaster

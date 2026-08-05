@@ -19,6 +19,27 @@ export const fr: PageDict = {
     deselectAll: 'Désélectionner'
   },
 
+  session: {
+    title: 'Sur quelle bibliothèque travaillez-vous ?',
+    subtitle:
+      'CrateForge garde les bibliothèques de vos logiciels séparées. Choisissez où lire et où écrire : le choix vaut pour cette session et se change à tout moment depuis la barre du haut.',
+    scopeLabel: 'Lire depuis',
+    allTitle: 'Toutes ensemble',
+    allDesc:
+      'Les bibliothèques restent séparées dans l\'archive ; ici vous les voyez comme une seule liste.',
+    allDescShared:
+      'Un titre présent dans plusieurs logiciels compte une seule fois : {shared} sont en commun.',
+    softwareDesc: 'Cette bibliothèque seule : chiffres, listes et opérations y restent.',
+    notImported: 'Pas encore importée. Vous pouvez le faire depuis Convertir.',
+    targetLabel: 'Écrire vers',
+    targetDesc:
+      'Où atterriront exports et écritures. Vous pouvez aussi décider opération par opération.',
+    targetAsk: 'Je décide sur le moment',
+    start: 'Commencer',
+    from: 'de',
+    to: 'à',
+    changeHint: 'Changer de bibliothèque de travail'
+  },
   tabs: {
     orphans: 'Orphelins',
     duplicates: 'Doublons',
@@ -936,6 +957,26 @@ export const de: PageDict = {
     deselectAll: 'Auswahl aufheben'
   },
 
+  session: {
+    title: 'An welcher Bibliothek arbeitest du gerade?',
+    subtitle:
+      'CrateForge hält die Bibliotheken deiner Programme getrennt. Wähle, woraus gelesen und wohin geschrieben wird: Die Wahl gilt für diese Sitzung und lässt sich jederzeit oben in der Leiste ändern.',
+    scopeLabel: 'Lesen aus',
+    allTitle: 'Alle zusammen',
+    allDesc: 'Die Bibliotheken bleiben im Archiv getrennt; hier siehst du sie als eine Liste.',
+    allDescShared:
+      'Ein Titel, der in mehreren Programmen liegt, zählt einmal: {shared} sind gemeinsam.',
+    softwareDesc: 'Nur diese Bibliothek: Zahlen, Listen und Vorgänge bleiben darin.',
+    notImported: 'Noch nicht importiert. Das geht unter Konvertieren.',
+    targetLabel: 'Schreiben nach',
+    targetDesc:
+      'Wohin Exporte und Schreibvorgänge gehen. Du kannst es auch pro Vorgang entscheiden.',
+    targetAsk: 'Entscheide ich später',
+    start: 'Starten',
+    from: 'von',
+    to: 'nach',
+    changeHint: 'Arbeitsbibliothek wechseln'
+  },
   tabs: {
     orphans: 'Verwaiste',
     duplicates: 'Duplikate',

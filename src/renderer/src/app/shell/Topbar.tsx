@@ -8,6 +8,7 @@ import { useLibrary } from '@/lib/library';
 import { t } from '@/lib/i18n';
 import { ROUTE_BY_ID, GROUPS } from '@/app/routes';
 import { NotificationCenter } from '@/components/NotificationCenter';
+import { SessionChip } from '@/components/SessionDialog';
 import { useNotifications } from '@/lib/notifications';
 import { Tooltip } from '@/components/ui/misc';
 
@@ -42,6 +43,11 @@ export function Topbar() {
           {t(locale, def.labelKey)}
         </h1>
       </div>
+
+      {/* Contesto di lavoro: da quale libreria si legge e verso dove si
+          scrive. Sta qui, non in un menù, perché è la risposta alla domanda
+          "dove sono" — e quella domanda si fa in continuazione. */}
+      <SessionChip />
 
       <div className="ml-auto flex items-center gap-3">
         {stats && (

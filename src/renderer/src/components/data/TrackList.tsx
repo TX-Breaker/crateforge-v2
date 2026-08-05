@@ -4,6 +4,7 @@ import { Search, X } from 'lucide-react';
 import { cn, formatDuration } from '@/lib/utils';
 import { useAppState } from '@/lib/appState';
 import { useLibrary } from '@/lib/library';
+import { useWorkspace } from '@/lib/workspace';
 import { t } from '@/lib/i18n';
 import { Badge, Checkbox, FilterChip, Input, Segmented, Skeleton } from '@/components/ui/misc';
 
@@ -81,6 +82,12 @@ export function TrackList({
      leggono soltanto — un chip non deve interrogare il database per sapere
      come chiamarsi. */
   const { stats, health } = useLibrary();
+  /* L'elenco mostra la libreria della sessione. In vista unificata una riga
+     per brano reale, non una per software. */
+  const { sources } = useWorkspace();
+  /* Chiave stabile: `sources` è un array nuovo a ogni render, e usarlo come
+     dipendenza rilancerebbe la query in continuazione. */
+  const sourceKey = (sources ?? []).join(',');
   const [rows, setRows] = useState<(Track | undefined)[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -123,7 +130,8 @@ export function TrackList({
         noGenre: noGenre || undefined,
         camelot: scope?.camelot,
         bpmMin: scope?.bpmMin,
-        bpmMax: scope?.bpmMax
+        bpmMax: scope?.bpmMax,
+        sources
       })) as { rows: Track[]; total: number };
       const next: (Track | undefined)[] = new Array(r.total);
       r.rows.forEach((row, i) => (next[i] = row));
@@ -133,7 +141,7 @@ export function TrackList({
       setLoading(false);
       scroller.current?.scrollTo({ top: 0 });
     })();
-  }, [debounced, needsReviewOnly, noKey, noBpm, noGenre, scopeKey]);
+  }, [debounced, needsReviewOnly, noKey, noBpm, noGenre, scopeKey, sourceKey]);
 
   const loadPage = useCallback(
     async (page: number) => {
@@ -149,7 +157,8 @@ export function TrackList({
         noGenre: noGenre || undefined,
         camelot: scope?.camelot,
         bpmMin: scope?.bpmMin,
-        bpmMax: scope?.bpmMax
+        bpmMax: scope?.bpmMax,
+        sources
       })) as { rows: Track[]; total: number };
       setRows((prev) => {
         const next = prev.slice();
@@ -157,7 +166,7 @@ export function TrackList({
         return next;
       });
     },
-    [debounced, needsReviewOnly, noKey, noBpm, noGenre, scopeKey]
+    [debounced, needsReviewOnly, noKey, noBpm, noGenre, scopeKey, sourceKey]
   );
 
   const rowH = density === 'compact' ? 30 : 46;

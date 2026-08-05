@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { useWorkspace } from '@/lib/workspace';
 
 /**
  * Stato "vivo" della libreria, condiviso da sidebar, statusbar, panoramica e
@@ -77,19 +78,23 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
   const [preflight, setPreflight] = useState<PreflightState | null>(null);
   const [sidecar, setSidecar] = useState<{ available: boolean; binaryPath?: string } | null>(null);
   const [rbPaths, setRbPaths] = useState<RekordboxPaths | null>(null);
+  const { sources } = useWorkspace();
   const [watcher, setWatcher] = useState<WatcherStatus>({ running: false, folder: null });
   const [arrivals, setArrivals] = useState(0);
   const [loading, setLoading] = useState(true);
 
+  /* Tutti i numeri seguono la libreria scelta per la sessione. Cambiare
+     libreria dalla barra in alto ricarica statistiche e diagnosi: se restassero
+     quelle di prima, l'intestazione direbbe una cosa e i numeri un'altra. */
   const refresh = useCallback(async () => {
     const [s, h] = await Promise.all([
-      window.crateforge.library.stats(),
-      window.crateforge.health.get()
+      window.crateforge.library.stats(sources),
+      window.crateforge.health.get(sources)
     ]);
     setStats(s as LibraryStats);
     setHealth(h as HealthReport);
     setLoading(false);
-  }, []);
+  }, [sources]);
 
   const refreshArrivals = useCallback(async () => {
     try {

@@ -75,13 +75,23 @@ const api = {
       camelot?: string;
       bpmMin?: number;
       bpmMax?: number;
+      /* Librerie della sessione di lavoro. Assente = vista unificata: una riga
+         per brano reale, non una per software. */
+      sources?: string[] | null;
     }) => ipcRenderer.invoke('library:page', q),
     pageByPlaylist: (playlistId: number, offset: number, limit: number) =>
       ipcRenderer.invoke('library:pageByPlaylist', playlistId, offset, limit),
-    stats: () => ipcRenderer.invoke('library:stats'),
+    stats: (sources?: string[] | null) => ipcRenderer.invoke('library:stats', sources),
+    /* Che cosa c'è nell'archivio, software per software: alimenta la scelta di
+       inizio sessione. `unified` conta i brani reali, non le righe. */
+    sources: () =>
+      ipcRenderer.invoke('library:sources') as Promise<{
+        bySoftware: Record<string, { tracks: number; playlists: number; sources: string[] }>;
+        unified: { tracks: number; shared: number };
+      }>,
     // Aggregati per i grafici della panoramica (istogramma BPM, copertura key).
-    distribution: () =>
-      ipcRenderer.invoke('library:distribution') as Promise<{
+    distribution: (sources?: string[] | null) =>
+      ipcRenderer.invoke('library:distribution', sources) as Promise<{
         bpm: { bucket: number; count: number }[];
         camelot: { camelot: string; count: number }[];
         noKey: number;
@@ -252,7 +262,9 @@ const api = {
       ipcRenderer.invoke('siae:export', sessionId, outPath, venue, eventDate)
   },
   health: {
-    get: () => ipcRenderer.invoke('health:get')
+    /* `sources` = librerie della sessione di lavoro; assente = vista unificata,
+       dove ogni brano reale conta una volta sola. */
+    get: (sources?: string[] | null) => ipcRenderer.invoke('health:get', sources)
   },
   setbuilder: {
     build: (startTrackId: number, length: number, curve: 'up' | 'flat' | 'down') =>

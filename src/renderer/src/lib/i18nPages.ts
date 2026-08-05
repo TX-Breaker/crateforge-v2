@@ -23,6 +23,27 @@ const it = {
     deselectAll: 'Deseleziona'
   },
 
+  session: {
+    title: 'Su quale libreria lavori adesso?',
+    subtitle:
+      'CrateForge tiene le librerie dei tuoi software separate. Scegli da dove leggere e dove scrivere: la scelta vale per questa sessione e la puoi cambiare quando vuoi dalla barra in alto.',
+    scopeLabel: 'Leggi da',
+    allTitle: 'Tutte insieme',
+    allDesc:
+      'Le librerie restano separate nell\'archivio; qui le vedi come un elenco solo.',
+    allDescShared:
+      'Un brano presente in più software conta una volta sola: {shared} sono in comune.',
+    softwareDesc: 'Solo questa libreria: numeri, elenchi e operazioni restano dentro.',
+    notImported: 'Non ancora importata. Puoi farlo da Converti.',
+    targetLabel: 'Scrivi verso',
+    targetDesc:
+      'Dove finiranno export e scritture. Puoi anche decidere di volta in volta, operazione per operazione.',
+    targetAsk: 'Decido al momento',
+    start: 'Inizia',
+    from: 'da',
+    to: 'a',
+    changeHint: 'Cambia libreria di lavoro'
+  },
   tabs: {
     orphans: 'Orfani',
     duplicates: 'Duplicati',
@@ -938,6 +959,26 @@ const en: PageDict = {
     deselectAll: 'Deselect'
   },
 
+  session: {
+    title: 'Which library are you working on?',
+    subtitle:
+      'CrateForge keeps your software libraries separate. Choose where to read from and where to write to: the choice holds for this session and you can change it any time from the bar at the top.',
+    scopeLabel: 'Read from',
+    allTitle: 'All together',
+    allDesc: 'Libraries stay separate in the archive; here you see them as one list.',
+    allDescShared:
+      'A track present in several apps counts once: {shared} are shared.',
+    softwareDesc: 'This library only: figures, lists and operations stay inside it.',
+    notImported: 'Not imported yet. You can do it from Convert.',
+    targetLabel: 'Write to',
+    targetDesc:
+      'Where exports and writes will land. You can also decide per operation, as you go.',
+    targetAsk: 'Decide as I go',
+    start: 'Start',
+    from: 'from',
+    to: 'to',
+    changeHint: 'Change working library'
+  },
   tabs: {
     orphans: 'Orphans',
     duplicates: 'Duplicates',

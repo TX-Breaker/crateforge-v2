@@ -64,6 +64,11 @@ export interface PageQuery {
   noBpm?: boolean;
   /** solo brani senza genere */
   noGenre?: boolean;
+  /**
+   * Librerie della sessione di lavoro. Assente o vuoto = vista unificata, cioè
+   * un brano reale per riga invece di una riga per software.
+   */
+  sources?: string[] | null;
   /** una sola tonalità Camelot, es. "8A" — usato dai grafici della panoramica */
   camelot?: string;
   /** intervallo di tempo, estremi inclusi in basso ed esclusi in alto */
@@ -72,6 +77,33 @@ export interface PageQuery {
 }
 
 /** Lettura paginata: la UI non riceve mai l'intera libreria in un colpo solo. */
+/**
+ * Filtro della SESSIONE DI LAVORO, in una riga di SQL.
+ *
+ * Due comportamenti, non uno:
+ *  - sorgenti indicate → si guarda solo dentro quelle librerie, doppioni
+ *    compresi: chi lavora su Traktor vuole vedere la SUA libreria com'è;
+ *  - nessuna sorgente (vista unificata) → una riga per BRANO REALE, cioè i soli
+ *    canonici. Senza, «tutte insieme» mostrerebbe la stessa canzone una volta
+ *    per software e ogni totale sarebbe gonfiato.
+ */
+export function scopeClause(
+  sources: string[] | null | undefined,
+  opts: { prefix?: string; tag?: string } = {}
+): { sql: string; params: Record<string, string> } {
+  const col = opts.prefix ?? '';
+  const tag = opts.tag ?? 'sc';
+  if (!sources || sources.length === 0) {
+    return { sql: `${col}canonical_id IS NULL`, params: {} };
+  }
+  const params: Record<string, string> = {};
+  sources.forEach((s, i) => {
+    params[`${tag}${i}`] = s;
+  });
+  const names = sources.map((_, i) => `:${tag}${i}`).join(',');
+  return { sql: `${col}source IN (${names})`, params };
+}
+
 export function getTracksPage(db: BetterSqlite3.Database, q: PageQuery): { rows: TrackRow[]; total: number } {
   const where: string[] = [];
   const params: Record<string, unknown> = {};
@@ -91,6 +123,9 @@ export function getTracksPage(db: BetterSqlite3.Database, q: PageQuery): { rows:
      sola pagina scaricata mostrerebbero buchi in mezzo all'elenco e un totale
      che conta righe mai filtrate. Il vuoto include sia NULL sia stringa vuota,
      perche' un import puo' produrre l'uno o l'altra. */
+  const scope = scopeClause(q.sources);
+  where.push(scope.sql);
+  Object.assign(params, scope.params);
   if (q.noKey) where.push(`(camelot IS NULL OR camelot = '')`);
   if (q.noBpm) where.push(`(bpm IS NULL OR bpm = 0)`);
   if (q.noGenre) where.push(`(genre IS NULL OR genre = '')`);
@@ -192,35 +227,44 @@ export interface LibraryDistribution {
  * Aggregati per la panoramica: distribuzione BPM e copertura tonalità.
  * Sono conteggi calcolati in SQL — non passa mai la libreria sul bridge IPC.
  */
-export function getLibraryDistribution(db: BetterSqlite3.Database): LibraryDistribution {
+export function getLibraryDistribution(
+  db: BetterSqlite3.Database,
+  sources?: string[] | null
+): LibraryDistribution {
+  /* I grafici della panoramica devono raccontare la libreria SCELTA: se la
+     sessione è su Traktor, un istogramma che somma anche Rekordbox risponde a
+     una domanda che nessuno ha fatto. */
+  const sc = scopeClause(sources);
   const bpm = db
     .prepare(
       `SELECT CAST(bpm / 5 AS INTEGER) * 5 AS bucket, COUNT(*) AS count
          FROM tracks
-        WHERE bpm IS NOT NULL AND bpm > 40 AND bpm < 220
+        WHERE bpm IS NOT NULL AND bpm > 40 AND bpm < 220 AND ${sc.sql}
         GROUP BY bucket
         ORDER BY bucket`
     )
-    .all() as { bucket: number; count: number }[];
+    .all(sc.params) as { bucket: number; count: number }[];
 
   const camelot = db
     .prepare(
       `SELECT camelot, COUNT(*) AS count
          FROM tracks
-        WHERE camelot IS NOT NULL AND camelot <> ''
+        WHERE camelot IS NOT NULL AND camelot <> '' AND ${sc.sql}
         GROUP BY camelot`
     )
-    .all() as { camelot: string; count: number }[];
+    .all(sc.params) as { camelot: string; count: number }[];
 
   const noKey = (
     db
-      .prepare(`SELECT COUNT(*) AS c FROM tracks WHERE camelot IS NULL OR camelot = ''`)
-      .get() as { c: number }
+      .prepare(
+        `SELECT COUNT(*) AS c FROM tracks WHERE (camelot IS NULL OR camelot = '') AND ${sc.sql}`
+      )
+      .get(sc.params) as { c: number }
   ).c;
 
   const bounds = db
-    .prepare(`SELECT MIN(created_at) AS first, MAX(created_at) AS last FROM tracks`)
-    .get() as { first: string | null; last: string | null };
+    .prepare(`SELECT MIN(created_at) AS first, MAX(created_at) AS last FROM tracks WHERE ${sc.sql}`)
+    .get(sc.params) as { first: string | null; last: string | null };
 
   return { bpm, camelot, noKey, firstImport: bounds.first, lastImport: bounds.last };
 }

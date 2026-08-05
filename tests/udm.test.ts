@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import Database from 'better-sqlite3';
 import { migrate, getSchemaVersion, SCHEMA_VERSION } from '@core/schema';
 import { getSetting, getTracksPage, logOperation, setSetting } from '@core/udm';
+import { computeHealth } from '@core/health';
+import { linkCanonicalTracks } from '@core/identity';
 
 /** UDM in chiaro (§11): il confine di decrittazione non entra mai qui. */
 function memDb() {
@@ -160,5 +162,55 @@ describe('getSchemaVersion validazione', () => {
     const db = memDb();
     db.prepare(`UPDATE meta SET value = 'boh' WHERE key = 'schema_version'`).run();
     expect(() => getSchemaVersion(db)).toThrow(/schema_version/);
+  });
+});
+
+describe('sessione di lavoro: da quale libreria arrivano i numeri', () => {
+  /* Il caso reale dell'utente: la stessa canzone importata da due software.
+     Su una libreria sola deve comparire com'è nel software; nella vista
+     unificata una volta sola, altrimenti ogni totale è gonfiato. */
+  function twoLibraries() {
+    const db = memDb();
+    const ins = db.prepare(
+      `INSERT INTO tracks (source, source_id, title, path, camelot, bpm)
+       VALUES (?, ?, ?, ?, ?, ?)`
+    );
+    ins.run('masterdb', 'r1', 'Condivisa', 'C:/M/a.mp3', '8A', 128);
+    ins.run('traktor', 't1', 'Condivisa', 'C:/M/a.mp3', '8A', 128);
+    ins.run('traktor', 't2', 'Solo Traktor', 'C:/M/b.mp3', '9A', 130);
+    ins.run('virtualdj', 'v1', 'Solo VDJ', 'C:/M/c.mp3', null, null);
+    linkCanonicalTracks(db);
+    return db;
+  }
+
+  it('una sola libreria: si vede quella, com’è', () => {
+    const db = twoLibraries();
+    expect(getTracksPage(db, { offset: 0, limit: 50, sources: ['traktor'] }).total).toBe(2);
+    expect(getTracksPage(db, { offset: 0, limit: 50, sources: ['masterdb', 'xml'] }).total).toBe(1);
+    expect(getTracksPage(db, { offset: 0, limit: 50, sources: ['virtualdj'] }).total).toBe(1);
+  });
+
+  it('vista unificata: un brano reale per riga, non uno per software', () => {
+    const db = twoLibraries();
+    // Quattro righe nell'archivio, tre brani veri.
+    expect((db.prepare('SELECT COUNT(*) c FROM tracks').get() as { c: number }).c).toBe(4);
+    expect(getTracksPage(db, { offset: 0, limit: 50 }).total).toBe(3);
+  });
+
+  it('i filtri continuano a valere dentro la sessione', () => {
+    const db = twoLibraries();
+    // "senza tonalità" esiste solo in VirtualDJ: su Traktor il conto è zero.
+    expect(getTracksPage(db, { offset: 0, limit: 50, sources: ['traktor'], noKey: true }).total).toBe(0);
+    expect(
+      getTracksPage(db, { offset: 0, limit: 50, sources: ['virtualdj'], noKey: true }).total
+    ).toBe(1);
+  });
+
+  it('la diagnosi conta la libreria scelta, non la somma', () => {
+    const db = twoLibraries();
+    expect(computeHealth(db, ['traktor']).total).toBe(2);
+    expect(computeHealth(db, ['virtualdj']).missingKey).toBe(1);
+    // Unificata: tre brani reali, non quattro righe.
+    expect(computeHealth(db).total).toBe(3);
   });
 });

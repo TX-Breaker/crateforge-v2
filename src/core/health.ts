@@ -1,4 +1,5 @@
 import type BetterSqlite3 from 'better-sqlite3';
+import { scopeClause } from './udm';
 
 /**
  * "Salute libreria": pagella READ-ONLY della libreria nell'UDM.
@@ -22,12 +23,23 @@ export interface HealthReport {
   score: number;
 }
 
-function count(db: BetterSqlite3.Database, sql: string): number {
-  return (db.prepare(sql).get() as { c: number }).c;
+function count(db: BetterSqlite3.Database, sql: string, params: Record<string, string>): number {
+  return (db.prepare(sql).get(params) as { c: number }).c;
 }
 
-export function computeHealth(db: BetterSqlite3.Database): HealthReport {
-  const total = count(db, `SELECT COUNT(*) c FROM tracks`);
+/**
+ * `sources` limita la pagella alla libreria della sessione di lavoro. Senza
+ * filtro la diagnosi conta i brani reali una volta sola (vista unificata):
+ * altrimenti un brano presente in tre software peserebbe tre volte sul
+ * punteggio, e la pagella direbbe una cosa falsa su una libreria sana.
+ */
+export function computeHealth(
+  db: BetterSqlite3.Database,
+  sources?: string[] | null
+): HealthReport {
+  const sc = scopeClause(sources);
+  const P = sc.params;
+  const total = count(db, `SELECT COUNT(*) c FROM tracks WHERE ${sc.sql}`, P);
   const empty: HealthReport = {
     total: 0, missingBpm: 0, missingKey: 0, missingGenre: 0, missingYear: 0,
     needsReview: 0, withoutHotCues: 0, duplicateGroups: 0, duplicateTracks: 0,
@@ -35,32 +47,48 @@ export function computeHealth(db: BetterSqlite3.Database): HealthReport {
   };
   if (total === 0) return empty;
 
-  const missingBpm = count(db, `SELECT COUNT(*) c FROM tracks WHERE bpm IS NULL OR bpm <= 0`);
+  const missingBpm = count(
+    db,
+    `SELECT COUNT(*) c FROM tracks WHERE (bpm IS NULL OR bpm <= 0) AND ${sc.sql}`,
+    P
+  );
   const missingKey = count(
     db,
-    `SELECT COUNT(*) c FROM tracks WHERE camelot IS NULL OR TRIM(camelot) = ''`
+    `SELECT COUNT(*) c FROM tracks WHERE (camelot IS NULL OR TRIM(camelot) = '') AND ${sc.sql}`,
+    P
   );
   const missingGenre = count(
     db,
-    `SELECT COUNT(*) c FROM tracks WHERE genre IS NULL OR TRIM(genre) = ''`
+    `SELECT COUNT(*) c FROM tracks WHERE (genre IS NULL OR TRIM(genre) = '') AND ${sc.sql}`,
+    P
   );
-  const missingYear = count(db, `SELECT COUNT(*) c FROM tracks WHERE year IS NULL`);
-  const needsReview = count(db, `SELECT COUNT(*) c FROM tracks WHERE needs_review = 1`);
+  const missingYear = count(db, `SELECT COUNT(*) c FROM tracks WHERE year IS NULL AND ${sc.sql}`, P);
+  const needsReview = count(
+    db,
+    `SELECT COUNT(*) c FROM tracks WHERE needs_review = 1 AND ${sc.sql}`,
+    P
+  );
   const withoutHotCues = count(
     db,
     `SELECT COUNT(*) c FROM tracks t
-     WHERE NOT EXISTS (SELECT 1 FROM cues WHERE track_id = t.id AND cue_type = 'hot')`
+     WHERE NOT EXISTS (SELECT 1 FROM cues WHERE track_id = t.id AND cue_type = 'hot')
+       AND ${scopeClause(sources, { prefix: 't.' }).sql}`,
+    P
   );
   const dup = db
     .prepare(
       `SELECT COUNT(*) AS groups, COALESCE(SUM(n), 0) AS tracks FROM (
          SELECT COUNT(*) AS n FROM tracks
-         WHERE acoustic_id IS NOT NULL
+         WHERE acoustic_id IS NOT NULL AND ${sc.sql}
          GROUP BY acoustic_id HAVING COUNT(*) > 1
        )`
     )
-    .get() as { groups: number; tracks: number };
-  const fingerprinted = count(db, `SELECT COUNT(*) c FROM tracks WHERE acoustic_id IS NOT NULL`);
+    .get(P) as { groups: number; tracks: number };
+  const fingerprinted = count(
+    db,
+    `SELECT COUNT(*) c FROM tracks WHERE acoustic_id IS NOT NULL AND ${sc.sql}`,
+    P
+  );
 
   // Copie in eccesso = tracce nei gruppi meno un rappresentante per gruppo:
   // una libreria dove ogni brano ha UNA copia non deve azzerare la voce.

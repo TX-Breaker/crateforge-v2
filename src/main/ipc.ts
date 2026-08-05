@@ -2,6 +2,7 @@ import { BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import type BetterSqlite3 from 'better-sqlite3';
 import { randomUUID } from 'crypto';
 import {
+  scopeClause,
   getLibraryDistribution,
   getPlaylistTracksPage,
   getSetting,
@@ -432,20 +433,92 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
       Math.max(1, Math.min(Math.floor(Number(limit)) || 50, 200))
     )
   );
-  ipcMain.handle('library:stats', () => ({
-    tracks: (db.prepare('SELECT COUNT(*) c FROM tracks').get() as { c: number }).c,
-    playlists: (db.prepare('SELECT COUNT(*) c FROM playlists').get() as { c: number }).c,
+  /* Tutti i numeri che l'utente legge in alto e in panoramica rispondono alla
+     libreria SCELTA per la sessione: mostrare la somma di librerie diverse è
+     esattamente ciò che rendeva impossibile capire dove si stava lavorando. */
+  ipcMain.handle('library:stats', (_e, sources?: string[] | null) => {
+    const sc = scopeClause(sources);
+    return {
+    tracks: (
+      db.prepare(`SELECT COUNT(*) c FROM tracks WHERE ${sc.sql}`).get(sc.params) as { c: number }
+    ).c,
+    playlists: (
+      db.prepare(
+        sources && sources.length
+          ? `SELECT COUNT(*) c FROM playlists WHERE source IN (${sources
+              .map(() => '?')
+              .join(',')})`
+          : 'SELECT COUNT(*) c FROM playlists'
+      ).get(...(sources && sources.length ? sources : [])) as { c: number }
+    ).c,
     needsReview: (
-      db.prepare('SELECT COUNT(*) c FROM tracks WHERE needs_review = 1').get() as { c: number }
+      db
+        .prepare(`SELECT COUNT(*) c FROM tracks WHERE needs_review = 1 AND ${sc.sql}`)
+        .get(sc.params) as { c: number }
     ).c,
     lastIngest: db
       .prepare('SELECT * FROM ingest_runs ORDER BY id DESC LIMIT 1')
       .get()
-  }));
+    };
+  });
+
+  /**
+   * Che cosa c'è nell'archivio, software per software.
+   *
+   * Serve alla scelta di inizio sessione: l'utente non può decidere su quale
+   * libreria lavorare se non sa quali ci sono e quanto contengono. `unified`
+   * conta i BRANI REALI (identità canonica), non le righe: è il numero che
+   * l'utente vedrà davvero scegliendo la vista unificata, ed è più piccolo
+   * della somma proprio perché i doppioni fra software vengono uniti.
+   */
+  ipcMain.handle('library:sources', () => {
+    const rows = db
+      .prepare(`SELECT source, COUNT(*) c FROM tracks GROUP BY source`)
+      .all() as { source: string; c: number }[];
+    const pls = db
+      .prepare(`SELECT source, COUNT(*) c FROM playlists GROUP BY source`)
+      .all() as { source: string; c: number }[];
+
+    const MAP: Record<string, string[]> = {
+      rekordbox: ['masterdb', 'xml'],
+      traktor: ['traktor'],
+      virtualdj: ['virtualdj'],
+      serato: ['serato'],
+      engine: ['engine']
+    };
+    const bySoftware: Record<string, { tracks: number; playlists: number; sources: string[] }> = {};
+    for (const [sw, sources] of Object.entries(MAP)) {
+      bySoftware[sw] = {
+        tracks: rows.filter((r) => sources.includes(r.source)).reduce((n, r) => n + r.c, 0),
+        playlists: pls.filter((r) => sources.includes(r.source)).reduce((n, r) => n + r.c, 0),
+        sources
+      };
+    }
+
+    const unifiedTracks = (
+      db
+        .prepare(`SELECT COUNT(DISTINCT COALESCE(canonical_id, id)) c FROM tracks`)
+        .get() as { c: number }
+    ).c;
+    const shared = (
+      db
+        .prepare(
+          `SELECT COUNT(*) c FROM (
+             SELECT COALESCE(canonical_id, id) k FROM tracks
+             GROUP BY k HAVING COUNT(DISTINCT source) > 1
+           )`
+        )
+        .get() as { c: number }
+    ).c;
+
+    return { bySoftware, unified: { tracks: unifiedTracks, shared } };
+  });
 
   // Aggregati per la panoramica (istogramma BPM, copertura tonalità): conteggi
   // calcolati in SQL, mai la libreria intera attraverso il bridge.
-  ipcMain.handle('library:distribution', () => getLibraryDistribution(db));
+  ipcMain.handle('library:distribution', (_e, sources?: string[] | null) =>
+    getLibraryDistribution(db, sources)
+  );
 
   // ---- ingestion XML (percorso pure-Node, modalità solo-XML) ----
   ipcMain.handle('library:ingestXml', async (_e, xmlPath: string) => {
@@ -1401,7 +1474,7 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
   });
 
   // ---- Salute libreria (read-only, modalità Semplice) ----
-  ipcMain.handle('health:get', () => computeHealth(db));
+  ipcMain.handle('health:get', (_e, sources?: string[] | null) => computeHealth(db, sources));
 
   // ---- Set Builder (Esperto, read-only; export = solito XML manuale) ----
   ipcMain.handle(
