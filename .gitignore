@@ -20,3 +20,12 @@ tests/fixtures/master.db
 __pycache__/
 python-sidecar/__pycache__/
 .ai-state/
+
+# Documentazione di lavoro e risorse usate per costruire il software:
+# restano in locale, non fanno parte di ciò che si distribuisce.
+# Unica eccezione: il README della root.
+*.md
+*.MD
+!README.md
+docs/
+CrateForge*Design System.zip
