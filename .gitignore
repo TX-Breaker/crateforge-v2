@@ -26,6 +26,6 @@ python-sidecar/__pycache__/
 # Unica eccezione: il README della root.
 *.md
 *.MD
-!README.md
+!/README.md
 docs/
 CrateForge*Design System.zip
