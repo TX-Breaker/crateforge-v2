@@ -74,6 +74,13 @@ export interface ResolvedCue {
   label: string | null;
   /** da quale libreria arriva: serve a spiegare l'esito, non al formato */
   from: 'origin' | 'destination';
+  /**
+   * Sacca dei campi non normalizzati del punto, trasportata così com'è.
+   * Viaggia con il cue perché è ciò che permette al writer di destinazione di
+   * riconsegnare al proprio formato quello che ne aveva ricevuto — per esempio
+   * il numero di slot originale di un cue Rekordbox, che altrove non esiste.
+   */
+  data?: string;
 }
 
 export interface ResolveResult {
@@ -104,7 +111,8 @@ const toResolved = (c: CueRow, from: 'origin' | 'destination'): ResolvedCue => (
   length_ms: c.length_ms,
   color: c.color,
   label: c.label,
-  from
+  from,
+  data: c.data
 });
 
 /**

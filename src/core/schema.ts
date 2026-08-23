@@ -14,7 +14,7 @@ import type BetterSqlite3 from 'better-sqlite3';
  *    I due percorsi non girano mai in concorrenza: Node serializza i job.
  *  - settings / jobs / oplog → SOLO Node.
  */
-export const SCHEMA_VERSION = 8;
+export const SCHEMA_VERSION = 9;
 
 const MIGRATIONS: Record<number, string> = {
   1: `
@@ -272,6 +272,36 @@ const MIGRATIONS: Record<number, string> = {
    * "fuori orario". */
   8: `
     ALTER TABLE play_history ADD COLUMN played_at TEXT;
+  `,
+  /* Sacca dei campi non normalizzati.
+   *
+   * Ogni formato porta con sé dati che nessuna colonna dell'UDM accoglie:
+   * `thirdPartySourceId` di Engine, gli attributi di `<Scan>` che VirtualDJ non
+   * dichiara, il numero di slot originale di un cue Rekordbox, la coppia
+   * `(location_id, portable_id)` con cui Serato 4 identifica un asset. Finora
+   * quei valori venivano letti e buttati via, perché non c'era dove metterli:
+   * una conversione X → UDM → X li perdeva in silenzio, e il silenzio è la
+   * parte peggiore — l'utente non ha modo di accorgersene.
+   *
+   * `data` è un oggetto JSON con una chiave per formato:
+   *
+   *   {"serato4": {"locationId": 1, "portableId": "…"}, "engine": {…}}
+   *
+   * La convenzione è obbligatoria: chi scrive dentro `data` tocca SOLO la
+   * propria chiave di primo livello e lascia intatte le altre. Senza, due
+   * adapter che scrivono lo stesso brano si cancellano i dati a vicenda.
+   *
+   * Perché JSON e non colonne: le colonne servono a ciò su cui si interroga o
+   * si ordina. Qui si tratta di valori che si conservano per riconsegnarli
+   * identici al formato da cui vengono — normalizzarli significherebbe
+   * aggiungere una colonna per ogni software, e ricominciare al successivo.
+   *
+   * Il default `'{}'` vale anche per le righe già esistenti, che quindi non
+   * vengono toccate: nessuna riscrittura, nessuna perdita.
+   */
+  9: `
+    ALTER TABLE tracks ADD COLUMN data TEXT NOT NULL DEFAULT '{}';
+    ALTER TABLE cues   ADD COLUMN data TEXT NOT NULL DEFAULT '{}';
   `
 };
 

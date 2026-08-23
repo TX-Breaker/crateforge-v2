@@ -2,6 +2,7 @@ import type BetterSqlite3 from 'better-sqlite3';
 import { toCamelot } from './camelot';
 import { extractVersionLabel } from './versionRegex';
 import { hasSuspectEncoding } from './xmlCollection';
+import { mergeFormatData, type FormatNamespace, type FormatPayload } from './formatData';
 
 /**
  * Modello normalizzato per l'import da un software DJ diverso da Rekordbox
@@ -20,6 +21,11 @@ export interface NormCue {
   lengthMs: number | null;
   color: string | null;
   label: string | null;
+  /**
+   * Campi del punto che l'UDM non normalizza (per esempio il numero di slot
+   * originale). Finiscono in `cues.data` sotto la chiave del formato.
+   */
+  formatData?: FormatPayload;
 }
 
 export interface NormTrack {
@@ -42,6 +48,11 @@ export interface NormTrack {
   trackColor?: string | null;
   beatgridBpm?: number | null;
   beatgridAnchorMs?: number | null;
+  /**
+   * Campi che questo formato porta e l'UDM non normalizza. Finiscono in
+   * `tracks.data` sotto la chiave del formato, senza toccare quelle degli altri.
+   */
+  formatData?: FormatPayload;
 }
 
 export interface NormPlaylist {
@@ -55,6 +66,13 @@ export interface NormPlaylist {
 
 export interface ForeignLibrary {
   source: ForeignSource;
+  /**
+   * Chiave sotto cui finiscono i `formatData` di questa libreria. Di norma
+   * coincide con `source`; serve separata perché una stessa `source` può avere
+   * più dialetti — Serato ≤3 e Serato 4 sono formati diversi con la stessa
+   * origine logica, e i loro campi non si devono sovrascrivere.
+   */
+  formatNamespace?: FormatNamespace;
   tracks: NormTrack[];
   playlists: NormPlaylist[];
   /** avvisi non fatali dal parsing (es. cue ignorati, campi mancanti) */
@@ -117,9 +135,16 @@ export function importForeignLibrary(
   const getId = db.prepare(`SELECT id FROM tracks WHERE source = ? AND source_id = ?`);
   const deleteCues = db.prepare(`DELETE FROM cues WHERE track_id = ?`);
   const insertCue = db.prepare(`
-    INSERT INTO cues (track_id, cue_type, cue_index, position_ms, length_ms, color, label)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO cues (track_id, cue_type, cue_index, position_ms, length_ms, color, label, data)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `);
+
+  /* Sacca dei campi non normalizzati: si legge quella già presente e si
+     sostituisce SOLO la chiave di questo formato. Il re-import di Traktor non
+     deve cancellare ciò che ha scritto quello di Engine sullo stesso brano. */
+  const ns: FormatNamespace = lib.formatNamespace ?? (lib.source as FormatNamespace);
+  const getData = db.prepare(`SELECT data FROM tracks WHERE source = ? AND source_id = ?`);
+  const setData = db.prepare(`UPDATE tracks SET data = ? WHERE id = ?`);
 
   const idBySourceId = new Map<string, number>();
   const BATCH = 500;
@@ -133,6 +158,11 @@ export function importForeignLibrary(
         }
         const tagIssue = !t.title || !t.artist;
         const badEncoding = hasSuspectEncoding(t.title) || hasSuspectEncoding(t.artist);
+        /* Va letta PRIMA dell'insert: dopo, la riga esiste comunque e non si
+           distinguerebbe più una sacca preesistente da una appena creata. */
+        const previousData = t.formatData
+          ? ((getData.get(lib.source, t.sourceId) as { data?: string } | undefined)?.data ?? '{}')
+          : null;
         insertTrack.run({
           source: lib.source,
           source_id: t.sourceId,
@@ -166,10 +196,26 @@ export function importForeignLibrary(
         idBySourceId.set(t.sourceId, row.id);
         result.tracks++;
 
+        if (t.formatData) {
+          setData.run(mergeFormatData(previousData, ns, t.formatData), row.id);
+        }
+
         deleteCues.run(row.id);
         for (const c of t.cues) {
           if (Number.isNaN(c.positionMs)) continue;
-          insertCue.run(row.id, c.type, c.index, c.positionMs, c.lengthMs, c.color, c.label);
+          /* I cue vengono ricreati a ogni import, quindi qui non c'è una sacca
+             precedente da preservare: si parte da vuoto. */
+          const cueData = c.formatData ? mergeFormatData('{}', ns, c.formatData) : '{}';
+          insertCue.run(
+            row.id,
+            c.type,
+            c.index,
+            c.positionMs,
+            c.lengthMs,
+            c.color,
+            c.label,
+            cueData
+          );
           result.cues++;
         }
       }

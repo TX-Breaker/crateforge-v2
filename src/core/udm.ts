@@ -3,8 +3,15 @@ import type BetterSqlite3 from 'better-sqlite3';
 import { migrate } from './schema';
 import type { ForeignSource } from './foreignImport';
 
-/** Tutti i valori possibili di tracks.source (dal v4 non più vincolati in DB). */
-export type TrackSource = 'masterdb' | 'xml' | ForeignSource;
+/**
+ * Tutti i valori possibili di tracks.source (dal v4 non più vincolati in DB).
+ *
+ * `rekordbox-usb` è distinto da `masterdb` di proposito: sono due database
+ * diversi, cifrati con due chiavi diverse, e la stessa traccia può stare in
+ * entrambi con id differenti. Fonderli sotto un'unica sorgente renderebbe
+ * impossibile dire da dove viene un brano — e quindi dove riscriverlo.
+ */
+export type TrackSource = 'masterdb' | 'xml' | 'rekordbox-usb' | ForeignSource;
 
 /**
  * Apre (creandolo se manca) il database UDM in chiaro.
@@ -51,6 +58,13 @@ export interface TrackRow {
   track_color: string | null;
   beatgrid_bpm: number | null;
   beatgrid_anchor_ms: number | null;
+  /**
+   * Campi che il formato di origine porta e l'UDM non normalizza, in JSON con
+   * una chiave per formato. Si legge e si scrive SOLO tramite `core/sidecarData`:
+   * toccarlo a mano significa prima o poi sovrascrivere la chiave di un altro
+   * adapter. Vedi migrazione 9 in `core/schema.ts`.
+   */
+  data: string;
 }
 
 export interface PageQuery {

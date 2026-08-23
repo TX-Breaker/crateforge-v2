@@ -1147,6 +1147,65 @@ def _serato_text(payload: bytes) -> str | None:
         return None
 
 
+# ---------------------------------------------------------------------------
+# Tipizzazione dei campi TLV: la regola sta nella PRIMA LETTERA del codice
+# ---------------------------------------------------------------------------
+#
+# Serato non ha una tabella "tag → tipo". Il parser guarda `code[0]`:
+#
+#   t, p  → stringa UTF-16BE (p è un percorso, ma il codec è lo stesso)
+#   s     → uint16 big-endian
+#   b     → uint8
+#   u     → uint32 big-endian senza segno
+#   altro → uint32 big-endian
+#
+# Da qui si deriva il tipo di QUALUNQUE campo, anche di uno mai incontrato.
+# Prima di questa funzione ogni payload veniva decodificato come UTF-16BE:
+# corretto per i campi di testo che leggiamo (`tsng`, `tart`, `pfil`…), ma
+# `ufsb` (flag) o `tsiz` sarebbero diventati stringhe di caratteri arbitrari.
+# Serve per il round-trip: un campo che non sappiamo interpretare va comunque
+# riscritto identico, e per riscriverlo bisogna sapere che cos'è.
+#
+# ⚠ Un buffer più corto del tipo NON è un errore: si restituisce 0. È il
+# comportamento osservato, e i file `_Serato_` si corrompono davvero (rimozione
+# a caldo di una chiavetta). Sollevare qui renderebbe illeggibile un database
+# che Serato apre senza fiatare.
+
+_SERATO_INT_WIDTH = {"s": 2, "b": 1, "u": 4}
+
+
+def _serato_value(tag: str, payload: bytes):
+    """Valore tipizzato di un campo TLV, dalla prima lettera del four-char code."""
+    first = tag[:1]
+    if first in ("t", "p"):
+        return _serato_text(payload)
+    width = _SERATO_INT_WIDTH.get(first, 4)
+    if len(payload) < width:
+        return 0
+    return int.from_bytes(payload[:width], "big")
+
+
+def _serato_encode_value(tag: str, value) -> bytes:
+    """Payload di un campo TLV, con lo stesso criterio della lettura.
+
+    ⚠ Asimmetria voluta rispetto a `_serato_value`: in lettura `u` cade nel ramo
+    di default (uint32 come tutti gli altri), in scrittura ha un ramo proprio che
+    satura a 0 i valori negativi. È così nel formato: un `u` negativo non esiste.
+    """
+    first = tag[:1]
+    if first in ("t", "p"):
+        return str(value or "").encode("utf-16-be")
+    width = _SERATO_INT_WIDTH.get(first, 4)
+    try:
+        n = int(value)
+    except (TypeError, ValueError):
+        n = 0
+    if first == "u":
+        n = max(0, n)
+    n = max(0, min(n, (1 << (8 * width)) - 1))
+    return n.to_bytes(width, "big")
+
+
 def parse_serato_markers2(geob_data: bytes):
     """GEOB 'Serato Markers2' → lista tuple (type,index,posMs,lenMs,color,label).
     Formato: 2 byte versione + base64 (con newline) del corpo; il corpo ha entry
@@ -1406,6 +1465,115 @@ def _serato_field(tag: str, payload: bytes) -> bytes:
     return tag.encode("ascii") + _s.pack(">I", len(payload)) + payload
 
 
+_CRATE_ORDER_FILENAME = "neworder.pref"
+_ORDER_BEGIN = "[begin record]"
+_ORDER_CRATE = "[crate]"
+_ORDER_END = "[end record]"
+
+
+def _u16(s: str) -> bytes:
+    return s.encode("utf-16-be")
+
+
+def _serato_crate_order_add(serato_dir: str, names: list[str], backup_dir: str | None = None) -> dict:
+    """Registra dei crate in `neworder.pref`, l'ordine dell'albero di Serato.
+
+    ⚠ Senza questo passaggio un crate scritto ESISTE come file ma non compare
+    nell'albero di Serato: il file d'ordine è la lista di ciò che Serato mostra.
+    È la ragione per cui l'export dei crate, finora, sembrava non funzionare.
+
+    Il formato NON è TLV: sono righe separate da `\\n`, con i marcatori
+    `[begin record]`, `[crate]`, `[end record]` codificati in UTF-16BE e
+    terminati da un byte nullo.
+
+    ⚠ Aggiornamento INCREMENTALE e basta: si legge il file esistente, si tolgono
+    le righe dei crate che stiamo per registrare (per non duplicarle) e si
+    reinseriscono PRIMA di `[end record]`. Tutto il resto resta byte per byte
+    com'era — compresi eventuali marcatori che non conosciamo.
+
+    Se `neworder.pref` non esiste NON viene creato: il file governa cosa Serato
+    mostra, e generarne uno da zero significherebbe dichiarare noi quale sia
+    l'intero albero dell'utente sulla base di un formato dedotto. Si segnala e
+    si lascia fare a Serato, che lo ricrea da sé.
+    """
+    path = os.path.join(serato_dir, _CRATE_ORDER_FILENAME)
+    if not os.path.exists(path):
+        return {"updated": False, "reason": "missing", "added": 0}
+
+    try:
+        with open(path, "rb") as f:
+            raw = f.read()
+    except OSError as exc:
+        return {"updated": False, "reason": f"unreadable: {exc}", "added": 0}
+
+    # Copia verificata per hash PRIMA di toccare l'originale: se il confronto
+    # non torna, non si scrive affatto. Stessa regola dei tag audio.
+    if backup_dir:
+        try:
+            os.makedirs(backup_dir, exist_ok=True)
+            copy = os.path.join(backup_dir, _CRATE_ORDER_FILENAME)
+            with open(copy, "wb") as f:
+                f.write(raw)
+                f.flush()
+                os.fsync(f.fileno())
+            if _sha256(copy) != _sha256(path):
+                return {"updated": False, "reason": "backup mismatch", "added": 0}
+            _backup_manifest_append(
+                backup_dir, {"original": path, "backup": copy, "sha256": _sha256(path)}
+            )
+        except OSError as exc:
+            return {"updated": False, "reason": f"backup failed: {exc}", "added": 0}
+
+    # Righe: il separatore è un LF *grezzo* (0x0A), non un LF in UTF-16.
+    lines = raw.split(b"\n")
+
+    crate_prefix = _u16(_ORDER_CRATE)
+    end_marker = _u16(_ORDER_END)
+
+    def is_crate_named(line: bytes, name: str) -> bool:
+        # ⚠ Confronto ESATTO, non `rstrip(b"\x00")`. In UTF-16BE metà dei byte
+        # sono nulli: un nome che finisce con un carattere tipo U+0100 termina
+        # davvero con 0x00, e uno strip avido se lo mangerebbe facendo fallire
+        # il riconoscimento — con il risultato di duplicare la riga invece di
+        # sostituirla.
+        if not line.startswith(crate_prefix):
+            return False
+        body = line[len(crate_prefix):]
+        target = _u16(name)
+        return body == target or body == target + b"\x00"
+
+    wanted = [n for n in names if n]
+    kept = [ln for ln in lines if not any(is_crate_named(ln, n) for n in wanted)]
+
+    new_lines = [crate_prefix + _u16(n) + b"\x00" for n in wanted]
+
+    end_at = next((i for i, ln in enumerate(kept) if ln.startswith(end_marker)), None)
+    if end_at is None:
+        # Nessun [end record]: si accoda in fondo, saltando l'eventuale riga
+        # vuota finale prodotta dallo split.
+        tail = 1 if kept and kept[-1] == b"" else 0
+        at = len(kept) - tail
+        out = kept[:at] + new_lines + kept[at:]
+    else:
+        out = kept[:end_at] + new_lines + kept[end_at:]
+
+    tmp = path + ".cfnew"
+    try:
+        with open(tmp, "wb") as f:
+            f.write(b"\n".join(out))
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
+    except OSError as exc:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        return {"updated": False, "reason": f"unwritable: {exc}", "added": 0}
+
+    return {"updated": True, "reason": None, "added": len(new_lines)}
+
+
 def cmd_write_serato_crates(args: argparse.Namespace) -> None:
     """Scrive i crate (playlist) di Serato in Subcrates/*.crate.
 
@@ -1444,6 +1612,11 @@ def cmd_write_serato_crates(args: argparse.Namespace) -> None:
         paths = job.get("paths") or []
         if not name or not paths:
             continue
+        # ⚠ `%` NON va sanitizzato: `%%` è il separatore di livello dei crate
+        # annidati, ed è ciò che rende `Genere%%House.crate` un figlio invece
+        # che un crate con un nome strano. Il chiamante ha già sostituito i `%`
+        # che facevano parte dei nomi originali (vedi adapters/serato/crateNames).
+        # `/` e `\` restano vietati: creerebbero sottocartelle, che Serato non usa.
         safe = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", name)[:120]
         target = os.path.join(sub, f"{safe}.crate")
         if os.path.exists(target):
@@ -1468,9 +1641,244 @@ def cmd_write_serato_crates(args: argparse.Namespace) -> None:
         except OSError as exc:
             skipped.append(f"{name} ({exc})")
 
+    # I crate appena scritti vanno registrati nell'albero, altrimenti esistono
+    # come file e Serato non li mostra. Solo quelli davvero scritti: annunciare
+    # nell'ordine un crate saltato lo farebbe comparire vuoto.
+    order = _serato_crate_order_add(
+        serato_dir,
+        [r["name"] for r in results],
+        getattr(args, "backup_dir", None),
+    )
+    if not order["updated"] and results:
+        emit({
+            "type": "log",
+            "message": (
+                "neworder.pref non aggiornato (%s): i crate sono stati scritti ma "
+                "potrebbero non comparire nell'albero finché Serato non li rilegge."
+                % order["reason"]
+            ),
+        })
+
     emit({
         "type": "done",
-        "data": {"written": written, "skipped": skipped, "crates": results[:100]},
+        "data": {
+            "written": written,
+            "skipped": skipped,
+            "crates": results[:100],
+            "order": order,
+        },
+    })
+
+
+_DB_V2_FILENAME = "database V2"
+_DB_V2_VERSION = "2.0/Serato Scratch LIVE Database"
+
+# ⚠ Campi ESCLUSI dal confronto fra il record esistente e quello nuovo.
+# Serato li ricalcola da sé a ogni scansione: se entrassero nel paragone
+# risulterebbero sempre diversi, e ogni sincronizzazione riscriverebbe l'intero
+# database senza che sia cambiato nulla.
+_DB_V2_VOLATILE = ("ufsb", "tlen", "tsiz")
+
+# Campi che sappiamo produrre. Tutto ciò che non è in questa lista, dentro un
+# record esistente, viene lasciato dov'è e com'è.
+_DB_V2_WRITABLE = {
+    "title": "tsng",
+    "artist": "tart",
+    "album": "talb",
+    "genre": "tgen",
+    "key": "tkey",
+    "bpm": "tbpm",
+}
+
+
+def _serato_db_relpath(abs_path: str, vol: str) -> str:
+    """Percorso come lo scrive Serato: relativo alla radice del volume."""
+    rel = abs_path.replace("\\", "/")
+    if vol and rel.lower().startswith(vol.lower().replace("\\", "/")):
+        rel = rel[len(vol):]
+    elif re.match(r"^[A-Za-z]:", rel):
+        rel = rel[2:]
+    return rel.lstrip("/")
+
+
+def _serato_merge_otrk(original: bytes, updates: dict) -> bytes:
+    """Fonde i valori nuovi dentro un record `otrk` esistente.
+
+    ⚠ Fusione a livello di CAMPO, non sostituzione del record. Un `otrk` reale
+    contiene decine di campi che questo progetto non interpreta — flag, indici,
+    date, dati di analisi. Ricostruire il record dai soli campi noti li
+    cancellerebbe tutti, e Serato non se ne lamenterebbe: si limiterebbe a
+    perdere il lavoro dell'utente.
+
+    L'ordine dei campi originali è preservato: i campi nuovi si sostituiscono al
+    loro posto, quelli mai visti si accodano.
+    """
+    out = b""
+    seen: set[str] = set()
+    for tag, payload in _serato_fields(original):
+        if tag in updates:
+            seen.add(tag)
+            out += _serato_field(tag, _serato_encode_value(tag, updates[tag]))
+        else:
+            out += _serato_field(tag, payload)
+    for tag, value in updates.items():
+        if tag not in seen:
+            out += _serato_field(tag, _serato_encode_value(tag, value))
+    return out
+
+
+def _serato_otrk_equivalent(original: bytes, merged: bytes) -> bool:
+    """I due record dicono la stessa cosa, ignorando i campi che Serato ricalcola."""
+    def stable(blob: bytes) -> list[tuple[str, bytes]]:
+        return [(t, p) for t, p in _serato_fields(blob) if t not in _DB_V2_VOLATILE]
+
+    return stable(original) == stable(merged)
+
+
+def cmd_write_serato_database(args: argparse.Namespace) -> None:
+    """Aggiorna `database V2` conservando tutto ciò che non stiamo scrivendo.
+
+    ⚠ La regola che rende sicura questa operazione: NON si rigenera il file. Si
+    legge quello esistente, si sostituiscono soltanto i record dei brani che
+    conosciamo, e si riscrive tutto il resto identico — intestazione compresa,
+    presa dal file originale invece che ricostruita.
+
+    Rigenerare `database V2` dall'archivio interno cancellerebbe ogni brano che
+    l'archivio non conosce. Su una libreria Serato costruita in anni, sarebbe la
+    perdita più grossa che questo programma possa causare.
+
+    Sicurezza, per file: copia verificata per hash → scrittura su file
+    temporaneo → fsync → sostituzione atomica. Se qualcosa va storto prima della
+    sostituzione, l'originale non è mai stato toccato.
+    """
+    try:
+        jobs = _load_json_payload(args.tracks_json, getattr(args, "tracks_file", None))
+        assert isinstance(jobs, list)
+    except (json.JSONDecodeError, AssertionError, OSError):
+        fail("--tracks-json non valido: atteso un array [{path, title, artist, …}].")
+        return
+
+    serato_dir = args.serato_dir
+    db_path = os.path.join(serato_dir, _DB_V2_FILENAME)
+    if not os.path.isfile(db_path):
+        fail(f"'{_DB_V2_FILENAME}' non trovato in {serato_dir}: non c'è una libreria da aggiornare.")
+        return
+
+    vol = _serato_volume_root(serato_dir)
+
+    # Indice dei valori nuovi per percorso relativo, che è la chiave d'identità
+    # dentro il database (campo `pfil`).
+    wanted: dict[str, dict] = {}
+    for job in jobs:
+        p = job.get("path")
+        if not p:
+            continue
+        updates = {}
+        for key, tag in _DB_V2_WRITABLE.items():
+            if job.get(key) is not None:
+                updates[tag] = job[key]
+        if updates:
+            wanted[_serato_db_relpath(p, vol).lower()] = updates
+
+    with open(db_path, "rb") as f:
+        raw = f.read()
+
+    # Copia verificata PRIMA di qualunque scrittura.
+    backup_dir = getattr(args, "backup_dir", None)
+    backup_path = None
+    if backup_dir:
+        try:
+            os.makedirs(backup_dir, exist_ok=True)
+            backup_path = os.path.join(backup_dir, _DB_V2_FILENAME)
+            with open(backup_path, "wb") as f:
+                f.write(raw)
+                f.flush()
+                os.fsync(f.fileno())
+            if _sha256(backup_path) != _sha256(db_path):
+                fail("Copia di sicurezza non verificata: nessuna scrittura eseguita.")
+                return
+            _backup_manifest_append(
+                backup_dir,
+                {"original": db_path, "backup": backup_path, "sha256": _sha256(db_path)},
+            )
+        except OSError as exc:
+            fail(f"Copia di sicurezza non riuscita ({exc}): nessuna scrittura eseguita.")
+            return
+
+    out = b""
+    updated = 0
+    unchanged = 0
+    preserved = 0
+    matched: set[str] = set()
+
+    for tag, payload in _serato_fields(raw):
+        if tag != "otrk":
+            # Intestazione e qualunque altro contenitore: identici.
+            out += _serato_field(tag, payload)
+            preserved += 1
+            continue
+
+        fld = {t: p for t, p in _serato_fields(payload)}
+        rel = _serato_value("pfil", fld["pfil"]) if "pfil" in fld else None
+        key = (rel or "").replace("\\", "/").lower()
+        updates = wanted.get(key)
+        if not updates:
+            out += _serato_field(tag, payload)
+            preserved += 1
+            continue
+
+        matched.add(key)
+        merged = _serato_merge_otrk(payload, updates)
+        if _serato_otrk_equivalent(payload, merged):
+            # Nulla di sostanziale è cambiato: si riscrive l'originale byte per
+            # byte, così il file non cambia affatto dove non doveva cambiare.
+            out += _serato_field(tag, payload)
+            unchanged += 1
+        else:
+            out += _serato_field(tag, merged)
+            updated += 1
+
+    # ⚠ I brani non presenti nel database NON vengono aggiunti qui: un `otrk`
+    # completo richiede campi che non sappiamo produrre (flag, durata, chiave di
+    # ordinamento). Serato li aggiunge da sé quando incontra il file. Aggiungerne
+    # di monchi significherebbe righe che si vedono ma non funzionano.
+    not_in_db = sorted(set(wanted) - matched)
+
+    tmp = db_path + ".cfnew"
+    try:
+        with open(tmp, "wb") as f:
+            f.write(out)
+            f.flush()
+            os.fsync(f.fileno())
+        # Rilettura di verifica prima di sostituire l'originale: il file nuovo
+        # deve ri-analizzarsi e contenere ESATTAMENTE gli stessi record di
+        # partenza. Questo comando aggiorna, non aggiunge e non toglie: un
+        # conteggio diverso significa che il codec ha sbagliato una lunghezza, e
+        # allora l'originale non si tocca.
+        with open(tmp, "rb") as f:
+            check = f.read()
+        prima = sum(1 for t, _ in _serato_fields(raw) if t == "otrk")
+        dopo = sum(1 for t, _ in _serato_fields(check) if t == "otrk")
+        if dopo != prima:
+            raise OSError(f"verifica fallita: {prima} record prima, {dopo} dopo")
+        os.replace(tmp, db_path)
+    except OSError as exc:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        fail(f"Scrittura non riuscita ({exc}): l'originale non è stato modificato.")
+        return
+
+    emit({
+        "type": "done",
+        "data": {
+            "updated": updated,
+            "unchanged": unchanged,
+            "preserved": preserved,
+            "notInDatabase": len(not_in_db),
+            "backupDir": backup_dir,
+        },
     })
 
 
@@ -1694,7 +2102,10 @@ def cmd_read_serato(args: argparse.Namespace) -> None:
             otrks = [p for t, p in _serato_fields(raw) if t == "otrk"]
             for k, payload in enumerate(otrks):
                 fld = {t: p for t, p in _serato_fields(payload)}
-                rel = _serato_text(fld.get("pfil", b"")) if fld.get("pfil") else None
+                # Il tipo di ogni campo si deriva dalla prima lettera del codice
+                # (vedi _serato_value): niente tabella da mantenere.
+                val = lambda tag: _serato_value(tag, fld[tag]) if tag in fld else None
+                rel = val("pfil")
                 if not rel:
                     continue
                 # Separatori normalizzati e guardia sui rel già assoluti (con
@@ -1706,7 +2117,7 @@ def cmd_read_serato(args: argparse.Namespace) -> None:
                     abs_path = os.path.normpath(rel)
                 else:
                     abs_path = os.path.normpath(vol + "/" + rel)
-                bpm_txt = _serato_text(fld.get("tbpm", b""))
+                bpm_txt = val("tbpm")
                 try:
                     bpm = float(bpm_txt) if bpm_txt else None
                 except ValueError:
@@ -1714,11 +2125,11 @@ def cmd_read_serato(args: argparse.Namespace) -> None:
                 cue_count += _serato_import_one(
                     udm, MutagenFile, abs_path, rel,
                     {
-                        "title": _serato_text(fld.get("tsng", b"")),
-                        "artist": _serato_text(fld.get("tart", b"")),
-                        "album": _serato_text(fld.get("talb", b"")),
-                        "genre": _serato_text(fld.get("tgen", b"")),
-                        "bpm": bpm, "key": _serato_text(fld.get("tkey", b"")),
+                        "title": val("tsng"),
+                        "artist": val("tart"),
+                        "album": val("talb"),
+                        "genre": val("tgen"),
+                        "bpm": bpm, "key": val("tkey"),
                     },
                 )
                 imported.add(abs_path)
@@ -1844,6 +2255,254 @@ def _read_serato_crates(serato_dir: str, udm: sqlite3.Connection) -> None:
                     (pid, tr[0], pos),
                 )
                 pos += 1
+
+
+# ---------------------------------------------------------------------------
+# Rekordbox su chiavetta USB — la SECONDA chiave
+# ---------------------------------------------------------------------------
+#
+# ⚠ Le chiavi SQLCipher di Rekordbox sono DUE, e non sono intercambiabili:
+#
+#   - quella del `master.db` desktop, che pyrekordbox ricava/scarica e che
+#     questo sidecar usa in `ingest-masterdb`;
+#   - quella dei database su chiavetta (`exportLibrary.db`, `export.pdb`), che
+#     è la costante qui sotto.
+#
+# Usare l'una al posto dell'altra non dà un errore parlante: dà "file is not a
+# database", che somiglia a un file corrotto. È l'errore più comune su questa
+# superficie, ed è il motivo per cui le due strade sono tenute separate anche
+# nel codice invece di essere unificate dietro un parametro.
+
+_RB_USB_PASSWORD = "r8gddnr4k847830ar6cqzbkk0el6qytmb3trbbx805jm74vez64i5o8fnrqryqls"
+_RB_USB_CIPHER_PRAGMAS = ("cipher=sqlcipher", "legacy=4")
+# Validata contro property[0].dbVersion. Una versione diversa significa
+# "chiavetta scritta da un'altra generazione di Rekordbox", non "file rotto".
+_RB_USB_EXPECTED_DB_VERSION = "1000"
+
+_RB_USB_LIBRARY = "exportLibrary.db"
+_RB_USB_PDB = "export.pdb"
+
+
+def find_pioneer_dir(root: str) -> str | None:
+    """Cartella `rekordbox` di una chiavetta Pioneer, se c'è.
+
+    ⚠ Non esiste un file marcatore: una chiavetta si riconosce dalla presenza di
+    uno dei due database. Su HFS+ la cartella si chiama `.PIONEER`, col punto.
+    """
+    for name in ("PIONEER", ".PIONEER"):
+        d = os.path.join(root, name, "rekordbox")
+        if os.path.exists(os.path.join(d, _RB_USB_LIBRARY)) or os.path.exists(
+            os.path.join(d, _RB_USB_PDB)
+        ):
+            return d
+    return None
+
+
+def _open_usb_library(path: str):
+    """Apre `exportLibrary.db` con la chiave USB. Senza, il file non si apre affatto."""
+    try:
+        import sqlcipher3  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(f"sqlcipher3 non disponibile nel sidecar: {exc}") from exc
+
+    con = sqlcipher3.connect(path)
+    cur = con.cursor()
+    for pragma in _RB_USB_CIPHER_PRAGMAS:
+        cur.execute(f"PRAGMA {pragma};")
+    cur.execute(f"PRAGMA key='{_RB_USB_PASSWORD}';")
+    # La chiave sbagliata non fallisce qui: fallisce alla prima lettura reale.
+    cur.execute("SELECT count(*) FROM sqlite_master;")
+    cur.fetchone()
+    return con
+
+
+def _table_columns(con, table: str) -> set[str]:
+    try:
+        return {r[1] for r in con.execute(f"PRAGMA table_info({table})").fetchall()}
+    except Exception:
+        return set()
+
+
+def cmd_read_usb_library(args: argparse.Namespace) -> None:
+    """Legge una libreria Rekordbox da chiavetta USB, in sola lettura.
+
+    Non tocca il supporto: apre, legge, chiude. Le scritture su chiavetta
+    (export.pdb, USBANLZ, catena staging→copia→verifica) sono un'altra cosa e
+    non sono implementate.
+    """
+    root = args.usb_root
+    pioneer = find_pioneer_dir(root)
+    if not pioneer:
+        fail(
+            f"Nessuna libreria Pioneer in {root}: manca la cartella PIONEER/rekordbox "
+            f"con {_RB_USB_LIBRARY} o {_RB_USB_PDB}."
+        )
+        return
+
+    lib_path = os.path.join(pioneer, _RB_USB_LIBRARY)
+    if not os.path.exists(lib_path):
+        fail(
+            f"Su questa chiavetta c'è solo {_RB_USB_PDB}, che è un formato diverso "
+            f"e non è ancora supportato in lettura."
+        )
+        return
+
+    try:
+        con = _open_usb_library(lib_path)
+    except Exception as exc:
+        fail(
+            "Impossibile aprire il database della chiavetta. Se il file esiste ed è "
+            f"integro, potrebbe essere di una generazione non supportata: {str(exc)[:200]}"
+        )
+        return
+
+    udm = open_udm(args.udm_path)
+    run_id = udm.execute(
+        "INSERT INTO ingest_runs (source, started_at, status) VALUES ('rekordbox-usb', ?, 'running')",
+        (_now_local(),),
+    ).lastrowid
+    udm.commit()
+
+    progress = ThrottledProgress("read-usb-library")
+    tracks = 0
+    warnings: list[str] = []
+
+    try:
+        # Versione del formato: un valore diverso non è un errore, è una
+        # generazione che non abbiamo collaudato. Si dice e si prosegue in
+        # lettura — leggere non può rovinare la chiavetta.
+        try:
+            row = con.execute("SELECT dbVersion FROM property LIMIT 1").fetchone()
+            found = str(row[0]) if row and row[0] is not None else None
+        except Exception:
+            found = None
+        if found != _RB_USB_EXPECTED_DB_VERSION:
+            warnings.append(
+                f"Versione del database della chiavetta: {found or 'non rilevata'} "
+                f"(collaudata: {_RB_USB_EXPECTED_DB_VERSION}). I dati letti potrebbero "
+                "essere incompleti."
+            )
+
+        cols = _table_columns(con, "content")
+        if not cols:
+            fail("Il database della chiavetta non ha una tabella 'content'.")
+            return
+
+        def col(*names):
+            for n in names:
+                if n in cols:
+                    return n
+            return None
+
+        c_id = col("ID", "id")
+        c_title = col("Title", "title")
+        c_bpm = col("BPM", "bpm")
+        c_len = col("Length", "length")
+        c_folder = col("FolderPath", "folder_path")
+        c_file = col("FileNameL", "FileNameS", "file_name")
+        c_year = col("ReleaseYear", "Year", "year")
+        c_size = col("FileSize", "file_size")
+
+        if not c_id:
+            fail("La tabella 'content' non ha una colonna identificativa riconoscibile.")
+            return
+
+        # Le tabelle di lookup: su una chiavetta i nomi sono normalizzati.
+        def lookup(table: str) -> dict:
+            tcols = _table_columns(con, table)
+            if not tcols:
+                return {}
+            key = "ID" if "ID" in tcols else ("id" if "id" in tcols else None)
+            name = "Name" if "Name" in tcols else ("name" if "name" in tcols else None)
+            if not key or not name:
+                return {}
+            try:
+                return {r[0]: r[1] for r in con.execute(f'SELECT "{key}", "{name}" FROM {table}')}
+            except Exception:
+                return {}
+
+        artists = lookup("artist")
+        albums = lookup("album")
+        genres = lookup("genre")
+        keys = lookup("key")
+
+        c_artist = col("ArtistID", "artist_id")
+        c_album = col("AlbumID", "album_id")
+        c_genre = col("GenreID", "genre_id")
+        c_key = col("KeyID", "key_id")
+
+        select = [c for c in (c_id, c_title, c_bpm, c_len, c_folder, c_file, c_year,
+                              c_size, c_artist, c_album, c_genre, c_key) if c]
+        rows = con.execute(f'SELECT {", ".join(chr(34)+c+chr(34) for c in select)} FROM content').fetchall()
+        idx = {name: i for i, name in enumerate(select)}
+
+        def get(r, c):
+            return r[idx[c]] if c and c in idx else None
+
+        ins = (
+            "INSERT INTO tracks (source, source_id, title, artist, album, genre, year, bpm,"
+            " musical_key, duration_s, path, filesize, data)"
+            " VALUES ('rekordbox-usb', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            " ON CONFLICT(source, source_id) DO UPDATE SET"
+            " title=excluded.title, artist=excluded.artist, album=excluded.album,"
+            " genre=excluded.genre, year=excluded.year, bpm=excluded.bpm,"
+            " musical_key=excluded.musical_key, duration_s=excluded.duration_s,"
+            " path=excluded.path, filesize=excluded.filesize"
+        )
+
+        for k, r in enumerate(rows):
+            cid = get(r, c_id)
+            folder = get(r, c_folder) or ""
+            fname = get(r, c_file) or ""
+            path = folder if folder.endswith(fname) else (folder.rstrip("/\\") + "/" + fname if fname else folder)
+            raw_bpm = get(r, c_bpm)
+            # Rekordbox tiene il BPM moltiplicato per 100.
+            bpm = (float(raw_bpm) / 100.0) if raw_bpm not in (None, 0) else None
+            length = get(r, c_len)
+            udm.execute(
+                ins,
+                (
+                    str(cid),
+                    get(r, c_title),
+                    artists.get(get(r, c_artist)),
+                    albums.get(get(r, c_album)),
+                    genres.get(get(r, c_genre)),
+                    get(r, c_year),
+                    bpm,
+                    keys.get(get(r, c_key)),
+                    float(length) if length else None,
+                    path or None,
+                    get(r, c_size),
+                    json.dumps({"rekordboxUsb": {"contentId": cid, "device": pioneer}}),
+                ),
+            )
+            tracks += 1
+            if tracks % 200 == 0:
+                udm.commit()
+            progress.update(k + 1, len(rows))
+
+        udm.commit()
+        udm.execute(
+            "UPDATE ingest_runs SET finished_at=?, status='ok', track_count=? WHERE id=?",
+            (_now_local(), tracks, run_id),
+        )
+        udm.commit()
+        progress.finish(tracks, tracks)
+        emit({"type": "done", "data": {"tracks": tracks, "device": pioneer, "warnings": warnings}})
+    except Exception as exc:
+        udm.rollback()
+        udm.execute(
+            "UPDATE ingest_runs SET finished_at=?, status='error', error=? WHERE id=?",
+            (_now_local(), str(exc), run_id),
+        )
+        udm.commit()
+        fail(f"Lettura della chiavetta non riuscita: {str(exc)[:300]}")
+    finally:
+        try:
+            con.close()
+        except Exception:
+            pass
+        udm.close()
 
 
 def cmd_ensure_key(args: argparse.Namespace) -> None:
@@ -1975,12 +2634,26 @@ def main() -> None:
     p_wc.add_argument("--serato-dir", required=True)
     p_wc.add_argument("--crates-json", required=False)
     p_wc.add_argument("--crates-file", required=False)
+    # neworder.pref è l'unico file ESISTENTE che questo comando modifica: prima
+    # di toccarlo se ne fa una copia verificata, come per i tag audio.
+    p_wc.add_argument("--backup-dir", required=False)
+
+    p_wd = sub.add_parser("write-serato-database")
+    p_wd.add_argument("--udm-path", required=True)
+    p_wd.add_argument("--serato-dir", required=True)
+    p_wd.add_argument("--tracks-json", required=False)
+    p_wd.add_argument("--tracks-file", required=False)
+    p_wd.add_argument("--backup-dir", required=False)
 
     p_ws = sub.add_parser("write-serato-cues")
     p_ws.add_argument("--udm-path", required=True)
     p_ws.add_argument("--cues-json", required=False)
     p_ws.add_argument("--cues-file", required=False)
     p_ws.add_argument("--backup-dir", required=True)
+
+    p_usb = sub.add_parser("read-usb-library")
+    p_usb.add_argument("--udm-path", required=True)
+    p_usb.add_argument("--usb-root", required=True)
 
     p_rh = sub.add_parser("read-history")
     p_rh.add_argument("--udm-path", required=True)
@@ -2023,6 +2696,10 @@ def main() -> None:
         cmd_write_serato_cues(args)
     elif args.command == "write-serato-crates":
         cmd_write_serato_crates(args)
+    elif args.command == "write-serato-database":
+        cmd_write_serato_database(args)
+    elif args.command == "read-usb-library":
+        cmd_read_usb_library(args)
     elif args.command == "read-history":
         cmd_read_history(args)
     elif args.command == "masterdb-create-playlist":

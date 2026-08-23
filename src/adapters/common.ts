@@ -11,6 +11,8 @@ export interface CueRow {
   length_ms: number | null;
   color: string | null;
   label: string | null;
+  /** Sacca dei campi non normalizzati; vedi `core/formatData`. */
+  data?: string;
 }
 
 export interface PlaylistRow {
@@ -130,7 +132,8 @@ export function getCuesForTrack(
     position_ms: c.position_ms,
     length_ms: c.length_ms,
     color: c.color,
-    label: c.label
+    label: c.label,
+    data: c.data
   }));
 }
 

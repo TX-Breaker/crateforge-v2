@@ -35,6 +35,9 @@ import { writeVirtualDjXml } from '@adapters/virtualdj/vdjWriter';
 import { writeEngineLibrary } from '@adapters/engine/engineWriter';
 import { REKORDBOX_XML_LIMITS } from '@adapters/common';
 import { SERATO_STATUS } from '@adapters/serato';
+import { crateNameFor, loadPlaylistTree } from '@adapters/serato/crateNames';
+import { serato4DatabasePath } from '@adapters/serato4';
+import { readSerato4Library } from '@adapters/serato4/reader';
 import { ENGINE_STATUS } from '@adapters/engine';
 import { applyProposals, proposeTags, TagProposal, TagProvider } from '@services/tagger/autoTagger';
 import { app } from 'electron';
@@ -74,6 +77,7 @@ import {
   type VersionVerdict
 } from '@core/djVersions';
 import { probeRekordboxApp, probeVersion } from './versionProbe';
+import { assertNotRunning } from './processGuard';
 import { checkSidecar, runSidecar, SidecarEvent } from './sidecar';
 import { rekordboxDefaultPaths } from './rekordboxPaths';
 import { detectDjSoftware } from './djSoftwarePaths';
@@ -629,6 +633,94 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
     });
   });
 
+  /**
+   * Import da SERATO DJ PRO 4 — `master.sqlite`.
+   *
+   * ⚠ Formato distinto da Serato ≤3, non una sua variante: quello è una
+   * cartella di file TLV, questo un database SQLite a grafo. Le due librerie
+   * coesistono sulla stessa macchina, quindi anche i due percorsi d'import.
+   *
+   * Sola lettura sul database dell'utente. La scrittura verso Serato 4 esiste
+   * come adapter ma NON è esposta: manca una voce nel registro delle versioni
+   * collaudate, e senza quella non c'è modo di rifiutare la scrittura verso una
+   * versione mai provata. Vedi `docs/formats/GAP-ANALYSIS.md` §6.
+   */
+  ipcMain.handle('library:importSerato4', async (_e, masterPath?: string) => {
+    if (anyJobRunning) throw new Error('Un altro lavoro è già in corso.');
+    return withJobLock(async () => {
+      const progress = new ThrottledProgress(wc());
+      const jobId = randomUUID();
+      const path = masterPath ?? serato4DatabasePath();
+      if (!path) {
+        return {
+          ok: false,
+          message:
+            'Nessuna libreria Serato DJ Pro 4 trovata su questa macchina (master.sqlite).'
+        };
+      }
+      try {
+        const lib = readSerato4Library(path);
+        const result = importForeignLibrary(db, lib, (done, total) =>
+          progress.update({ jobId, phase: 'import-serato4', done, total })
+        );
+        const netWarn = networkPathWarning(path);
+        if (netWarn) result.warnings.unshift(netWarn);
+        if (lib.emptyContainers > 0) {
+          result.warnings.push(
+            `${lib.emptyContainers} contenitori senza brani non sono stati importati.`
+          );
+        }
+        progress.finish({
+          jobId,
+          phase: 'import-serato4',
+          done: result.tracks,
+          total: result.tracks
+        });
+        logOperation(db, 'import.serato4', path, 'ok', JSON.stringify(result));
+        relinkIdentity('import.serato4');
+        return { ok: true, ...result };
+      } catch (err) {
+        progress.finish({ jobId, phase: 'import-serato4', done: 1, total: 1 });
+        logOperation(db, 'import.serato4', path, 'error', String(err));
+        return { ok: false, message: String(err) };
+      }
+    });
+  });
+
+  /**
+   * Import da una CHIAVETTA Pioneer — `exportLibrary.db`.
+   *
+   * ⚠ Il database su chiavetta è cifrato con una chiave DIVERSA da quella del
+   * `master.db` desktop. Non è un dettaglio: usare la chiave sbagliata dà
+   * "file is not a database", che somiglia a un file corrotto e manda a cercare
+   * il problema dove non è. Le due strade restano separate anche nel codice.
+   *
+   * Sola lettura sul supporto. La scrittura su chiavetta — `export.pdb`, i file
+   * di analisi, la catena staging → copia → verifica — non è implementata.
+   */
+  ipcMain.handle('library:importUsbLibrary', async (_e, usbRoot: string) => {
+    if (anyJobRunning) throw new Error('Un altro lavoro è già in corso.');
+    return withJobLock(async () => {
+      const check = checkSidecar();
+      if (!check.available) {
+        return { ok: false, message: 'Modulo sidecar non disponibile.' };
+      }
+      const r = await runSidecarJob('read-usb-library', 'read-usb-library', [
+        '--usb-root',
+        usbRoot
+      ]);
+      logOperation(
+        db,
+        'import.rekordbox-usb',
+        usbRoot,
+        r.ok ? 'ok' : 'error',
+        r.ok ? JSON.stringify(r.data) : r.message
+      );
+      if (r.ok) relinkIdentity('import.rekordbox-usb');
+      return r.ok ? { ok: true, ...r.data } : { ok: false, message: r.message };
+    });
+  });
+
   // ---- ingestion master.db (sidecar Python; sola lettura sul sorgente) ----
   ipcMain.handle(
     'library:ingestMasterdb',
@@ -1036,6 +1128,10 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
        Chi prepara i file per un altro computer può sbloccare la versione a mano. */
     const seratoLib = detectDjSoftware().find((s) => s.id === 'serato');
     assertWritable('serato', seratoLib?.path ?? '');
+    /* I cue stanno nei tag dei file audio, che Serato tiene aperti e in cache:
+       riscriverli mentre il programma gira produce un disallineamento fra ciò
+       che c'è sul disco e ciò che Serato mostra, e alla chiusura vince Serato. */
+    await assertNotRunning('serato', 'Serato DJ');
 
     /* Un job per file, con i soli hot cue entro gli 8 pad di Serato.
        Il filtro per SORGENTE va applicato qui come lo applicano tutti gli altri
@@ -1176,13 +1272,20 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
       // Si scrive DENTRO la cartella _Serato_ dell'utente: la versione di quel
       // database decide se il formato dei crate è quello che sappiamo produrre.
       assertWritable('serato', seratoDir);
+      /* Serato tiene in memoria l'albero dei crate e lo riscrive alla chiusura:
+         scrivere adesso significa vedersi cancellare i file appena creati. */
+      await assertNotRunning('serato', 'Serato DJ');
 
       const lists = listPlaylists(db).filter(
         (p) => !sel?.playlistIds?.length || sel.playlistIds.includes(p.id)
       );
+      /* Il nome del crate porta dentro di sé la gerarchia, con `%%` come
+         separatore: in Serato `Subcrates/` è piatta e l'annidamento vive nel
+         nome del file. Senza, l'albero importato tornerebbe indietro piatto. */
+      const tree = loadPlaylistTree(db);
       const jobs = lists
         .map((p) => ({
-          name: p.name,
+          name: crateNameFor(tree, p.id) || p.name,
           paths: (
             db
               .prepare(
@@ -1195,6 +1298,14 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
         .filter((j) => j.paths.length);
       if (!jobs.length) return { ok: false, message: 'Nessuna playlist con brani da esportare.' };
 
+      /* I file `.crate` sono nuovi e non sovrascrivono nulla, ma per far
+         comparire i crate nell'albero va aggiornato `neworder.pref`, che
+         esiste già: quello va copiato prima di toccarlo. */
+      const backupDir = join(
+        app.getPath('userData'),
+        'backups',
+        `serato-crates-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}`
+      );
       const cratesFile = writeTempJson('serato-crates', jobs);
       let r;
       try {
@@ -1202,7 +1313,9 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
           '--serato-dir',
           seratoDir,
           '--crates-file',
-          cratesFile
+          cratesFile,
+          '--backup-dir',
+          backupDir
         ]);
       } finally {
         rmSync(cratesFile, { force: true });
@@ -1215,6 +1328,104 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
         r.ok ? JSON.stringify(r.data) : r.message
       );
       return r.ok ? { ok: true, ...r.data } : { ok: false, message: r.message };
+    }
+  );
+
+  /**
+   * Aggiornamento dei metadati dentro `database V2` di Serato ≤3.
+   *
+   * ⚠ Non rigenera il file: legge quello esistente, sostituisce i campi solo
+   * per i brani che conosciamo e riscrive tutto il resto identico. Rigenerarlo
+   * dall'archivio interno cancellerebbe ogni brano che l'archivio non conosce —
+   * su una libreria costruita in anni, è la perdita più grossa che questo
+   * programma possa causare.
+   *
+   * Passa dal gate delle scritture dirette perché tocca un file dell'utente.
+   */
+  ipcMain.handle(
+    'export:seratoDatabase',
+    async (_e, seratoDir: string, sel?: { playlistIds?: number[]; source?: string }) => {
+      if (getSetting(db, 'directWrites') !== '1') {
+        throw new Error(
+          'Aggiornare il database di Serato tocca un file della tua libreria: ' +
+            'serve attivare le scritture dirette in Impostazioni → Esperto.'
+        );
+      }
+      const check = checkSidecar();
+      if (!check.available) return { ok: false, message: 'Modulo sidecar non disponibile.' };
+
+      assertWritable('serato', seratoDir);
+      await assertNotRunning('serato', 'Serato DJ');
+
+      const conds: string[] = ['t.path IS NOT NULL'];
+      const params: unknown[] = [];
+      if (sel?.source) {
+        conds.push('t.source = ?');
+        params.push(sel.source);
+      }
+      if (sel?.playlistIds?.length) {
+        conds.push(
+          `t.id IN (SELECT track_id FROM playlist_tracks WHERE playlist_id IN (${sel.playlistIds
+            .map(() => '?')
+            .join(',')}))`
+        );
+        params.push(...sel.playlistIds);
+      }
+      const rows = db
+        .prepare(
+          `SELECT t.path, t.title, t.artist, t.album, t.genre, t.musical_key, t.bpm
+             FROM tracks t WHERE ${conds.join(' AND ')}`
+        )
+        .all(...params) as {
+        path: string;
+        title: string | null;
+        artist: string | null;
+        album: string | null;
+        genre: string | null;
+        musical_key: string | null;
+        bpm: number | null;
+      }[];
+      if (!rows.length) return { ok: false, message: 'Nessun brano con percorso da aggiornare.' };
+
+      /* Serato tiene il BPM come TESTO (il codice inizia per `t`): va
+         formattato qui, non lasciato a una conversione implicita. */
+      const jobs = rows.map((t) => ({
+        path: t.path,
+        title: t.title,
+        artist: t.artist,
+        album: t.album,
+        genre: t.genre,
+        key: t.musical_key,
+        bpm: t.bpm !== null ? t.bpm.toFixed(2) : null
+      }));
+
+      const backupDir = join(
+        app.getPath('userData'),
+        'backups',
+        `serato-db-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}`
+      );
+      const tracksFile = writeTempJson('serato-db', jobs);
+      let r;
+      try {
+        r = await runSidecarJob('write-serato-database', 'write-serato-database', [
+          '--serato-dir',
+          seratoDir,
+          '--tracks-file',
+          tracksFile,
+          '--backup-dir',
+          backupDir
+        ]);
+      } finally {
+        rmSync(tracksFile, { force: true });
+      }
+      logOperation(
+        db,
+        'export.serato-database',
+        seratoDir,
+        r.ok ? 'ok' : 'error',
+        r.ok ? JSON.stringify(r.data) : r.message
+      );
+      return r.ok ? { ok: true, backupDir, ...r.data } : { ok: false, message: r.message };
     }
   );
 
@@ -1657,6 +1868,18 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
       if (versioneRb.blocksWrite) {
         logOperation(db, 'version.block', masterDbPath, 'error', `rekordbox=${versioneRb.detected ?? 'n/d'}`);
         return { ok: false, message: versioneRb.message };
+      }
+
+      /* Il master.db è SQLite aperto in esclusiva da Rekordbox. Finora questa
+         condizione era solo raccomandata nel testo della conferma: ora è
+         verificata. Una scrittura concorrente su un file SQLCipher non dà un
+         errore leggibile, dà una libreria che non si riapre. */
+      try {
+        await assertNotRunning('rekordbox', 'Rekordbox');
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        logOperation(db, 'process.block', masterDbPath, 'error', message);
+        return { ok: false, message };
       }
 
       // Risolvi gli ID contenuto del master.db dai brani UDM (source_id).

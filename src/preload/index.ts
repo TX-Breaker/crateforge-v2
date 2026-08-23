@@ -112,7 +112,29 @@ const api = {
     importForeign: (kind: 'traktor' | 'virtualdj' | 'engine', path: string) =>
       ipcRenderer.invoke('library:importForeign', kind, path),
     // Serato (sperimentale): riceve la cartella "_Serato_".
-    importSerato: (seratoDir: string) => ipcRenderer.invoke('library:importSerato', seratoDir)
+    importSerato: (seratoDir: string) => ipcRenderer.invoke('library:importSerato', seratoDir),
+    /* Serato DJ Pro 4: formato DIVERSO dal ≤3, non una sua variante. Senza
+       argomento cerca `master.sqlite` nella posizione di sistema. */
+    importSerato4: (masterPath?: string) =>
+      ipcRenderer.invoke('library:importSerato4', masterPath) as Promise<{
+        ok: boolean;
+        tracks?: number;
+        playlists?: number;
+        cues?: number;
+        warnings?: string[];
+        message?: string;
+      }>,
+    /* Chiavetta Pioneer: riceve la RADICE dell'unità (es. "E:\"), non la
+       cartella PIONEER. Il database è cifrato con una chiave diversa da quella
+       del master.db desktop. */
+    importUsbLibrary: (usbRoot: string) =>
+      ipcRenderer.invoke('library:importUsbLibrary', usbRoot) as Promise<{
+        ok: boolean;
+        tracks?: number;
+        device?: string;
+        warnings?: string[];
+        message?: string;
+      }>
   },
   /**
    * Sincronizzazione dei punti fra librerie. `plan` non scrive niente: conta.
@@ -243,6 +265,18 @@ const api = {
         ok: boolean;
         written?: number;
         skipped?: string[];
+        message?: string;
+      }>,
+    // Metadati dentro `database V2`: aggiorna i record dei brani conosciuti e
+    // lascia intatto tutto il resto, brani estranei compresi.
+    seratoDatabase: (seratoDir: string, sel?: { playlistIds?: number[]; source?: string }) =>
+      ipcRenderer.invoke('export:seratoDatabase', seratoDir, sel) as Promise<{
+        ok: boolean;
+        updated?: number;
+        unchanged?: number;
+        preserved?: number;
+        notInDatabase?: number;
+        backupDir?: string;
         message?: string;
       }>
   },
