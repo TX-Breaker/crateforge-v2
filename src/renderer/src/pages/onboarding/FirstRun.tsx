@@ -22,6 +22,15 @@ import { LOCALES } from '@/lib/i18n';
 import { pageText } from '@/lib/i18nPages';
 import { CrateTile } from '@/components/Brand';
 import { cn, formatClock, shortenPath } from '@/lib/utils';
+import {
+  AppGridStep,
+  DEFAULT_IMPORT_CHOICES,
+  FeaturesStep,
+  GoalStep,
+  ImportPanelStep,
+  type ImportChoices,
+  type WizardGoal
+} from './WizardSteps';
 
 type SoftwareId = 'rekordbox' | 'traktor' | 'virtualdj' | 'serato' | 'engine';
 
@@ -65,7 +74,50 @@ export function FirstRun() {
   const { refresh, health, stats } = useLibrary();
   const { run } = useJobs();
 
+  /* ⚠ La ramificazione. `convert` salta la vetrina delle funzioni e la
+     diagnosi: chi sta migrando una volta sola non ha motivo di vederle, e
+     mostrargliele comunque trasformerebbe una procedura in una brochure. */
+  const [goal, setGoalState] = useState<WizardGoal | null>(null);
+
+  /* La scelta d'obiettivo vive nel UDM, accanto allo stato di completamento:
+     la procedura è rieseguibile dalle impostazioni, e chi la riapre deve
+     ritrovarsi dove si era collocato invece di ridichiararlo. */
+  useEffect(() => {
+    let vivo = true;
+    void window.crateforge.settings.get('wizardGoal').then((v) => {
+      if (vivo && (v === 'convert' || v === 'organize')) setGoalState(v);
+    });
+    return () => {
+      vivo = false;
+    };
+  }, []);
+
+  const setGoal = (g: WizardGoal) => {
+    setGoalState(g);
+    void window.crateforge.settings.set('wizardGoal', g);
+  };
+  const [appId, setAppId] = useState<string | null>(null);
+  const [choices, setChoices] = useState<ImportChoices>(DEFAULT_IMPORT_CHOICES);
+
+  /**
+   * I passi effettivamente mostrati, in ordine, con la loro etichetta.
+   * È l'unica fonte: i pallini in testa, la disabilitazione di «Avanti» e il
+   * rendering leggono tutti da qui, così non possono divergere.
+   */
+  const flow: { id: string; labelKey: string }[] = [
+    { id: 'welcome', labelKey: 's1' },
+    ...(goal === 'organize' ? [{ id: 'features', labelKey: 's6' }] : []),
+    { id: 'app', labelKey: 's7' },
+    { id: 'importPanel', labelKey: 's8' },
+    { id: 'detect', labelKey: 's2' },
+    { id: 'import', labelKey: 's3' },
+    ...(goal === 'organize' ? [{ id: 'health', labelKey: 's4' }] : []),
+    { id: 'prefs', labelKey: 's5' }
+  ];
+
   const [step, setStep] = useState(0);
+  const current = flow[Math.min(step, flow.length - 1)].id;
+  const goTo = (id: string) => setStep(Math.max(0, flow.findIndex((f) => f.id === id)));
   const [detections, setDetections] = useState<Detection[] | null>(null);
   const [chosen, setChosen] = useState<Set<SoftwareId>>(new Set());
   const [manual, setManual] = useState<Partial<Record<SoftwareId, string>>>({});
@@ -88,8 +140,8 @@ export function FirstRun() {
   }, []);
 
   useEffect(() => {
-    if (step === 1 && detections === null) detect();
-  }, [step, detections, detect]);
+    if (current === 'detect' && detections === null) detect();
+  }, [current, detections, detect]);
 
   const pathFor = (d: Detection) => manual[d.id] ?? d.path;
 
@@ -179,7 +231,7 @@ export function FirstRun() {
         setImportLog([...results]);
       }
       await refresh();
-      if (results.length > 0 && results.every((r) => r.ok)) setStep(3);
+      if (results.length > 0 && results.every((r) => r.ok)) setStep((n) => n + 1);
     } finally {
       setBusy(false);
     }
@@ -188,7 +240,7 @@ export function FirstRun() {
   const failed = importLog.filter((r) => !r.ok);
   const importDone = importLog.length > 0 && !busy;
 
-  const steps = [tp('s1'), tp('s2'), tp('s3'), tp('s4'), tp('s5')];
+  const steps = flow.map((f) => tp(f.labelKey));
 
   return (
     <div className="flex h-full flex-col bg-canvas">
@@ -230,7 +282,7 @@ export function FirstRun() {
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto max-w-4xl space-y-4 p-6">
           {/* 1 — benvenuto */}
-          {step === 0 && (
+          {current === 'welcome' && (
             <div className="space-y-4">
               <div>
                 <Eyebrow>{tp('welcomeEyebrow')}</Eyebrow>
@@ -250,11 +302,24 @@ export function FirstRun() {
               <Notice variant="info" title={tp('notTitle')}>
                 {tp('notBody')}
               </Notice>
+
+              {/* ⚠ La domanda che ramifica tutto il resto sta qui, non su un
+                  passo suo: la schermata aveva spazio, e un passo in meno è un
+                  passo in meno da attraversare per chi vuole solo convertire. */}
+              <GoalStep t={tp} value={goal} onChange={setGoal} />
             </div>
           )}
 
+          {current === 'features' && <FeaturesStep t={tp} />}
+
+          {current === 'app' && <AppGridStep t={tp} value={appId} onChange={setAppId} />}
+
+          {current === 'importPanel' && (
+            <ImportPanelStep t={tp} appId={appId} choices={choices} onChange={setChoices} />
+          )}
+
           {/* 2 — rilevamento */}
-          {step === 1 && (
+          {current === 'detect' && (
             <div className="space-y-4">
               <div>
                 <Eyebrow>{tp('detectEyebrow')}</Eyebrow>
@@ -391,7 +456,7 @@ export function FirstRun() {
           )}
 
           {/* 3 — import */}
-          {step === 2 && (
+          {current === 'import' && (
             <div className="space-y-4">
               <div>
                 <Eyebrow>{tp('importEyebrow')}</Eyebrow>
@@ -449,7 +514,7 @@ export function FirstRun() {
                       <Button size="sm" variant="secondary" onClick={runImport}>
                         <RefreshCw /> {tp('retryImport')}
                       </Button>
-                      <Button size="sm" variant="secondary" onClick={() => setStep(1)}>
+                      <Button size="sm" variant="secondary" onClick={() => goTo('detect')}>
                         <FolderOpen /> {tp('backToPick')}
                       </Button>
                       <Button
@@ -457,7 +522,7 @@ export function FirstRun() {
                         variant="ghost"
                         onClick={() => {
                           setAcceptedFailures(true);
-                          setStep(3);
+                          goTo('health');
                         }}
                       >
                         {tp('continueAnyway')}
@@ -478,7 +543,7 @@ export function FirstRun() {
           )}
 
           {/* 4 — diagnosi */}
-          {step === 3 && (
+          {current === 'health' && (
             <div className="space-y-4">
               <div>
                 <Eyebrow>{tp('diagEyebrow')}</Eyebrow>
@@ -520,7 +585,7 @@ export function FirstRun() {
           )}
 
           {/* 5 — preferenze */}
-          {step === 4 && (
+          {current === 'prefs' && (
             <div className="space-y-4">
               <div>
                 <Eyebrow>{tp('prefEyebrow')}</Eyebrow>
@@ -587,15 +652,24 @@ export function FirstRun() {
           <ArrowLeft /> {tp('back')}
         </Button>
         <div className="ml-auto">
-          {step < 4 ? (
+          {step < flow.length - 1 ? (
             <Button
               variant="primary"
               onClick={() => setStep((s) => s + 1)}
-              /* Dal passo import non si esce con un errore aperto: o si
-                 risolve, o si accetta esplicitamente dal riquadro rosso. Il
-                 tasto Avanti non è il posto dove si prendono quelle decisioni. */
+              /* Tre cancelli, ognuno per una ragione diversa:
+                 - dal benvenuto non si esce senza aver scelto l'obiettivo, che
+                   è la scelta da cui dipendono i passi successivi;
+                 - dalla griglia neppure, altrimenti il pannello di import non
+                   saprebbe cosa proporre;
+                 - dal passo import non si esce con un errore aperto: o si
+                   risolve, o lo si accetta esplicitamente dal riquadro rosso.
+                   Il tasto Avanti non è il posto dove si prendono quelle
+                   decisioni. */
               disabled={
-                step === 2 && (importLog.length === 0 || (failed.length > 0 && !acceptedFailures))
+                (current === 'welcome' && goal === null) ||
+                (current === 'app' && appId === null) ||
+                (current === 'import' &&
+                  (importLog.length === 0 || (failed.length > 0 && !acceptedFailures)))
               }
             >
               {tp('next')} <ArrowRight />

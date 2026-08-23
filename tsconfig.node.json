@@ -34,7 +34,11 @@
     "src/renderer/src/lib/camelotHues.ts",
     "src/renderer/src/lib/cuePalette.ts"
   ],
+  /* Questi test toccano il renderer (i18n, registro delle sorgenti): li
+     compila tsconfig.web, che ha gli alias giusti. Un file non puo'
+     appartenere a due progetti. */
   "exclude": [
-    "tests/i18nParity.test.ts"
+    "tests/i18nParity.test.ts",
+    "tests/djRegistry.wizard.test.ts"
   ]
 }
