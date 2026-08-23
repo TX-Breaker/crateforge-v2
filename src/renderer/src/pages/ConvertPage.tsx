@@ -35,6 +35,7 @@ import {
 import { useNotifications } from '@/lib/notifications';
 import { pageText } from '@/lib/i18nPages';
 import { t } from '@/lib/i18n';
+import { LibrarySyncPanel } from '@/components/LibrarySyncPanel';
 import { cn } from '@/lib/utils';
 
 type Format = 'rekordbox' | 'traktor' | 'virtualdj';
@@ -790,6 +791,16 @@ export function ConvertPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Sincronizzazione dei METADATI. Sta accanto a quella dei punti, non su
+          una pagina sua: chi allinea due librerie e chi ne converte una fanno
+          la stessa cosa con un'intenzione diversa, e separarle costringerebbe a
+          duplicare selettori, prova a vuoto e pannello dei numeri. */}
+      <LibrarySyncPanel
+        t={tp}
+        libraries={SOFTWARE.map((id) => ({ id, sources: SOURCES_OF[id] }))}
+        locale={locale}
+      />
 
       {/* Un colpo solo verso tutto quello che c'è su questo computer. */}
       <Card>

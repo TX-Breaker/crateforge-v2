@@ -14,6 +14,13 @@ import { ingestCollectionXml } from '@core/xmlCollection';
 import { importForeignLibrary } from '@core/foreignImport';
 import { linkCanonicalTracks } from '@core/identity';
 import { planSync } from '@core/sync';
+import {
+  DEFAULT_SYNC_FIELDS,
+  applySync,
+  planLibrarySync,
+  type SyncOptions
+} from '@core/syncEngine';
+import type { SyncField } from '@core/syncDiff';
 import { readTraktorNml } from '@adapters/traktor/nmlReader';
 import { readVirtualDjXml } from '@adapters/virtualdj/vdjReader';
 import { readEngineLibrary } from '@adapters/engine/engineReader';
@@ -1559,6 +1566,169 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
       return r.ok ? { ok: true, backupDir, ...r.data } : { ok: false, message: r.message };
     }
   );
+
+  /* ------------------------------------------------- sincronizzazione libreria
+   *
+   * ⚠ Queste tre operazioni toccano SOLO l'archivio interno. La propagazione
+   * verso i software DJ passa dagli export, che hanno gate, rilevamento del
+   * processo e catena di scrittura sicura. Tenere separate le due fasi è la
+   * ragione per cui qui non serve un gate: non c'è nessun file dell'utente da
+   * rovinare.
+   */
+
+  /** Prova a vuoto: conta e basta. È il numero che si vede PRIMA di confermare. */
+  ipcMain.handle('sync:planLibrary', (_e, opts: SyncOptions) => {
+    try {
+      const r = planLibrarySync(db, opts);
+      return {
+        ok: true,
+        summary: r.summary,
+        skipped: r.skipped,
+        unpaired: r.unpaired,
+        /* Solo le prime righe: l'elenco completo di una libreria da centomila
+           brani non serve a nessuno in una finestra di dialogo. */
+        conflicts: r.pairs
+          .filter((p) => p.plan.conflicts.length > 0)
+          .slice(0, 200)
+          .map((p) => ({
+            canonicalId: p.canonicalId,
+            aSoftware: p.aSoftware,
+            bSoftware: p.bSoftware,
+            fields: p.plan.conflicts.map((c) => ({
+              field: c.field,
+              aValue: c.aValue === null ? null : String(c.aValue),
+              bValue: c.bValue === null ? null : String(c.bValue),
+              reason: c.reason
+            }))
+          }))
+      };
+    } catch (err) {
+      return { ok: false, message: err instanceof Error ? err.message : String(err) };
+    }
+  });
+
+  /** Applica. Ricalcola il piano invece di fidarsi di quello che arriva dal
+   *  renderer: fra la prova a vuoto e la conferma la libreria può essere
+   *  cambiata, e scrivere su un piano stantio è il modo di sovrascrivere una
+   *  modifica che l'utente ha appena fatto. */
+  ipcMain.handle('sync:applyLibrary', (_e, opts: SyncOptions) => {
+    if (anyJobRunning) throw new Error('Un altro lavoro è già in corso.');
+    try {
+      const piano = planLibrarySync(db, opts);
+      const r = applySync(db, piano, opts);
+      logOperation(
+        db,
+        'sync.library',
+        `${opts.aSources.join('+')} ↔ ${opts.bSources.join('+')}`,
+        'ok',
+        JSON.stringify({ mode: opts.mode, ...r })
+      );
+      return { ok: true, ...r };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logOperation(db, 'sync.library', opts.aSources.join('+'), 'error', message);
+      return { ok: false, message };
+    }
+  });
+
+  /** Conflitti aperti, con il brano a cui si riferiscono. */
+  ipcMain.handle('sync:conflicts', (_e, limit?: number) => {
+    return db
+      .prepare(
+        `SELECT c.id, c.canonical_id AS canonicalId, c.field,
+                c.a_software AS aSoftware, c.a_value AS aValue,
+                c.b_software AS bSoftware, c.b_value AS bValue,
+                t.title, t.artist
+           FROM sync_conflicts c
+           LEFT JOIN tracks t ON t.id = c.canonical_id
+          WHERE c.resolved_at IS NULL
+          ORDER BY c.field, c.id
+          LIMIT ?`
+      )
+      .all(Math.min(limit ?? 200, 500));
+  });
+
+  /**
+   * Risolve un conflitto scrivendo il valore scelto in ENTRAMBI i lati.
+   *
+   * `scope: 'field'` applica la stessa scelta a tutti i conflitti aperti su quel
+   * campo: è il modo in cui i conflitti si presentano davvero — cinquanta volte
+   * lo stesso, non cinquanta diversi.
+   */
+  ipcMain.handle(
+    'sync:resolveConflict',
+    (_e, id: number, choice: 'a' | 'b' | 'skip', scope: 'one' | 'field' = 'one') => {
+      const riga = db
+        .prepare(`SELECT * FROM sync_conflicts WHERE id = ? AND resolved_at IS NULL`)
+        .get(id) as
+        | {
+            id: number;
+            canonical_id: number;
+            field: string;
+            a_software: string;
+            a_value: string | null;
+            b_software: string;
+            b_value: string | null;
+          }
+        | undefined;
+      if (!riga) return { ok: false, message: 'Conflitto non trovato o già risolto.' };
+
+      const bersagli =
+        scope === 'field'
+          ? (db
+              .prepare(`SELECT * FROM sync_conflicts WHERE field = ? AND resolved_at IS NULL`)
+              .all(riga.field) as typeof riga[])
+          : [riga];
+
+      const COLONNE: Record<string, string> = {
+        title: 'title', artist: 'artist', album: 'album', genre: 'genre', year: 'year',
+        bpm: 'bpm', musical_key: 'musical_key', rating: 'rating', track_color: 'track_color'
+      };
+
+      const run = db.transaction(() => {
+        for (const c of bersagli) {
+          if (choice !== 'skip') {
+            const col = COLONNE[c.field];
+            /* Un campo che non è una colonna — per esempio `playlist:12` — non
+               si risolve scrivendo un valore: si segna deciso e basta. */
+            if (col) {
+              const valore = choice === 'a' ? c.a_value : c.b_value;
+              db.prepare(
+                `UPDATE tracks SET ${col} = ?
+                  WHERE COALESCE(canonical_id, id) = ?`
+              ).run(valore, c.canonical_id);
+            }
+          }
+          db.prepare(
+            `UPDATE sync_conflicts SET resolved_at = datetime('now'), resolution = ? WHERE id = ?`
+          ).run(choice, c.id);
+        }
+      });
+      run();
+      logOperation(db, 'sync.resolve', riga.field, 'ok', `${choice} × ${bersagli.length}`);
+      return { ok: true, resolved: bersagli.length };
+    }
+  );
+
+  /** Stato per libreria: quando è stata allineata l'ultima volta, e con che esito. */
+  ipcMain.handle('sync:libraryState', () => {
+    return db
+      .prepare(
+        `SELECT software, COUNT(*) AS tracks,
+                MAX(last_synced_at) AS lastSyncedAt,
+                SUM(CASE WHEN outcome = 'conflict' THEN 1 ELSE 0 END) AS conflicts
+           FROM sync_state GROUP BY software ORDER BY software`
+      )
+      .all();
+  });
+
+  /** I campi che il motore sa sincronizzare, con il predefinito. */
+  ipcMain.handle('sync:fields', () => ({
+    all: [
+      'title', 'artist', 'album', 'genre', 'year', 'bpm', 'musical_key', 'rating', 'track_color'
+    ] as SyncField[],
+    defaults: DEFAULT_SYNC_FIELDS
+  }));
 
   // ---- relocator ----
   ipcMain.handle('relocator:findBroken', () => {

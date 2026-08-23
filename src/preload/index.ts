@@ -155,6 +155,78 @@ const api = {
    * selezione e risolvono i conflitti con la stessa regola.
    */
   sync: {
+    /* Sincronizzazione dei METADATI fra librerie. Tocca solo l'archivio
+       interno: la propagazione verso i software DJ passa dagli export. */
+    planLibrary: (opts: {
+      aSources: string[];
+      bSources: string[];
+      mode: 'symmetric' | 'masterSlave';
+      fields?: string[];
+      temporalFields?: string[];
+    }) =>
+      ipcRenderer.invoke('sync:planLibrary', opts) as Promise<{
+        ok: boolean;
+        summary?: {
+          tracks: number;
+          touched: number;
+          toA: number;
+          toB: number;
+          conflicts: number;
+          untouched: number;
+        };
+        skipped?: number;
+        unpaired?: number;
+        conflicts?: {
+          canonicalId: number;
+          aSoftware: string;
+          bSoftware: string;
+          fields: { field: string; aValue: string | null; bValue: string | null; reason: string }[];
+        }[];
+        message?: string;
+      }>,
+    applyLibrary: (opts: {
+      aSources: string[];
+      bSources: string[];
+      mode: 'symmetric' | 'masterSlave';
+      fields?: string[];
+      temporalFields?: string[];
+    }) =>
+      ipcRenderer.invoke('sync:applyLibrary', opts) as Promise<{
+        ok: boolean;
+        written?: number;
+        fieldsToA?: number;
+        fieldsToB?: number;
+        conflicts?: number;
+        message?: string;
+      }>,
+    conflicts: (limit?: number) =>
+      ipcRenderer.invoke('sync:conflicts', limit) as Promise<
+        {
+          id: number;
+          canonicalId: number;
+          field: string;
+          aSoftware: string;
+          aValue: string | null;
+          bSoftware: string;
+          bValue: string | null;
+          title: string | null;
+          artist: string | null;
+        }[]
+      >,
+    /* `scope: 'field'` applica la stessa scelta a tutti i conflitti aperti su
+       quel campo: e' il modo in cui si presentano davvero. */
+    resolveConflict: (id: number, choice: 'a' | 'b' | 'skip', scope?: 'one' | 'field') =>
+      ipcRenderer.invoke('sync:resolveConflict', id, choice, scope) as Promise<{
+        ok: boolean;
+        resolved?: number;
+        message?: string;
+      }>,
+    libraryState: () =>
+      ipcRenderer.invoke('sync:libraryState') as Promise<
+        { software: string; tracks: number; lastSyncedAt: string | null; conflicts: number }[]
+      >,
+    fields: () =>
+      ipcRenderer.invoke('sync:fields') as Promise<{ all: string[]; defaults: string[] }>,
     plan: (opts: {
       originSources: string[];
       destinationSources: string[];
