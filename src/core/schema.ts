@@ -14,7 +14,7 @@ import type BetterSqlite3 from 'better-sqlite3';
  *    I due percorsi non girano mai in concorrenza: Node serializza i job.
  *  - settings / jobs / oplog → SOLO Node.
  */
-export const SCHEMA_VERSION = 9;
+export const SCHEMA_VERSION = 11;
 
 const MIGRATIONS: Record<number, string> = {
   1: `
@@ -302,6 +302,113 @@ const MIGRATIONS: Record<number, string> = {
   9: `
     ALTER TABLE tracks ADD COLUMN data TEXT NOT NULL DEFAULT '{}';
     ALTER TABLE cues   ADD COLUMN data TEXT NOT NULL DEFAULT '{}';
+  `,
+  /* Volume, percorso relativo, e il perche' di un collegamento.
+   *
+   * Tre problemi che sembrano distinti e sono lo stesso.
+   *
+   * 1. IDENTITA' FRA MACCHINE. L'identita' di un file era il percorso intero.
+   *    Ma i formati DJ non ragionano cosi': Serato <=3 scrive un percorso
+   *    RELATIVO alla radice del volume, Serato 4 identifica per
+   *    (location_id, portable_id). Una chiavetta montata come E: su un computer
+   *    e F: su un altro e' lo stesso supporto con due percorsi diversi, e oggi
+   *    produce due identita' diverse.
+   *
+   * 2. DRIVE ASSENTE CONTRO FILE CANCELLATI. Senza la nozione di volume le due
+   *    cose si assomigliano troppo, e confonderle in un motore di
+   *    sincronizzazione significa propagare una cancellazione che nessuno ha
+   *    chiesto. E' il modo piu' diretto di distruggere una libreria.
+   *
+   * 3. PERCHE' DUE RIGHE SONO UNITE. La regola di identita' ha tre gradini di
+   *    certezza decrescente, ma la riga non registrava quale l'aveva collegata.
+   *    Serve per due motivi diversi: la fiducia in un collegamento per impronta
+   *    acustica non e' quella di uno per percorso identico, e all'utente che
+   *    chiede «perche' questi due sono lo stesso brano?» oggi non si sa
+   *    rispondere.
+   *
+   * `identity_overrides` chiude il cerchio: se la regola sbaglia, l'utente deve
+   * poter dire «no, sono brani diversi» PRIMA che un motore automatico ci
+   * scriva sopra. Il verdetto e' un puntatore, quindi sempre annullabile.
+   */
+  10: `
+    CREATE TABLE IF NOT EXISTS volumes (
+      id           INTEGER PRIMARY KEY,
+      -- Identificatore stabile del supporto, quando ricavabile (uuid del
+      -- filesystem, serial number). NULL quando non lo si e' potuto leggere:
+      -- allora si ripiega su label + mount point, che e' piu' debole.
+      uuid         TEXT UNIQUE,
+      label        TEXT,
+      -- Ultimo punto di innesto visto: cambia fra macchine, e' un indizio non
+      -- un'identita'.
+      last_mount   TEXT,
+      last_seen_at TEXT,
+      removable    INTEGER NOT NULL DEFAULT 0
+    );
+
+    ALTER TABLE tracks ADD COLUMN volume_id INTEGER REFERENCES volumes(id) ON DELETE SET NULL;
+    ALTER TABLE tracks ADD COLUMN path_relative TEXT;
+    CREATE INDEX IF NOT EXISTS idx_tracks_volume ON tracks(volume_id, path_relative);
+
+    -- Quale regola ha collegato questa riga al proprio canonico, e quando.
+    -- NULL = «sono io il canonico», che e' lo stato di tutte le righe esistenti.
+    ALTER TABLE tracks ADD COLUMN identity_rule TEXT;
+    ALTER TABLE tracks ADD COLUMN identity_at TEXT;
+
+    CREATE TABLE IF NOT EXISTS identity_overrides (
+      a_id    INTEGER NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
+      b_id    INTEGER NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
+      -- 'same'      = uniscili anche se la regola non li avrebbe uniti
+      -- 'different' = NON unirli, anche se la regola lo farebbe
+      verdict TEXT NOT NULL CHECK (verdict IN ('same', 'different')),
+      decided_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (a_id, b_id)
+    );
+  `,
+  /* Stato della sincronizzazione, e conflitti in sospeso.
+   *
+   * ⚠ `last_synced_digest` e' il cuore, ed e' la colonna che sembra
+   * ridondante e non lo e': conserva lo stato all'ultimo allineamento
+   * RIUSCITO, non quello attuale. Confrontare due librerie dice che sono
+   * diverse; non dice CHI ha cambiato. Senza uno stato di riferimento ogni
+   * differenza sembra un conflitto, e l'utente annega in domande a cui non sa
+   * rispondere.
+   *
+   * La chiave e' `canonical_id`, non `tracks.id`: l'unita' della
+   * sincronizzazione e' il brano reale, non la riga che per caso lo
+   * rappresentava in un certo momento.
+   */
+  11: `
+    CREATE TABLE IF NOT EXISTS sync_state (
+      canonical_id       INTEGER NOT NULL,
+      software           TEXT    NOT NULL,
+      -- Il segnale con cui quel software dichiara le proprie modifiche:
+      -- numero di sequenza per Rekordbox, timestamp per Serato 4 / Engine /
+      -- Traktor, impronta del contenuto per gli altri.
+      last_signal        TEXT,
+      last_synced_digest TEXT,
+      last_synced_at     TEXT,
+      outcome            TEXT,
+      PRIMARY KEY (canonical_id, software)
+    );
+    CREATE INDEX IF NOT EXISTS idx_sync_state_software
+      ON sync_state(software, last_synced_at);
+
+    CREATE TABLE IF NOT EXISTS sync_conflicts (
+      id           INTEGER PRIMARY KEY,
+      canonical_id INTEGER NOT NULL,
+      -- 'genre' | 'bpm' | 'cues' | 'playlist:<id>' …
+      field        TEXT NOT NULL,
+      a_software   TEXT NOT NULL,
+      a_value      TEXT,
+      b_software   TEXT NOT NULL,
+      b_value      TEXT,
+      detected_at  TEXT NOT NULL DEFAULT (datetime('now')),
+      resolved_at  TEXT,
+      -- 'a' | 'b' | 'skip'; NULL finche' l'utente non decide
+      resolution   TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_sync_conflicts_open
+      ON sync_conflicts(canonical_id) WHERE resolved_at IS NULL;
   `
 };
 

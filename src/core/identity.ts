@@ -108,7 +108,24 @@ export function linkCanonicalTracks(db: BetterSqlite3.Database): LinkResult {
     )
     .iterate() as IterableIterator<Row>;
 
-  const updates: { id: number; canonical: number }[] = [];
+  /* Verdetti manuali dell'utente. Hanno la precedenza su OGNI regola: se una
+     persona ha guardato due righe e ha detto «sono brani diversi», nessuna
+     euristica la smentisce. È il motivo per cui esistono — la regola 2 può
+     sbagliare, e prima che un motore automatico ci scriva sopra l'utente deve
+     poter correggere. */
+  const forced = new Map<string, 'same' | 'different'>();
+  const pairKey = (a: number, b: number) => (a < b ? `${a}:${b}` : `${b}:${a}`);
+  try {
+    for (const o of db
+      .prepare(`SELECT a_id, b_id, verdict FROM identity_overrides`)
+      .all() as { a_id: number; b_id: number; verdict: 'same' | 'different' }[]) {
+      forced.set(pairKey(o.a_id, o.b_id), o.verdict);
+    }
+  } catch {
+    // Tabella assente su un database non ancora migrato: nessun verdetto.
+  }
+
+  const updates: { id: number; canonical: number; rule: string }[] = [];
 
   for (const r of rows) {
     const mine = r.canonical_id ?? r.id;
@@ -122,8 +139,11 @@ export function linkCanonicalTracks(db: BetterSqlite3.Database): LinkResult {
     let target: number | null = null;
     let usedRule: keyof LinkResult['byRule'] | null = null;
 
+    /** Una coppia che l'utente ha dichiarato diversa non si unisce mai. */
+    const vietata = (other: number) => forced.get(pairKey(r.id, other)) === 'different';
+
     const hitPath = pathKey ? byPath.get(pathKey) : undefined;
-    if (hitPath !== undefined && hitPath !== mine) {
+    if (hitPath !== undefined && hitPath !== mine && !vietata(hitPath)) {
       target = canonicalOf.get(hitPath) ?? hitPath;
       usedRule = 'path';
     }
@@ -134,6 +154,7 @@ export function linkCanonicalTracks(db: BetterSqlite3.Database): LinkResult {
       if (
         hit &&
         hit.id !== mine &&
+        !vietata(hit.id) &&
         Math.abs(hit.duration - (r.duration_s ?? 0)) <= DURATION_TOLERANCE_S
       ) {
         target = canonicalOf.get(hit.id) ?? hit.id;
@@ -143,7 +164,7 @@ export function linkCanonicalTracks(db: BetterSqlite3.Database): LinkResult {
 
     if (target === null && r.acoustic_id) {
       const hit = byAcoustic.get(r.acoustic_id);
-      if (hit !== undefined && hit !== mine) {
+      if (hit !== undefined && hit !== mine && !vietata(hit)) {
         target = canonicalOf.get(hit) ?? hit;
         usedRule = 'acoustic';
       }
@@ -153,7 +174,12 @@ export function linkCanonicalTracks(db: BetterSqlite3.Database): LinkResult {
       // Il canonico è sempre l'id più basso del gruppo: stabile fra esecuzioni.
       const canonical = Math.min(target, mine);
       if (canonical !== mine) {
-        updates.push({ id: r.id, canonical });
+        /* La regola che ha collegato la riga viaggia con la riga. Serve a due
+           cose diverse: dire all'utente PERCHE' due brani sono lo stesso, e
+           permettere al motore di sincronizzazione di distinguere un
+           collegamento certo da uno probabile — la fiducia in un accoppiamento
+           per impronta acustica non e' quella di uno per percorso identico. */
+        updates.push({ id: r.id, canonical, rule: usedRule ?? 'unknown' });
         canonicalOf.set(r.id, canonical);
         result.linked++;
         if (usedRule) result.byRule[usedRule]++;
@@ -168,9 +194,12 @@ export function linkCanonicalTracks(db: BetterSqlite3.Database): LinkResult {
   }
 
   if (updates.length) {
-    const stmt = db.prepare(`UPDATE tracks SET canonical_id = ? WHERE id = ?`);
+    const stmt = db.prepare(
+      `UPDATE tracks SET canonical_id = ?, identity_rule = ?, identity_at = datetime('now')
+        WHERE id = ?`
+    );
     const run = db.transaction(() => {
-      for (const u of updates) stmt.run(u.canonical, u.id);
+      for (const u of updates) stmt.run(u.canonical, u.rule, u.id);
     });
     run();
   }
