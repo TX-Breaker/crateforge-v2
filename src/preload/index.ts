@@ -124,6 +124,19 @@ const api = {
         warnings?: string[];
         message?: string;
       }>,
+    /* djay Pro: senza argomento cerca MediaLibrary.db nella posizione di
+       sistema. Sperimentale — `unreadable` dice quante righe non sono state
+       decifrate, ed è il numero da guardare. */
+    importDjay: (dbPath?: string) =>
+      ipcRenderer.invoke('library:importDjay', dbPath) as Promise<{
+        ok: boolean;
+        tracks?: number;
+        playlists?: number;
+        unreadable?: number;
+        scanned?: number;
+        warnings?: string[];
+        message?: string;
+      }>,
     /* Chiavetta Pioneer: riceve la RADICE dell'unità (es. "E:\"), non la
        cartella PIONEER. Il database è cifrato con una chiave diversa da quella
        del master.db desktop. */

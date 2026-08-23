@@ -239,6 +239,68 @@ export function encodeLoops(loops: (EngineLoopSlot | null)[]): Buffer {
   return Buffer.concat(parts);
 }
 
+/* -------------------------------------------------------------- beatData  */
+
+/**
+ * Intestazione di `beatData` — la sola parte del blob che sia documentata.
+ *
+ * ⚠ Big-endian, e i due valori sono `double` IEEE-754, non interi. Letti come
+ * uint32 il sample rate diventa 1088421504: un numero abbastanza plausibile da
+ * non far scattare nessun controllo, e abbastanza sbagliato da rovinare ogni
+ * conversione di posizione.
+ *
+ * Il corpo che segue — i marker veri e propri — NON è documentato, e questo
+ * modulo non lo interpreta. Vedi `decodeBeatDataHeader` per il perché.
+ */
+export interface EngineBeatDataHeader {
+  sampleRate: number;
+  totalSamples: number;
+  /** Byte di flag dopo i due double. Significato ignoto; conservato per il round-trip. */
+  flag: number;
+  /** Byte del blob che restano non interpretati. */
+  unparsedBytes: number;
+}
+
+/** Il rapporto campioni/sample-rate deve dare una durata di brano credibile. */
+const MIN_TRACK_SECONDS = 1;
+const MAX_TRACK_SECONDS = 4 * 60 * 60;
+
+/**
+ * Legge l'intestazione di `beatData`, e SOLO quella.
+ *
+ * ⚠ Perché non anche i marker. La specifica dichiara il corpo del blob come non
+ * verificato, e l'ispezione di una libreria reale non lo ha chiarito: la
+ * struttura sembra fatta di record da 56 byte con posizione in `double`
+ * little-endian e numero di battito in `int64` little-endian, ma ricavando il
+ * tempo dai due marker di una traccia a 71 BPM ne risultano 72,59 — un errore
+ * del 2%. Su una griglia, il 2% non è un'imprecisione: è un downbeat che a metà
+ * brano è fuori di mezza battuta.
+ *
+ * Una griglia sbagliata è peggio di una griglia assente, perché sembra giusta.
+ * Finché il layout non è confermato su più versioni di Engine, da qui esce solo
+ * ciò che è certo — e chi legge sa esattamente quanto resta fuori.
+ */
+export function decodeBeatDataHeader(payload: Buffer): EngineBeatDataHeader | null {
+  if (payload.length < 17) return null;
+  const sampleRate = payload.readDoubleBE(0);
+  const totalSamples = payload.readDoubleBE(8);
+
+  // Controlli di plausibilità: servono a distinguere un blob valido da uno di
+  // una versione con un layout diverso, che altrimenti darebbe numeri assurdi
+  // trattati come veri.
+  if (!Number.isFinite(sampleRate) || sampleRate < 8000 || sampleRate > 192000) return null;
+  if (!Number.isFinite(totalSamples) || totalSamples <= 0) return null;
+  const seconds = totalSamples / sampleRate;
+  if (seconds < MIN_TRACK_SECONDS || seconds > MAX_TRACK_SECONDS) return null;
+
+  return {
+    sampleRate,
+    totalSamples,
+    flag: payload[16],
+    unparsedBytes: payload.length - 17
+  };
+}
+
 /* ------------------------------------------------------------- trackData  */
 
 /**

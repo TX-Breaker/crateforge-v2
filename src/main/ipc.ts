@@ -38,6 +38,8 @@ import { SERATO_STATUS } from '@adapters/serato';
 import { crateNameFor, loadPlaylistTree } from '@adapters/serato/crateNames';
 import { serato4DatabasePath } from '@adapters/serato4';
 import { readSerato4Library } from '@adapters/serato4/reader';
+import { DJAY_DB_FILENAME, djayDatabasePath } from '@adapters/djay';
+import { readDjayLibrary } from '@adapters/djay/reader';
 import { ENGINE_STATUS } from '@adapters/engine';
 import { applyProposals, proposeTags, TagProposal, TagProvider } from '@services/tagger/autoTagger';
 import { app } from 'electron';
@@ -682,6 +684,51 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
       } catch (err) {
         progress.finish({ jobId, phase: 'import-serato4', done: 1, total: 1 });
         logOperation(db, 'import.serato4', path, 'error', String(err));
+        return { ok: false, message: String(err) };
+      }
+    });
+  });
+
+  /**
+   * Import da DJAY PRO — `MediaLibrary.db`.
+   *
+   * ⚠ djay non ha una tabella di tracce: è un archivio chiave-valore con i dati
+   * dentro blob serializzati, in due formati diversi che convivono nella stessa
+   * libreria.
+   *
+   * ⚠⚠ Sperimentale: il lettore è scritto sulla specifica ma non è mai stato
+   * eseguito su una libreria djay reale, perché djay non è installato sulla
+   * macchina di sviluppo. Per questo l'esito riporta quante righe non sono state
+   * decifrate: è il numero da guardare per capire se il formato regge.
+   *
+   * Sola lettura. Non esiste un percorso di scrittura verso djay.
+   */
+  ipcMain.handle('library:importDjay', async (_e, dbPath?: string) => {
+    if (anyJobRunning) throw new Error('Un altro lavoro è già in corso.');
+    return withJobLock(async () => {
+      const progress = new ThrottledProgress(wc());
+      const jobId = randomUUID();
+      const path = dbPath ?? djayDatabasePath();
+      if (!path) {
+        return {
+          ok: false,
+          message: `Nessuna libreria djay Pro trovata su questa macchina (${DJAY_DB_FILENAME}).`
+        };
+      }
+      try {
+        const lib = readDjayLibrary(path);
+        const result = importForeignLibrary(db, lib, (done, total) =>
+          progress.update({ jobId, phase: 'import-djay', done, total })
+        );
+        const netWarn = networkPathWarning(path);
+        if (netWarn) result.warnings.unshift(netWarn);
+        progress.finish({ jobId, phase: 'import-djay', done: result.tracks, total: result.tracks });
+        logOperation(db, 'import.djay', path, 'ok', JSON.stringify(result));
+        relinkIdentity('import.djay');
+        return { ok: true, ...result, unreadable: lib.unreadable, scanned: lib.scanned };
+      } catch (err) {
+        progress.finish({ jobId, phase: 'import-djay', done: 1, total: 1 });
+        logOperation(db, 'import.djay', path, 'error', String(err));
         return { ok: false, message: String(err) };
       }
     });

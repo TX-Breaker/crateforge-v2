@@ -78,7 +78,15 @@ const FORMATS: { id: Format; title: string; descKey: string; ext: string; defaul
   }
 ];
 
-type SourceId = 'rekordbox-db' | 'rekordbox-xml' | 'traktor' | 'virtualdj' | 'engine' | 'serato';
+type SourceId =
+  | 'rekordbox-db'
+  | 'rekordbox-xml'
+  | 'traktor'
+  | 'virtualdj'
+  | 'engine'
+  | 'serato'
+  | 'serato4'
+  | 'djay';
 
 const SOURCES: { id: SourceId; label: string; ext: string; udm: string }[] = [
   { id: 'rekordbox-db', label: 'Rekordbox (master.db)', ext: 'db', udm: 'masterdb' },
@@ -86,7 +94,12 @@ const SOURCES: { id: SourceId; label: string; ext: string; udm: string }[] = [
   { id: 'traktor', label: 'Traktor (.nml)', ext: 'nml', udm: 'traktor' },
   { id: 'virtualdj', label: 'VirtualDJ (database.xml)', ext: 'xml', udm: 'virtualdj' },
   { id: 'engine', label: 'Engine DJ (m.db)', ext: 'db', udm: 'engine' },
-  { id: 'serato', label: 'Serato (_Serato_)', ext: '', udm: 'serato' }
+  { id: 'serato', label: 'Serato DJ Pro 3 (_Serato_)', ext: '', udm: 'serato' },
+  /* ⚠ Serato 4 è un formato DIVERSO dal ≤3, non una sua variante: database
+     SQLite invece di una cartella di file binari. Le due librerie possono
+     coesistere sulla stessa macchina, quindi restano due voci distinte. */
+  { id: 'serato4', label: 'Serato DJ Pro 4 (master.sqlite)', ext: 'sqlite', udm: 'serato' },
+  { id: 'djay', label: 'Djay Pro (MediaLibrary.db)', ext: 'db', udm: 'djay' }
 ];
 
 type Cap = 'full' | 'partial' | 'none';
@@ -96,7 +109,8 @@ const MATRIX: { app: string; imp: Cap; impKey: string; exp: Cap; expKey: string 
   { app: 'Traktor', imp: 'full', impKey: 'trImport', exp: 'full', expKey: 'trExport' },
   { app: 'VirtualDJ', imp: 'partial', impKey: 'vdjImport', exp: 'full', expKey: 'vdjExport' },
   { app: 'Engine DJ', imp: 'full', impKey: 'enImport', exp: 'partial', expKey: 'enExport' },
-  { app: 'Serato', imp: 'full', impKey: 'srImport', exp: 'partial', expKey: 'srExport' }
+  { app: 'Serato', imp: 'full', impKey: 'srImport', exp: 'partial', expKey: 'srExport' },
+  { app: 'Djay Pro', imp: 'partial', impKey: 'djImport', exp: 'none', expKey: 'djExport' }
 ];
 
 /**
@@ -363,6 +377,29 @@ export function ConvertPage() {
       setBusy(true);
       try {
         const r = await run(tp('jobImport'), () => window.crateforge.library.importSerato(dir));
+        if (!r.ok) {
+          setError(r.message ?? tp('convErr'));
+          return false;
+        }
+        await refresh();
+        return true;
+      } catch (err) {
+        setError(String(err));
+        return false;
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    /* Serato 4 e djay sanno dove sta la propria libreria: si prova la posizione
+       di sistema, e solo se non c'è si chiede il file all'utente. */
+    if (src === 'serato4' || src === 'djay') {
+      setBusy(true);
+      try {
+        const r =
+          src === 'serato4'
+            ? await run(tp('jobImport'), () => window.crateforge.library.importSerato4())
+            : await run(tp('jobImport'), () => window.crateforge.library.importDjay());
         if (!r.ok) {
           setError(r.message ?? tp('convErr'));
           return false;

@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import { dirname, join, resolve } from 'path';
 import { inflateSync } from 'zlib';
 import type { ForeignLibrary, NormCue, NormPlaylist, NormTrack } from '@core/foreignImport';
+import { decodeBeatDataHeader } from './engineCodec';
 
 /**
  * Reader Engine DJ (Denon / Engine Prime / Engine OS).
@@ -44,22 +45,57 @@ function argbToHex(buf: Buffer, off: number): string | null {
   return ('#' + hex(buf[off + 1]) + hex(buf[off + 2]) + hex(buf[off + 3])).toUpperCase();
 }
 
-/** Sample rate per-traccia (double BE @0 di trackData); 44100 come fallback. */
-function sampleRateOf(trackData: unknown): number {
-  const td = decodeFramedZlib(trackData);
-  if (td && td.length >= 8) {
-    const sr = td.readDoubleBE(0);
-    if (sr >= 8000 && sr <= 192000) return sr;
+/**
+ * Sample rate del brano, da due fonti indipendenti.
+ *
+ * Vive sia in testa a `trackData` sia in testa a `beatData`, ed è il valore da
+ * cui dipende OGNI conversione di posizione: i cue Engine sono in campioni, non
+ * in millisecondi. Sbagliarlo di un fattore 48/44,1 sposta ogni cue del 9%.
+ *
+ * Le due fonti si controllano a vicenda: se concordano il valore è solido, se
+ * divergono si preferisce `trackData` (è quello che il writer di questo
+ * progetto produce) e si segnala. Il ripiego a 44100 resta l'ultima spiaggia.
+ */
+function sampleRateOf(trackData: unknown, beatData?: unknown): { rate: number; source: string } {
+  const fromTrack = (() => {
+    const td = decodeFramedZlib(trackData);
+    if (td && td.length >= 8) {
+      const sr = td.readDoubleBE(0);
+      if (sr >= 8000 && sr <= 192000) return sr;
+    }
+    return null;
+  })();
+
+  const fromBeat = (() => {
+    const bd = decodeFramedZlib(beatData);
+    if (!bd) return null;
+    return decodeBeatDataHeader(bd)?.sampleRate ?? null;
+  })();
+
+  if (fromTrack !== null && fromBeat !== null && fromTrack !== fromBeat) {
+    return { rate: fromTrack, source: 'trackData (in disaccordo con beatData)' };
   }
-  return 44100;
+  if (fromTrack !== null) return { rate: fromTrack, source: 'trackData' };
+  if (fromBeat !== null) return { rate: fromBeat, source: 'beatData' };
+  return { rate: 44100, source: 'ripiego' };
 }
 
-// NOTA beatgrid Engine: il blob `beatData` (framed zlib, header BE) contiene i
-// marker della griglia, ma il layout dei marker è complesso e version-dipendente
-// e non è ancora reverse-engineered in modo affidabile (il primo marker NON è un
-// semplice double sample-offset). Per non rischiare un downbeat errato, l'anchor
-// Engine NON viene estratto: i writer ripiegano su griglia a BPM costante da 0.
-// Follow-up: parser dedicato di `beatData` validato su dati reali.
+/* ⚠ BEATGRID DI ENGINE — quello che si legge e quello che no.
+ *
+ * Di `beatData` è documentata l'INTESTAZIONE: due `double` big-endian con
+ * sample rate e numero di campioni, poi un byte di flag. Quella viene letta
+ * (`decodeBeatDataHeader`) e usata come seconda fonte per la sample rate.
+ *
+ * Il corpo — i marker della griglia — NON è documentato, e l'ispezione di una
+ * libreria reale non lo ha chiarito: la forma sembra fatta di record da 56 byte
+ * con posizione in `double` little-endian e battito in `int64` little-endian,
+ * ma ricavando il tempo dai marker di una traccia a 71 BPM ne risultano 72,59.
+ * Un errore del 2% su una griglia significa mezza battuta di scarto a metà
+ * brano.
+ *
+ * Quindi l'ancora della griglia NON viene estratta, e i writer continuano a
+ * ripiegare su una griglia a BPM costante da zero. Una griglia sbagliata è
+ * peggio di una assente: sembra giusta finché non si suona. */
 
 /**
  * Decodifica i cue Engine dai blob PerformanceData (roadmap §7.9, prima persi).
@@ -154,7 +190,12 @@ export function readEngineLibrary(dbPath: string): ForeignLibrary {
       album: pick(cols, 'album'),
       genre: pick(cols, 'genre'),
       year: pick(cols, 'year'),
+      // Il MISURATO, con ripiego sul dichiarato quando l'analisi non c'è.
       bpm: pick(cols, 'bpmAnalyzed', 'bpm'),
+      // Il DICHIARATO, letto a parte per poterlo conservare invece di perderlo.
+      // `null` quando l'unica colonna disponibile è già finita in `bpm`.
+      bpmDeclared: cols.has('bpmAnalyzed') ? pick(cols, 'bpm') : null,
+      thirdPartySourceId: pick(cols, 'thirdPartySourceId'),
       key: pick(cols, 'keyAnalyzed', 'key'),
       length: pick(cols, 'length', 'lengthCalculated'),
       path: pick(cols, 'path', 'filename'),
@@ -171,6 +212,10 @@ export function readEngineLibrary(dbPath: string): ForeignLibrary {
       c.genre ? `${c.genre} AS genre` : `NULL AS genre`,
       c.year ? `${c.year} AS year` : `NULL AS year`,
       c.bpm ? `${c.bpm} AS bpm` : `NULL AS bpm`,
+      c.bpmDeclared ? `${c.bpmDeclared} AS bpmDeclared` : `NULL AS bpmDeclared`,
+      c.thirdPartySourceId
+        ? `${c.thirdPartySourceId} AS thirdPartySourceId`
+        : `NULL AS thirdPartySourceId`,
       c.key ? `${c.key} AS keyval` : `NULL AS keyval`,
       c.length ? `${c.length} AS length` : `NULL AS length`,
       c.path ? `${c.path} AS path` : `NULL AS path`,
@@ -188,26 +233,32 @@ export function readEngineLibrary(dbPath: string): ForeignLibrary {
     const libRoot = resolve(dirname(dbPath), '..'); // …/Engine Library/Database2 → …/Engine Library
 
     // Cue/loop dai blob PerformanceData (roadmap §7.9): indicizzati per trackId.
-    const perfByTrack = new Map<string, { quickCues: unknown; loops: unknown; trackData: unknown }>();
+    const perfByTrack = new Map<
+      string,
+      { quickCues: unknown; loops: unknown; trackData: unknown; beatData: unknown }
+    >();
     if (tableExists(db, 'PerformanceData')) {
       const pcols = columnsOf(db, 'PerformanceData');
       const idCol = pick(pcols, 'trackId', 'id') ?? 'trackId';
       const qcCol = pick(pcols, 'quickCues');
       const loopCol = pick(pcols, 'loops');
       const tdCol = pick(pcols, 'trackData');
+      const bdCol = pick(pcols, 'beatData');
       if (qcCol || loopCol) {
         const psel = [
           `${idCol} AS tid`,
           qcCol ? `${qcCol} AS quickCues` : `NULL AS quickCues`,
           loopCol ? `${loopCol} AS loops` : `NULL AS loops`,
-          tdCol ? `${tdCol} AS trackData` : `NULL AS trackData`
+          tdCol ? `${tdCol} AS trackData` : `NULL AS trackData`,
+          bdCol ? `${bdCol} AS beatData` : `NULL AS beatData`
         ].join(', ');
         const prows = db.prepare(`SELECT ${psel} FROM PerformanceData`).all() as Record<string, unknown>[];
         for (const pr of prows) {
           perfByTrack.set(String(pr.tid), {
             quickCues: pr.quickCues,
             loops: pr.loops,
-            trackData: pr.trackData
+            trackData: pr.trackData,
+            beatData: pr.beatData
           });
         }
       }
@@ -225,10 +276,41 @@ export function readEngineLibrary(dbPath: string): ForeignLibrary {
         : null;
       const keyval = r.keyval != null ? Number(r.keyval) : NaN;
       const musicalKey = Number.isInteger(keyval) && ENGINE_KEY[keyval] ? ENGINE_KEY[keyval] : null;
-      const bpm = r.bpm != null ? Number(r.bpm) || null : null;
+      /* ⚠ ENGINE HA DUE CAMPI BPM, E IL MODELLO INTERNO NE HA UNO.
+       *
+       *   bpm         INTEGER  valore DICHIARATO: dal tag del file o inserito a mano
+       *   bpmAnalyzed REAL     valore MISURATO dall'analisi audio di Engine
+       *
+       * La scelta: si legge `bpmAnalyzed` con ripiego su `bpm`, perché è il
+       * valore che Engine stesso usa per suonare — un tag dichiarato a 128 su
+       * una traccia misurata a 127,98 non è più preciso, è solo arrotondato.
+       *
+       * Ma il valore scartato NON si butta più: finisce nella sacca dei campi
+       * non normalizzati. Prima di averla, un giro Engine → archivio → Engine
+       * riscriveva `bpm` con l'analizzato arrotondato, cancellando per sempre
+       * ciò che l'utente aveva dichiarato. Conservarlo costa una chiave JSON e
+       * rende il round-trip davvero tale.
+       *
+       * Le altre due strade erano peggiori: leggere solo il dichiarato butta
+       * via l'analisi di Engine a ogni esportazione; aggiungere una colonna
+       * dedicata al modello interno è corretto ma contagioso, perché nessun
+       * altro formato ha questa distinzione. */
+      const bpmAnalyzed = r.bpm != null ? Number(r.bpm) || null : null;
+      const bpmDeclared = r.bpmDeclared != null ? Number(r.bpmDeclared) || null : null;
+      const bpm = bpmAnalyzed;
+
       const perf = perfByTrack.get(String(r.id));
-      const cues = perf ? readEngineCues(perf.quickCues, perf.loops, sampleRateOf(perf.trackData)) : [];
+      const sr = perf ? sampleRateOf(perf.trackData, perf.beatData) : { rate: 44100, source: 'assente' };
+      const cues = perf ? readEngineCues(perf.quickCues, perf.loops, sr.rate) : [];
       const rating = r.rating != null ? Number(r.rating) : null;
+
+      /* Ciò che Engine porta e il modello interno non normalizza. Solo valori
+         davvero presenti: una chiave con `null` sarebbe rumore che fa sembrare
+         diverse due righe identiche. */
+      const extra: Record<string, unknown> = {};
+      if (bpmDeclared !== null && bpmDeclared !== bpmAnalyzed) extra.bpmDeclared = bpmDeclared;
+      if (r.thirdPartySourceId != null) extra.thirdPartySourceId = Number(r.thirdPartySourceId);
+      if (perf && sr.source !== 'assente') extra.sampleRate = sr.rate;
       return {
         sourceId: String(r.id),
         title: r.title != null ? String(r.title) : null,
@@ -242,7 +324,8 @@ export function readEngineLibrary(dbPath: string): ForeignLibrary {
         path,
         filesize: r.filesize != null ? Number(r.filesize) || null : null,
         cues,
-        rating: rating != null && !Number.isNaN(rating) ? rating : null
+        rating: rating != null && !Number.isNaN(rating) ? rating : null,
+        formatData: Object.keys(extra).length ? extra : undefined
       };
     });
 

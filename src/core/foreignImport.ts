@@ -12,7 +12,7 @@ import { mergeFormatData, type FormatNamespace, type FormatPayload } from './for
  * qualsiasi altro formato passano dallo stesso modello dati.
  */
 
-export type ForeignSource = 'traktor' | 'virtualdj' | 'engine' | 'serato';
+export type ForeignSource = 'traktor' | 'virtualdj' | 'engine' | 'serato' | 'djay';
 
 export interface NormCue {
   type: 'hot' | 'memory' | 'loop';

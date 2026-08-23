@@ -32,6 +32,7 @@ export type FormatNamespace =
   | 'traktor'
   | 'virtualdj'
   | 'engine'
+  | 'djay'
   | 'itunes';
 
 export type FormatPayload = Record<string, unknown>;
