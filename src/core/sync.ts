@@ -60,6 +60,9 @@ export const DEST_CAPABILITY: Record<string, DestCapability> = {
   virtualdj: { hotPads: 8, loopPads: 0, canDemote: true },
   // otto CUE + otto LOOP separati nei GEOB, ma nessun contenitore fuori dai pad
   serato: { hotPads: 8, loopPads: 8, canDemote: false },
+  /* Serato 4 tiene i cue dove li teneva il <=3: nei tag dei file audio. Stessa
+     capacita', stessa perdita fuori dagli otto pad. */
+  serato4: { hotPads: 8, loopPads: 8, canDemote: false },
   // otto quickCues + otto loops separati, nessun memory
   engine: { hotPads: 8, loopPads: 8, canDemote: false }
 };

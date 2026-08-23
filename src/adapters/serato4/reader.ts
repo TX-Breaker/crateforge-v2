@@ -27,21 +27,46 @@ import type { ForeignLibrary, NormPlaylist, NormTrack } from '@core/foreignImpor
  * un'installazione con colonne diverse perde campi, non fallisce.
  */
 
-/** Colonne che ci interessano, in ordine di preferenza per ciascun campo. */
+/**
+ * Colonne che ci interessano, in ordine di preferenza per ciascun campo.
+ *
+ * ⚠ I nomi confermati su una libreria reale (schema `user_version` 202) vengono
+ * per primi. Il resto della lista è ripiego per versioni con nomi diversi:
+ * lo schema di Serato 4 cambia fra le versioni — la tabella `migration_script`
+ * ne conserva la storia — ed è la ragione per cui questo lettore chiede al
+ * database quali colonne esistono invece di darle per scontate.
+ *
+ * ⚠ Il titolo sta in `name`, non in `title`: `title` non esiste affatto.
+ * ⚠ La durata sta in `length_ms`. Esiste anche `length_sec`, ma su una libreria
+ * reale è vuota su tutte le 114 tracce: cercarla per prima significa importare
+ * zero durate senza accorgersene.
+ */
 const CANDIDATE_COLUMNS: Record<string, string[]> = {
-  title: ['title', 'song', 'name'],
+  title: ['name', 'title', 'song'],
   artist: ['artist'],
   album: ['album'],
   genre: ['genre'],
   year: ['year'],
   bpm: ['bpm', 'tempo'],
   key: ['key', 'musical_key', 'initial_key'],
-  duration: ['length', 'duration', 'total_time'],
+  durationMs: ['length_ms'],
+  durationSec: ['length_sec', 'length', 'duration', 'total_time'],
   comment: ['comments', 'comment'],
   color: ['color'],
+  rating: ['rating'],
+  label: ['label'],
+  remixer: ['remixer'],
+  composer: ['composer'],
+  grouping: ['grouping'],
+  trackNumber: ['track_number'],
   fileName: ['file_name'],
   fileSize: ['file_size'],
-  bitRate: ['file_bit_rate']
+  bitRate: ['file_bit_rate'],
+  // Campi che Serato porta e il modello interno non normalizza: finiscono
+  // nella sacca, per non perderli a ogni conversione.
+  beatgridLocked: ['is_beatgrid_locked'],
+  stale: ['is_stale'],
+  playCount: ['dj_play_count']
 };
 
 function columnsOf(db: BetterSqlite3.Database, table: string): Set<string> {
@@ -157,17 +182,33 @@ export function readFrom(db: BetterSqlite3.Database): Serato4ReadResult {
       year: num(r.year),
       bpm: num(r.bpm),
       musicalKey: str(r.key),
-      durationS: durationSeconds(r.duration),
+      /* La durata ha DUE colonne possibili e una sola è valorizzata. Si prende
+         quella in millisecondi quando c'è, senza euristiche sulla grandezza del
+         numero: il nome della colonna dice già l'unità. */
+      durationS: (() => {
+        const ms = num(r.durationMs);
+        if (ms !== null) return ms / 1000;
+        return num(r.durationSec);
+      })(),
       path,
       filesize: num(r.fileSize),
       cues: [],
+      rating: num(r.rating),
       /* Conservare l'identità nativa è ciò che permette di RISCRIVERE invece di
          reinserire: senza, un export tornerebbe indietro creando doppioni. */
       formatData: {
         assetId: r.id,
         locationId: r.location_id,
         portableId: portable,
-        locationPath: base
+        locationPath: base,
+        ...(num(r.playCount) !== null ? { playCount: num(r.playCount) } : {}),
+        ...(r.beatgridLocked ? { beatgridLocked: true } : {}),
+        ...(r.stale ? { stale: true } : {}),
+        ...(str(r.label) ? { label: str(r.label) } : {}),
+        ...(str(r.remixer) ? { remixer: str(r.remixer) } : {}),
+        ...(str(r.composer) ? { composer: str(r.composer) } : {}),
+        ...(str(r.grouping) ? { grouping: str(r.grouping) } : {}),
+        ...(str(r.comment) ? { comment: str(r.comment) } : {})
       },
       trackColor: null
     });
@@ -195,14 +236,6 @@ export function readFrom(db: BetterSqlite3.Database): Serato4ReadResult {
 function joinPath(base: string, file: string): string {
   const sep = base.includes('\\') ? '\\' : '/';
   return base.endsWith(sep) ? base + file : base + sep + file;
-}
-
-/** Serato tiene le durate in millisecondi o in secondi a seconda della colonna. */
-function durationSeconds(v: unknown): number | null {
-  const n = num(v);
-  if (n === null) return null;
-  // Nessun brano dura 10.000 secondi (2h46m): oltre quella soglia è in ms.
-  return n > 10_000 ? n / 1000 : n;
 }
 
 function readContainers(

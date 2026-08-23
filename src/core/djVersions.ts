@@ -20,7 +20,15 @@
  * registro operazioni.
  */
 
-export type DjSoftware = 'rekordbox' | 'traktor' | 'virtualdj' | 'serato' | 'engine';
+export type DjSoftware =
+  | 'rekordbox'
+  | 'traktor'
+  | 'virtualdj'
+  /** Serato DJ Pro <= 3: cartella `_Serato_`, file binari TLV. */
+  | 'serato'
+  /** Serato DJ Pro 4: database SQLite a grafo. Formato DIVERSO, non una variante. */
+  | 'serato4'
+  | 'engine';
 
 export interface TestedEntry {
   /** Nome leggibile del software. */
@@ -66,6 +74,16 @@ export const TESTED: Record<DjSoftware, TestedEntry> = {
     testedWithApp: '4.0.9',
     testedOn: '2026-07-29',
     evidence: 'cartella _Serato_ reale, vrsn "2.0/Serato Scratch LIVE Database" + tag GEOB su file veri'
+  },
+  serato4: {
+    label: 'Serato DJ Pro 4',
+    marker: 'versione dello schema (PRAGMA user_version di master.sqlite)',
+    maxTested: '202',
+    testedWithApp: null,
+    testedOn: '2026-08-23',
+    evidence:
+      'master.sqlite reale (114 asset, 3 contenitori): 50 tabelle, catena container -> ' +
+      "space_asset -> asset verificata, user_version 202 letta dall'intestazione del file"
   },
   traktor: {
     label: 'Traktor',

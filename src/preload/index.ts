@@ -280,6 +280,20 @@ const api = {
         skipped?: string[];
         message?: string;
       }>,
+    /* Crate in Serato DJ Pro 4. Non tocca le tabelle di cache: accoda gli id
+       nelle code di invalidazione e lascia ricostruire a Serato. Lega solo
+       brani che Serato ha gia' in libreria; gli altri tornano in notInLibrary. */
+    serato4Crates: (masterPath?: string, sel?: { playlistIds?: number[] }) =>
+      ipcRenderer.invoke('export:serato4Crates', masterPath, sel) as Promise<{
+        ok: boolean;
+        created?: number;
+        linked?: number;
+        skipped?: string[];
+        notInLibrary?: string[];
+        invalidated?: string[];
+        backupDir?: string;
+        message?: string;
+      }>,
     // Metadati dentro `database V2`: aggiorna i record dei brani conosciuti e
     // lascia intatto tutto il resto, brani estranei compresi.
     seratoDatabase: (seratoDir: string, sel?: { playlistIds?: number[]; source?: string }) =>

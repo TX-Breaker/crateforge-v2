@@ -38,6 +38,7 @@ import { SERATO_STATUS } from '@adapters/serato';
 import { crateNameFor, loadPlaylistTree } from '@adapters/serato/crateNames';
 import { serato4DatabasePath } from '@adapters/serato4';
 import { readSerato4Library } from '@adapters/serato4/reader';
+import { writeSerato4Crates } from '@adapters/serato4/writer';
 import { DJAY_DB_FILENAME, djayDatabasePath } from '@adapters/djay';
 import { readDjayLibrary } from '@adapters/djay/reader';
 import { ENGINE_STATUS } from '@adapters/engine';
@@ -688,6 +689,89 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
       }
     });
   });
+
+  /**
+   * Export verso SERATO DJ PRO 4: crea crate in `master.sqlite`.
+   *
+   * ⚠ Non scrive nelle tabelle di cache dell'ordinamento — le
+   * `anonymous_table_N` con le chiavi precalcolate come BLOB. Scrive nei dati e
+   * accoda gli id nelle code `*_needs_*`, lasciando che Serato ricostruisca. È
+   * la regola non negoziabile del formato: quelle chiavi hanno un algoritmo non
+   * documentato, e un valore sbagliato non dà errore, dà un crate ordinato a
+   * casaccio.
+   *
+   * ⚠ Limite dichiarato: si legano solo brani che Serato ha GIÀ in libreria.
+   * Creare un asset richiede `external_id` e `portable_id` la cui semantica non
+   * è documentata; un asset con quei campi sbagliati compare e non si carica.
+   * I percorsi non riconosciuti tornano in `notInLibrary`.
+   */
+  ipcMain.handle(
+    'export:serato4Crates',
+    async (_e, masterPath?: string, sel?: { playlistIds?: number[] }) => {
+      if (getSetting(db, 'directWrites') !== '1') {
+        throw new Error(
+          'Creare crate in Serato 4 scrive nel database della tua libreria: ' +
+            'serve attivare le scritture dirette in Impostazioni → Esperto.'
+        );
+      }
+      const path = masterPath ?? serato4DatabasePath();
+      if (!path) return { ok: false, message: 'Nessuna libreria Serato DJ Pro 4 trovata.' };
+
+      /* Ora che Serato 4 ha un marcatore di versione (PRAGMA user_version) il
+         gate può fare il suo mestiere: su uno schema mai collaudato ci si ferma
+         invece di scrivere alla cieca. */
+      assertWritable('serato4', path);
+      await assertNotRunning('serato4', 'Serato DJ');
+
+      const tree = loadPlaylistTree(db);
+      const lists = listPlaylists(db).filter(
+        (p) => !sel?.playlistIds?.length || sel.playlistIds.includes(p.id)
+      );
+      const jobs = lists
+        .map((p) => ({
+          name: crateNameFor(tree, p.id) || p.name,
+          paths: (
+            db
+              .prepare(
+                `SELECT t.path FROM playlist_tracks pt JOIN tracks t ON t.id = pt.track_id
+                  WHERE pt.playlist_id = ? AND t.path IS NOT NULL ORDER BY pt.position`
+              )
+              .all(p.id) as { path: string }[]
+          ).map((r) => r.path)
+        }))
+        .filter((j) => j.paths.length);
+      if (!jobs.length) return { ok: false, message: 'Nessuna playlist con brani da esportare.' };
+
+      /* Copia del database PRIMA di toccarlo: è la libreria dell'utente, e il
+         formato non ha un round-trip verificato che ci autorizzi a rifarla. */
+      const backupDir = join(
+        app.getPath('userData'),
+        'backups',
+        `serato4-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}`
+      );
+      try {
+        mkdirSync(backupDir, { recursive: true });
+        copyFileSync(path, join(backupDir, 'master.sqlite'));
+        if (statSync(path).size !== statSync(join(backupDir, 'master.sqlite')).size) {
+          throw new Error('copia di sicurezza incompleta');
+        }
+      } catch (err) {
+        const message = `Copia di sicurezza non riuscita (${String(err)}): nessuna scrittura eseguita.`;
+        logOperation(db, 'export.serato4-crates', path, 'error', message);
+        return { ok: false, message };
+      }
+
+      try {
+        const r = writeSerato4Crates(path, jobs);
+        logOperation(db, 'export.serato4-crates', path, 'ok', JSON.stringify(r));
+        return { ok: true, backupDir, ...r };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        logOperation(db, 'export.serato4-crates', path, 'error', message);
+        return { ok: false, message, backupDir };
+      }
+    }
+  );
 
   /**
    * Import da DJAY PRO — `MediaLibrary.db`.

@@ -165,6 +165,8 @@ export function probeVersion(software: DjSoftware, path: string): string | null 
     switch (software) {
       case 'engine':
         return probeEngine(path);
+      case 'serato4':
+        return probeSerato4(path);
       case 'serato': {
         // Accetta sia la cartella _Serato_ sia un percorso al suo interno.
         if (existsSync(join(path, 'database V2'))) return probeSerato(path);
@@ -185,5 +187,42 @@ export function probeVersion(software: DjSoftware, path: string): string | null 
     }
   } catch {
     return null;
+  }
+}
+
+/**
+ * Serato DJ Pro 4: `PRAGMA user_version` di `master.sqlite`.
+ *
+ * ⚠ È un marcatore di FORMATO, non di applicazione: la tabella
+ * `migration_script` conserva la storia delle migrazioni, e ognuna finisce con
+ * `PRAGMA user_version = N`. È quindi Serato stesso a dichiarare quale versione
+ * di schema sta usando — esattamente ciò che serve al gate delle scritture.
+ *
+ * Si legge dall'intestazione del file invece di aprire una connessione SQLite:
+ * `user_version` sta a offset 60 dei primi 100 byte di ogni database SQLite, in
+ * big-endian. Così la sonda non prende lock su un database che Serato potrebbe
+ * avere aperto.
+ */
+export function probeSerato4(masterSqlitePath: string): string | null {
+  if (!existsSync(masterSqlitePath)) return null;
+  let fd: number | null = null;
+  try {
+    fd = openSync(masterSqlitePath, 'r');
+    const buf = Buffer.alloc(100);
+    const read = readSync(fd, buf, 0, 100, 0);
+    if (read < 100) return null;
+    if (buf.subarray(0, 15).toString('ascii') !== 'SQLite format 3') return null;
+    const version = buf.readUInt32BE(60);
+    return version > 0 ? String(version) : null;
+  } catch {
+    return null;
+  } finally {
+    if (fd !== null) {
+      try {
+        closeSync(fd);
+      } catch {
+        /* già chiuso */
+      }
+    }
   }
 }

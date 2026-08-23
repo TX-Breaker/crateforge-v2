@@ -3,6 +3,8 @@ import Database from 'better-sqlite3';
 import { existsSync } from 'fs';
 import { readSerato4Library } from '../src/adapters/serato4/reader';
 import { serato4DatabasePath, serato4Paths } from '../src/adapters/serato4';
+import { probeSerato4 } from '../src/main/versionProbe';
+import { TESTED } from '../src/core/djVersions';
 
 /**
  * Validazione del lettore Serato 4 contro la libreria REALE installata su
@@ -117,5 +119,62 @@ d('Serato 4 — libreria reale (sola lettura)', () => {
     } finally {
       db.close();
     }
+  });
+});
+
+/**
+ * Il registro delle versioni e i campi davvero valorizzati.
+ *
+ * ⚠ Il gruppo sopra verificava la STRUTTURA — che le tabelle ci fossero, che le
+ * relazioni tornassero — e proprio per questo non si accorse che le durate non
+ * venivano importate: il lettore cercava `length`, la colonna reale è
+ * `length_ms`. Un test che guarda solo la forma non vede un campo vuoto.
+ */
+d('Serato 4 — versione e campi valorizzati', () => {
+  it('espone un marcatore di versione leggibile senza aprire il database', () => {
+    // Serve al gate delle scritture: senza marcatore non c'è modo di rifiutare
+    // una versione mai collaudata, ed è per questo che il writer restava fermo.
+    const v = probeSerato4(master as string);
+    expect(v).not.toBeNull();
+    expect(Number(v)).toBeGreaterThan(0);
+  });
+
+  it('il marcatore letto dall’intestazione coincide con PRAGMA user_version', () => {
+    const db = new Database(master as string, { readonly: true, fileMustExist: true });
+    try {
+      const pragma = (db.pragma('user_version', { simple: true }) as number).toString();
+      expect(probeSerato4(master as string)).toBe(pragma);
+    } finally {
+      db.close();
+    }
+  });
+
+  it('la versione della libreria reale è quella dichiarata come collaudata', () => {
+    expect(probeSerato4(master as string)).toBe(TESTED.serato4.maxTested);
+  });
+
+  it('importa davvero titolo, durata e BPM, non solo le righe', () => {
+    const lib = readSerato4Library(master as string);
+    const conTitolo = lib.tracks.filter((t) => t.title !== null).length;
+    const conDurata = lib.tracks.filter((t) => t.durationS !== null).length;
+    const conBpm = lib.tracks.filter((t) => t.bpm !== null).length;
+
+    // Percentuali, non contenuti: il punto è che i campi non siano vuoti.
+    expect(conTitolo / lib.tracks.length).toBeGreaterThan(0.9);
+    expect(conDurata / lib.tracks.length).toBeGreaterThan(0.9);
+    expect(conBpm / lib.tracks.length).toBeGreaterThan(0.9);
+
+    // Durate in SECONDI: se si leggesse `length_ms` senza dividere, un brano
+    // di 3 minuti risulterebbe lungo due giorni.
+    for (const t of lib.tracks) {
+      if (t.durationS === null) continue;
+      expect(t.durationS).toBeGreaterThan(1);
+      expect(t.durationS).toBeLessThan(4 * 60 * 60);
+    }
+
+    console.log(
+      `[serato4] valorizzati: titolo ${conTitolo}, durata ${conDurata}, bpm ${conBpm} ` +
+        `su ${lib.tracks.length}`
+    );
   });
 });

@@ -2,6 +2,7 @@ import { app } from 'electron';
 import { closeSync, existsSync, openSync, readSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
 import { rekordboxDefaultPaths } from './rekordboxPaths';
+import type { DjSoftware } from '@core/djVersions';
 
 /**
  * Rilevamento delle installazioni DJ presenti su QUESTA macchina.
@@ -17,7 +18,15 @@ import { rekordboxDefaultPaths } from './rekordboxPaths';
  * Qui si guarda soltanto: nessun file viene aperto, letto o copiato.
  */
 
-export type DjSoftwareId = 'rekordbox' | 'traktor' | 'virtualdj' | 'serato' | 'engine';
+/**
+ * Identificatore del software, DERIVATO dal registro delle versioni collaudate.
+ *
+ * ⚠ Era un elenco a sé: un ottavo posto in cui la lista dei software supportati
+ * andava tenuta allineata a mano. Aggiungerne uno significava toccare tutti gli
+ * elenchi e accorgersi degli altri solo quando qualcosa non compariva. Ora
+ * l'unica fonte è `DjSoftware`: se il registro cresce, il rilevamento lo sa.
+ */
+export type DjSoftwareId = DjSoftware;
 
 /**
  * L'APPLICAZIONE installata, che è una cosa diversa dalla sua LIBRERIA.
@@ -69,7 +78,7 @@ export interface DjSoftwareDetection {
    */
   limit?: 'readOnly' | 'external' | 'directWrite';
   /** tipo di sorgente da passare alla IPC di import */
-  kind: 'masterdb' | 'nml' | 'vdjxml' | 'seratoDir' | 'enginedb';
+  kind: 'masterdb' | 'nml' | 'vdjxml' | 'seratoDir' | 'serato4db' | 'enginedb';
 }
 
 function firstExisting(candidates: string[]): string | null {
@@ -180,6 +189,19 @@ function seratoCandidates(): string[] {
   return [join(music(), '_Serato_'), join(home(), '_Serato_'), join(documents(), '_Serato_')];
 }
 
+/**
+ * Serato DJ Pro 4: `master.sqlite`.
+ *
+ * ⚠ Percorso completamente diverso dalla cartella `_Serato_` del ≤3, e sotto
+ * `AppData\Local` invece che nella cartella musicale: cercare il 4 dove sta il
+ * ≤3 non lo trova mai.
+ */
+function serato4Candidates(): string[] {
+  return process.platform === 'win32'
+    ? [join(process.env.LOCALAPPDATA ?? '', 'Serato', 'Library', 'master.sqlite')]
+    : [join(home(), 'Library', 'Application Support', 'Serato', 'Library', 'master.sqlite')];
+}
+
 function engineCandidates(): string[] {
   const names = ['Engine Library', 'Engine Library 2'];
   const out: string[] = [];
@@ -247,9 +269,24 @@ function virtualdjVersion(vdjHome: string | null): string | null {
   }
 }
 
+/**
+ * Serato 4 e Serato ≤3 sono due FORMATI ma un solo PROGRAMMA: l'installazione,
+ * e quindi il suggerimento su dove cercarla, sono gli stessi.
+ *
+ * Il tipo di ritorno esclude `serato4` di proposito: così il compilatore sa che
+ * gli switch a valle non devono trattarlo, e continua a segnalare se un giorno
+ * si aggiunge un software senza gestirlo.
+ */
+type AppKey = Exclude<DjSoftwareId, 'serato4'>;
+
+function appKeyOf(id: DjSoftwareId): AppKey {
+  return id === 'serato4' ? 'serato' : id;
+}
+
 function appInstall(id: DjSoftwareId, vdjHome: string | null): DjAppInstall {
+  const key = appKeyOf(id);
   const none: DjAppInstall = { installed: false, path: null, version: null };
-  switch (id) {
+  switch (key) {
     case 'rekordbox': {
       // La cartella di installazione contiene una sottocartella per versione.
       const root = findAppDir(/^rekordbox$/i);
@@ -296,8 +333,9 @@ function appInstall(id: DjSoftwareId, vdjHome: string | null): DjAppInstall {
 
 /** Nome del file da cercare e percorso tipico, per guidare la scelta manuale. */
 function hintFor(id: DjSoftwareId, vdjHome: string | null): DjSourceHint {
+  const key = appKeyOf(id);
   const win = process.platform === 'win32';
-  switch (id) {
+  switch (key) {
     case 'rekordbox':
       return {
         fileName: 'master.db',
@@ -335,6 +373,13 @@ export function detectDjSoftware(): DjSoftwareDetection[] {
 
   const seratoChecked = seratoCandidates();
   const seratoPath = firstExisting(seratoChecked);
+
+  /* ⚠ Serato 4 non sostituisce la cartella `_Serato_`: le due librerie
+     coesistono, e dopo un aggiornamento a Serato 4 la vecchia resta lì. Vanno
+     quindi cercate ENTRAMBE, altrimenti su una macchina aggiornata si rileva il
+     formato che l'utente non usa più. */
+  const serato4Checked = serato4Candidates();
+  const serato4Path = firstExisting(serato4Checked);
 
   const engineChecked = engineCandidates();
   const enginePath = firstExisting(engineChecked);
@@ -386,6 +431,19 @@ export function detectDjSoftware(): DjSoftwareDetection[] {
       // limite del canale, non come impossibilità.
       limit: 'directWrite',
       kind: 'seratoDir'
+    },
+    {
+      id: 'serato4',
+      found: serato4Path !== null,
+      path: serato4Path,
+      checked: serato4Checked,
+      modifiedAt: modifiedAt(serato4Path),
+      app: appInstall('serato', vdjHome),
+      hint: hintFor('serato', vdjHome),
+      /* La scrittura verso Serato 4 tocca il database dell'utente e passa dai
+         gate come le altre; il limite dichiarato è lo stesso del ≤3. */
+      limit: 'directWrite',
+      kind: 'serato4db'
     },
     {
       id: 'engine',

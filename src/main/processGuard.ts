@@ -49,6 +49,14 @@ export const PROCESS_PATTERNS: Record<DjSoftware, ProcessPattern> = {
     unix: [/^serato\s?dj/i],
     verified: true
   },
+  /* Serato 4 e Serato <=3 sono due FORMATI diversi ma UN SOLO programma: il
+     processo da cercare e' lo stesso. Tenerli separati nel registro serve al
+     gate delle versioni, non al rilevamento. */
+  serato4: {
+    win: [],
+    unix: [/^serato\s?dj/i],
+    verified: true
+  },
   // Specifica: ["virtualdj8.exe", "virtualdj.exe"] su Windows, /^virtualdj/i su macOS
   virtualdj: {
     win: ['virtualdj8.exe', 'virtualdj.exe'],
@@ -180,7 +188,7 @@ export async function isDjSoftwareRunning(software: DjSoftware): Promise<Running
 
   const matched = names.find((name) => {
     if (process.platform === 'win32') {
-      if (software === 'serato' && SERATO_WIN_RE.test(name)) return true;
+      if ((software === 'serato' || software === 'serato4') && SERATO_WIN_RE.test(name)) return true;
       return pattern.win.includes(name);
     }
     return pattern.unix.some((re) => re.test(name));
