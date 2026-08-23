@@ -66,7 +66,11 @@ const CANDIDATE_COLUMNS: Record<string, string[]> = {
   // nella sacca, per non perderli a ogni conversione.
   beatgridLocked: ['is_beatgrid_locked'],
   stale: ['is_stale'],
-  playCount: ['dj_play_count']
+  playCount: ['dj_play_count'],
+  /* Segnale di modifica per traccia. E' la colonna su cui si regge il
+     rilevamento incrementale: senza, ogni giro di sincronizzazione
+     dovrebbe ricalcolare l'impronta di tutta la libreria. */
+  timeModified: ['time_modified']
 };
 
 function columnsOf(db: BetterSqlite3.Database, table: string): Set<string> {
@@ -202,6 +206,7 @@ export function readFrom(db: BetterSqlite3.Database): Serato4ReadResult {
         portableId: portable,
         locationPath: base,
         ...(num(r.playCount) !== null ? { playCount: num(r.playCount) } : {}),
+        ...(num(r.timeModified) !== null ? { timeModified: num(r.timeModified) } : {}),
         ...(r.beatgridLocked ? { beatgridLocked: true } : {}),
         ...(r.stale ? { stale: true } : {}),
         ...(str(r.label) ? { label: str(r.label) } : {}),

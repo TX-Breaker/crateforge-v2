@@ -250,12 +250,14 @@ def cmd_ingest_masterdb(args: argparse.Namespace) -> None:
                                     year, bpm, musical_key, camelot, duration_s, path,
                                     filesize, version_label, has_tag_issues,
                                     needs_review, review_reason, gain_db, rating,
-                                    track_color, beatgrid_bpm, beatgrid_anchor_ms)
+                                    track_color, beatgrid_bpm, beatgrid_anchor_ms,
+                                    data)
                 VALUES ('masterdb', :source_id, :title, :artist, :album, :genre,
                         :year, :bpm, :musical_key, :camelot, :duration_s, :path,
                         :filesize, :version_label, :has_tag_issues,
                         :needs_review, :review_reason, :gain_db, :rating,
-                        :track_color, :beatgrid_bpm, :beatgrid_anchor_ms)
+                        :track_color, :beatgrid_bpm, :beatgrid_anchor_ms,
+                        :data)
                 ON CONFLICT(source, source_id) DO UPDATE SET
                     title=excluded.title, artist=excluded.artist,
                     album=excluded.album, genre=excluded.genre,
@@ -270,7 +272,8 @@ def cmd_ingest_masterdb(args: argparse.Namespace) -> None:
                     gain_db=excluded.gain_db, rating=excluded.rating,
                     track_color=excluded.track_color,
                     beatgrid_bpm=excluded.beatgrid_bpm,
-                    beatgrid_anchor_ms=excluded.beatgrid_anchor_ms
+                    beatgrid_anchor_ms=excluded.beatgrid_anchor_ms,
+                    data=excluded.data
                 """,
                 row,
             )
@@ -391,6 +394,14 @@ def _content_to_track(c) -> dict | None:
     source_id = _get(c, "ID", "id")
     if source_id is None:
         return None
+
+    # ⚠ Rekordbox ha un JOURNAL: `rb_local_usn` e' un numero di sequenza
+    # monotono che cresce a ogni modifica. E' il segnale piu' ricco fra tutti i
+    # software supportati, e permette al motore di sincronizzazione di chiedere
+    # «cosa e' cambiato da quando ho guardato» invece di «in cosa differiscono
+    # queste due librerie». Senza, ogni giro rilegge tutto.
+    usn = _get(c, "rb_local_usn", "usn")
+    updated_at = _get(c, "updated_at")
     title = _get(c, "Title")
     artist = _get(_get(c, "Artist"), "Name") or _get(c, "ArtistName")
     album = _get(_get(c, "Album"), "Name") or _get(c, "AlbumName")
@@ -437,6 +448,24 @@ def _content_to_track(c) -> dict | None:
         "track_color": track_color,
         "beatgrid_bpm": None,
         "beatgrid_anchor_ms": None,
+        # Sacca dei campi non normalizzati, chiave 'rekordbox'. Ci va il
+        # segnale di modifica: senza, il motore di sincronizzazione non puo'
+        # essere incrementale. Solo valori davvero presenti — una chiave a
+        # None sarebbe rumore che fa sembrare diverse due righe identiche.
+        "data": json.dumps(
+            {
+                "rekordbox": {
+                    k: v
+                    for k, v in (
+                        ("usn", int(usn) if isinstance(usn, (int, float)) else None),
+                        ("updatedAt", str(updated_at) if updated_at else None),
+                    )
+                    if v is not None
+                }
+            }
+        )
+        if (usn is not None or updated_at is not None)
+        else "{}",
     }
 
 

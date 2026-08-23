@@ -196,6 +196,8 @@ export function readEngineLibrary(dbPath: string): ForeignLibrary {
       // `null` quando l'unica colonna disponibile è già finita in `bpm`.
       bpmDeclared: cols.has('bpmAnalyzed') ? pick(cols, 'bpm') : null,
       thirdPartySourceId: pick(cols, 'thirdPartySourceId'),
+      // Segnale di modifica per traccia: regge il rilevamento incrementale.
+      lastEditTime: pick(cols, 'lastEditTime'),
       key: pick(cols, 'keyAnalyzed', 'key'),
       length: pick(cols, 'length', 'lengthCalculated'),
       path: pick(cols, 'path', 'filename'),
@@ -216,6 +218,7 @@ export function readEngineLibrary(dbPath: string): ForeignLibrary {
       c.thirdPartySourceId
         ? `${c.thirdPartySourceId} AS thirdPartySourceId`
         : `NULL AS thirdPartySourceId`,
+      c.lastEditTime ? `${c.lastEditTime} AS lastEditTime` : `NULL AS lastEditTime`,
       c.key ? `${c.key} AS keyval` : `NULL AS keyval`,
       c.length ? `${c.length} AS length` : `NULL AS length`,
       c.path ? `${c.path} AS path` : `NULL AS path`,
@@ -310,6 +313,7 @@ export function readEngineLibrary(dbPath: string): ForeignLibrary {
       const extra: Record<string, unknown> = {};
       if (bpmDeclared !== null && bpmDeclared !== bpmAnalyzed) extra.bpmDeclared = bpmDeclared;
       if (r.thirdPartySourceId != null) extra.thirdPartySourceId = Number(r.thirdPartySourceId);
+      if (r.lastEditTime != null) extra.lastEditTime = Number(r.lastEditTime);
       if (perf && sr.source !== 'assente') extra.sampleRate = sr.rate;
       return {
         sourceId: String(r.id),
