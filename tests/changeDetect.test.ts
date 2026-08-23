@@ -182,3 +182,34 @@ dEngine('Engine DJ — segnale sulla libreria reale', () => {
     expect(confrontati).toBeGreaterThan(0);
   });
 });
+
+describe('Traktor — segnale nativo ma non numerico', () => {
+  it('usa la data di modifica come impronta, senza interpretarla', () => {
+    /* ⚠ Il formato dei due attributi NML non è documentato. Non serve
+       interpretarlo: serve che il valore sia stabile e cambi quando la traccia
+       cambia. Il confronto è un'uguaglianza di stringhe. */
+    const a = signalFor('traktor', { genre: 'House' }, '2024-01-15/45000');
+    const b = signalFor('traktor', { genre: 'Techno' }, '2024-01-15/45000');
+    // Stesso segnale nativo → non cambiato, anche se i campi differiscono:
+    // è il software a dichiarare che non ha toccato la traccia.
+    expect(compareSignals(a, b)).toBe('unchanged');
+
+    const c = signalFor('traktor', { genre: 'House' }, '2024-02-01/12000');
+    expect(compareSignals(a, c)).toBe('changed');
+  });
+
+  it('un segnale nativo e un’impronta calcolata non si confondono', () => {
+    // Se un giro trova l'uno e il successivo l'altro, si rilegge. Direzione
+    // sicura: meglio un giro in più che una modifica non vista.
+    const nativo = signalFor('traktor', { genre: 'House' }, '2024-01-15/45000');
+    const calcolata = signalFor('traktor', { genre: 'House' }, null);
+    expect(compareSignals(nativo, calcolata)).toBe('changed');
+  });
+
+  it('legge la data di modifica dalla sacca del formato', () => {
+    expect(nativeSignalFrom('traktor', { modifiedDate: '2024-01-15/45000' })).toBe(
+      '2024-01-15/45000'
+    );
+    expect(nativeSignalFrom('traktor', { modifiedDate: '   ' })).toBeNull();
+  });
+});

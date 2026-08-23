@@ -120,6 +120,18 @@ export function readTraktorNml(nmlPath: string): ForeignLibrary {
     const yearRaw = info['@_RELEASE_DATE'] ?? (e['@_YEAR'] as string | undefined);
     const year = yearRaw ? Number(String(yearRaw).slice(0, 4)) || null : null;
 
+    /* Segnale di modifica per traccia. Traktor lo scrive come data e ora in due
+       attributi separati; senza, questo software resterebbe sul rilevamento a
+       impronta, che costa una lettura completa della collezione a ogni giro.
+
+       ⚠ Il formato dei due attributi non è documentato: `MODIFIED_DATE` sembra
+       una data ISO e `MODIFIED_TIME` un numero di secondi dalla mezzanotte. Non
+       serve interpretarli — serve che il valore sia STABILE e cambi quando la
+       traccia cambia. Si concatenano così come sono, e il confronto è
+       un'uguaglianza di stringhe. */
+    const modifiedDate = (info['@_MODIFIED_DATE'] ?? e['@_MODIFIED_DATE']) as string | undefined;
+    const modifiedTime = (info['@_MODIFIED_TIME'] ?? e['@_MODIFIED_TIME']) as string | undefined;
+
     const cuesRaw = asArray<Record<string, unknown>>(e.CUE_V2 as never);
     const cues = cuesRaw
       .map((c) => mapCue(c as Record<string, string>))
@@ -152,7 +164,11 @@ export function readTraktorNml(nmlPath: string): ForeignLibrary {
       filesize: info['@_FILESIZE'] ? Number(info['@_FILESIZE']) * 1024 || null : null,
       cues,
       beatgridBpm,
-      beatgridAnchorMs
+      beatgridAnchorMs,
+      formatData:
+        modifiedDate || modifiedTime
+          ? { modifiedDate: `${modifiedDate ?? ''}/${modifiedTime ?? ''}` }
+          : undefined
     });
   }
 
