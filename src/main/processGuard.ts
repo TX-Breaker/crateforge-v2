@@ -2,6 +2,23 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import type { DjSoftware } from '@core/djVersions';
 
+/**
+ * Software che questa guardia sa riconoscere.
+ *
+ * È `DjSoftware` più djay, e la differenza non è una svista. `DjSoftware` è
+ * l'elenco dei software verso cui CrateForge SCRIVE, e ogni voce lì dentro
+ * porta con sé un marcatore di versione collaudato: è il gate delle scritture.
+ * Di djay oggi esiste solo il lettore, quindi non ha nulla da presidiare e non
+ * appartiene a quell'elenco.
+ *
+ * Ma leggere un database SQLite mentre l'applicazione lo tiene aperto in
+ * modalità WAL può restituire uno stato a metà — righe già nel journal e non
+ * ancora nel file principale — quindi la guardia serve anche alla sola
+ * lettura. Da qui il tipo separato: più largo dove il rischio è più largo,
+ * senza promettere una scrittura che non esiste.
+ */
+export type GuardedSoftware = DjSoftware | 'djay';
+
 const exec = promisify(execFile);
 
 /**
@@ -32,28 +49,42 @@ export interface ProcessPattern {
   win: string[];
   /** Espressioni sul nome del comando su macOS e Linux. */
   unix: RegExp[];
-  /** true quando il pattern viene dalla specifica, false quando è dedotto. */
+  /**
+   * true quando il nome è stato letto da un processo realmente in esecuzione,
+   * false quando è dedotto dal nome di installazione. Un pattern dedotto non
+   * è sbagliato per forza, ma il suo mancato rilevamento è previsto: chi legge
+   * questo campo sa quanto può fidarsi del "non è in esecuzione".
+   */
   verified: boolean;
 }
 
 /**
- * ⚠ Solo Serato e VirtualDJ hanno pattern presi dalla specifica dei formati.
- * Gli altri tre sono **assunzioni** ricavate dai nomi di installazione più
- * comuni e vanno confermate su una macchina con quel software installato:
- * finché `verified` è false, un mancato rilevamento è previsto, non sorprendente.
+ * Tutti i pattern sono stati VERIFICATI il 24/08/2026 su una macchina con i
+ * cinque software installati e in esecuzione contemporaneamente, leggendo
+ * `tasklist` mentre giravano.
+ *
+ * ⚠ La verifica ha trovato quello che l'assunzione non poteva sapere:
+ * Rekordbox non è un processo, sono cinque. Accanto a `rekordbox.exe` girano
+ * quattro istanze di `rekordboxAgent.exe`. Una guardia che cercasse solo il
+ * primo direbbe «non in esecuzione» mentre l'agent tiene ancora il database,
+ * ed è esattamente il caso che questa guardia esiste per impedire.
  */
-export const PROCESS_PATTERNS: Record<DjSoftware, ProcessPattern> = {
-  // Specifica: /serato dj (pro|lite)( v\d+)?\.exe/i
+export const PROCESS_PATTERNS: Record<GuardedSoftware, ProcessPattern> = {
+  /* Specifica: /serato dj (pro|lite)( v\d+)?\.exe/i — confermata: il processo
+     osservato è `Serato DJ Pro.exe`. Serato lancia anche
+     `serato_library_ipc_lock_tool.exe`, figlio di `Serato DJ Pro.exe`, il cui
+     nome dichiara la funzione: tiene il lock della libreria. Lo si cerca
+     perché è il lock a impedire la scrittura, non la finestra dell'app. */
   serato: {
-    win: [],
+    win: ['serato_library_ipc_lock_tool.exe'],
     unix: [/^serato\s?dj/i],
     verified: true
   },
-  /* Serato 4 e Serato <=3 sono due FORMATI diversi ma UN SOLO programma: il
-     processo da cercare e' lo stesso. Tenerli separati nel registro serve al
-     gate delle versioni, non al rilevamento. */
+  /* Serato 4 e Serato <=3 sono due FORMATI diversi ma UN SOLO programma: i
+     processi da cercare sono gli stessi, elenco incluso. Tenerli separati nel
+     registro serve al gate delle versioni, non al rilevamento. */
   serato4: {
-    win: [],
+    win: ['serato_library_ipc_lock_tool.exe'],
     unix: [/^serato\s?dj/i],
     verified: true
   },
@@ -63,23 +94,45 @@ export const PROCESS_PATTERNS: Record<DjSoftware, ProcessPattern> = {
     unix: [/^virtualdj/i],
     verified: true
   },
-  // ASSUNZIONE: nome dell'eseguibile non documentato nella specifica.
+  /* ⚠ Cinque processi, non uno: `rekordbox.exe` più quattro `rekordboxAgent.exe`.
+     Includere l'agent sarebbe pericoloso se fosse un servizio sempre attivo,
+     perché bloccherebbe le scritture per sempre. Verificato che non lo è:
+     l'albero dei processi mostra il primo agent figlio diretto di
+     `rekordbox.exe` e gli altri tre figli suoi, e non esiste né chiave di
+     avvio automatico, né attività pianificata, né servizio di Windows che li
+     lanci. Vivono quanto l'applicazione — o un istante di più, che è proprio
+     la finestra in cui il database è ancora occupato e l'utente crede di aver
+     già chiuso tutto. */
   rekordbox: {
-    win: ['rekordbox.exe'],
+    win: ['rekordbox.exe', 'rekordboxagent.exe'],
     unix: [/^rekordbox/i],
-    verified: false
+    verified: true
   },
-  // ASSUNZIONE: idem.
+  /* Verificato su Traktor Pro 4: il processo è `Traktor Pro 4.exe`, con la
+     versione dentro il nome. Le versioni precedenti restano nell'elenco perché
+     seguono la stessa forma. */
   traktor: {
     win: ['traktor.exe', 'traktor pro 3.exe', 'traktor pro 4.exe'],
     unix: [/^traktor/i],
-    verified: false
+    verified: true
   },
-  // ASSUNZIONE: idem.
+  /* Verificato: `Engine DJ.exe`, con lo spazio.
+     ⚠ Il confronto è ESATTO, non una ricerca di sottostringa, e la macchina di
+     collaudo spiega perché: ci girava `PowerToys.KeyboardManagerEngine.exe` e
+     l'avvio automatico lanciava `ace_engine.exe`. Con un match generico su
+     «engine», un'utilità di tastiera avrebbe bloccato per sempre ogni
+     scrittura verso Engine DJ. */
   engine: {
     win: ['engine dj.exe', 'enginedj.exe', 'engine_dj.exe'],
     unix: [/^engine\s?dj/i],
-    verified: false
+    verified: true
+  },
+  /* djay Pro: verificato come `djayApp.exe`. È distribuito dallo Store, quindi
+     l'eseguibile vive sotto `WindowsApps` e non in `Program Files`. */
+  djay: {
+    win: ['djayapp.exe'],
+    unix: [/^djay/i],
+    verified: true
   }
 };
 
@@ -87,7 +140,7 @@ export const PROCESS_PATTERNS: Record<DjSoftware, ProcessPattern> = {
 const SERATO_WIN_RE = /^serato dj (pro|lite)( v\d+)?\.exe$/i;
 
 export interface RunningVerdict {
-  software: DjSoftware;
+  software: GuardedSoftware;
   running: boolean;
   /** Nome del processo che ha fatto scattare il rilevamento. */
   matched: string | null;
@@ -96,7 +149,7 @@ export interface RunningVerdict {
    * è un "non lo so", e va trattato come tale.
    */
   unknown: boolean;
-  /** false quando il pattern è un'assunzione e non viene dalla specifica. */
+  /** false quando il pattern è dedotto e non osservato: vedi `ProcessPattern`. */
   verified: boolean;
 }
 
@@ -169,7 +222,7 @@ async function listProcesses(): Promise<string[]> {
 }
 
 /** Il software è in esecuzione? Non lancia mai: l'incertezza è nel verdetto. */
-export async function isDjSoftwareRunning(software: DjSoftware): Promise<RunningVerdict> {
+export async function isDjSoftwareRunning(software: GuardedSoftware): Promise<RunningVerdict> {
   const pattern = PROCESS_PATTERNS[software];
   const base: RunningVerdict = {
     software,
@@ -208,7 +261,7 @@ export async function isDjSoftwareRunning(software: DjSoftware): Promise<Running
  * messaggio dice esplicitamente perché si è fermato, così l'utente può chiudere
  * il programma e riprovare invece di restare a indovinare.
  */
-export async function assertNotRunning(software: DjSoftware, label: string): Promise<void> {
+export async function assertNotRunning(software: GuardedSoftware, label: string): Promise<void> {
   const v = await isDjSoftwareRunning(software);
   if (v.unknown) {
     throw new Error(
