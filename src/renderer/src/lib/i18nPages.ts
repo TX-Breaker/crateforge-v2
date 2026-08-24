@@ -994,6 +994,12 @@ const it = {
     goalOrganizeTitle: 'Voglio rimettere in forma la mia libreria',
     goalOrganizeBody:
       'Sistemare il caos, costruire un flusso di lavoro, farne la mia base di partenza.',
+    goalHubTitle: 'CrateForge è la mia libreria principale',
+    goalHubBody:
+      'Cambio spesso programma o ho più attrezzature. Tengo qui la libreria buona e da qui la riverso su tutti gli altri, a mano o da sola.',
+    goalPrimaryTitle: 'Comanda un solo programma, gli altri li uso per suonare',
+    goalPrimaryBody:
+      'La libreria vera sta nel mio programma principale. Voglio ritrovarla uguale negli altri, sempre in quella direzione.',
     featEyebrow: 'Cosa trovi qui dentro',
     featTitle: 'Le funzioni che esistono oggi',
     featBody:
@@ -2139,6 +2145,12 @@ const en: PageDict = {
     goalConvertBody: 'I am moving to a new DJ app. Nothing else.',
     goalOrganizeTitle: 'I want to get my library back in shape',
     goalOrganizeBody: 'Clear the mess, build a workflow, make this my starting point.',
+    goalHubTitle: 'CrateForge is my main library',
+    goalHubBody:
+      'I switch software often, or I have more than one setup. The good library lives here, and from here it goes out to all the others, by hand or on its own.',
+    goalPrimaryTitle: 'One program is in charge, the others are for playing',
+    goalPrimaryBody:
+      'The real library lives in my main program. I want it mirrored in the others, always in that direction.',
     featEyebrow: 'What is in here',
     featTitle: 'The features that exist today',
     featBody:

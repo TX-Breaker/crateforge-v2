@@ -1,9 +1,11 @@
 import {
   Copy,
+  Crown,
   Disc3,
   FolderSearch,
   HelpCircle,
   Layers,
+  Library,
   Music4,
   Wrench
 } from 'lucide-react';
@@ -30,7 +32,28 @@ import { cn } from '@/lib/utils';
  * classe inventata.
  */
 
-export type WizardGoal = 'convert' | 'organize';
+/**
+ * Perché l'utente è qui. Sono quattro situazioni diverse, non quattro modi di
+ * dire la stessa cosa, e ognuna vuole un flusso diverso:
+ *
+ * - `convert`  — migrazione una tantum verso un altro programma. Finito quello,
+ *                CrateForge non serve più.
+ * - `organize` — rimettere in ordine la libreria: doppioni, tag, percorsi rotti.
+ * - `hub`      — CrateForge è la libreria PRINCIPALE e scrive verso tutti gli
+ *                altri. È il caso di chi cambia spesso programma o ha più
+ *                attrezzature e vuole ritrovare la stessa libreria ovunque.
+ * - `primary`  — un solo programma comanda (per esempio Rekordbox) e la sua
+ *                libreria viene riversata sugli altri, che servono solo a
+ *                suonare. La direzione è sempre la stessa, mai al contrario.
+ *
+ * ⚠ La differenza fra `hub` e `primary` non è di comodo: decide CHI vince in
+ * caso di conflitto. Con `hub` la verità sta in CrateForge e le modifiche fatte
+ * nei singoli programmi vi confluiscono; con `primary` la verità sta nel
+ * programma principale e quello che si fa negli altri viene sovrascritto. Un
+ * utente che sceglie male perde il lavoro fatto dalla parte sbagliata, quindi le
+ * due voci vanno tenute distinte e spiegate.
+ */
+export type WizardGoal = 'convert' | 'organize' | 'hub' | 'primary';
 
 type T = (k: string, p?: Record<string, string | number>) => string;
 
@@ -55,7 +78,9 @@ export function GoalStep({
 }) {
   const options: { id: WizardGoal; icon: typeof Disc3; titleKey: string; bodyKey: string }[] = [
     { id: 'convert', icon: Disc3, titleKey: 'goalConvertTitle', bodyKey: 'goalConvertBody' },
-    { id: 'organize', icon: Wrench, titleKey: 'goalOrganizeTitle', bodyKey: 'goalOrganizeBody' }
+    { id: 'organize', icon: Wrench, titleKey: 'goalOrganizeTitle', bodyKey: 'goalOrganizeBody' },
+    { id: 'hub', icon: Library, titleKey: 'goalHubTitle', bodyKey: 'goalHubBody' },
+    { id: 'primary', icon: Crown, titleKey: 'goalPrimaryTitle', bodyKey: 'goalPrimaryBody' }
   ];
 
   return (

@@ -994,6 +994,12 @@ export const fr: PageDict = {
     goalConvertBody: 'Je passe à une nouvelle appli DJ. Rien d’autre.',
     goalOrganizeTitle: 'Je veux remettre ma bibliothèque en forme',
     goalOrganizeBody: 'Ranger le désordre, construire un flux de travail, en faire ma base.',
+    goalHubTitle: 'CrateForge est ma bibliothèque principale',
+    goalHubBody:
+      'Je change souvent de logiciel, ou j’ai plusieurs configurations. La bonne bibliothèque vit ici, et d’ici elle part vers toutes les autres, à la main ou toute seule.',
+    goalPrimaryTitle: 'Un seul programme commande, les autres servent à jouer',
+    goalPrimaryBody:
+      'La vraie bibliothèque vit dans mon programme principal. Je veux la retrouver identique dans les autres, toujours dans ce sens.',
     featEyebrow: 'Ce qu’il y a ici',
     featTitle: 'Les fonctions qui existent aujourd’hui',
     featBody:
@@ -2137,6 +2143,12 @@ export const de: PageDict = {
     goalConvertBody: 'Ich wechsle zu einer neuen DJ-App. Sonst nichts.',
     goalOrganizeTitle: 'Ich will meine Bibliothek wieder in Form bringen',
     goalOrganizeBody: 'Das Chaos ordnen, einen Arbeitsablauf aufbauen, hier meine Basis haben.',
+    goalHubTitle: 'CrateForge ist meine Hauptbibliothek',
+    goalHubBody:
+      'Ich wechsle oft das Programm oder habe mehrere Setups. Die gute Bibliothek liegt hier, und von hier geht sie an alle anderen — von Hand oder von selbst.',
+    goalPrimaryTitle: 'Ein Programm bestimmt, die anderen sind zum Spielen',
+    goalPrimaryBody:
+      'Die echte Bibliothek liegt in meinem Hauptprogramm. Ich will sie in den anderen genauso wiederfinden, immer in diese Richtung.',
     featEyebrow: 'Was hier drin ist',
     featTitle: 'Die Funktionen, die es heute gibt',
     featBody:

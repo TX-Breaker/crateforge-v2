@@ -112,14 +112,20 @@ export function FirstRun() {
    * È l'unica fonte: i pallini in testa, la disabilitazione di «Avanti» e il
    * rendering leggono tutti da qui, così non possono divergere.
    */
+  /* Chi non sta solo convertendo userà CrateForge nel tempo, quindi ha senso
+     mostrargli che cosa sa fare e in che stato è la libreria appena importata.
+     Chi sta migrando una volta sola no: per lui sono due schermate di troppo
+     fra sé e il risultato. */
+  const restera = goal === 'organize' || goal === 'hub' || goal === 'primary';
+
   const flow: { id: string; labelKey: string }[] = [
     { id: 'welcome', labelKey: 's1' },
-    ...(goal === 'organize' ? [{ id: 'features', labelKey: 's6' }] : []),
+    ...(restera ? [{ id: 'features', labelKey: 's6' }] : []),
     { id: 'app', labelKey: 's7' },
     { id: 'importPanel', labelKey: 's8' },
     { id: 'detect', labelKey: 's2' },
     { id: 'import', labelKey: 's3' },
-    ...(goal === 'organize' ? [{ id: 'health', labelKey: 's4' }] : []),
+    ...(restera ? [{ id: 'health', labelKey: 's4' }] : []),
     { id: 'prefs', labelKey: 's5' }
   ];
 
@@ -295,7 +301,10 @@ export function FirstRun() {
   return (
     <div className="flex h-full flex-col bg-canvas">
       {/* barra dei passi */}
-      <header className="flex shrink-0 items-center gap-4 border-b border-line-subtle bg-surface-1 px-6 py-3">
+      {/* ⚠ `pr-window-controls`: su Windows i comandi di finestra sono disegnati
+          dal sistema sopra la pagina, e senza quello spazio il pulsante a filo
+          destro finisce sotto di loro e non si può più premere. */}
+      <header className="flex shrink-0 items-center gap-4 border-b border-line-subtle bg-surface-1 px-6 py-3 pr-window-controls">
         <CrateTile size={22} radius={5} />
         <div className="flex flex-wrap items-center gap-1.5">
           {steps.map((s, i) => (

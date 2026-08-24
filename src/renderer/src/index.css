@@ -409,3 +409,21 @@
 :root[data-motion='reduce'] button:active {
   transform: none !important;
 }
+
+/*
+ * Spazio riservato ai comandi di finestra.
+ *
+ * ⚠ Su Windows la finestra usa il Window Controls Overlay: i pulsanti riduci /
+ * ingrandisci / chiudi sono disegnati dal sistema SOPRA la pagina, nell'angolo
+ * in alto a destra. Qualunque cosa messa a filo destro in una barra alta finisce
+ * sotto di loro e diventa incliccabile — succedeva al pulsante «Salta» della
+ * procedura guidata, che spariva senza lasciare traccia del perché.
+ *
+ * `titlebar-area-width` è la larghezza che il sistema lascia alla pagina; la
+ * differenza rispetto alla finestra è lo spazio occupato dai comandi. Dove
+ * l'overlay non esiste (macOS, Linux) le variabili non sono definite e il
+ * ripiego azzera il padding, senza buchi nel layout.
+ */
+.pr-window-controls {
+  padding-right: calc(100vw - env(titlebar-area-width, 100vw) - env(titlebar-area-x, 0px));
+}
