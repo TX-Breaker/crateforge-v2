@@ -186,15 +186,38 @@ export function FeaturesStep({ t }: { t: T }) {
 /* ------------------------------------------------------------------ passo 3 */
 
 /** «Da quale app DJ stai importando?» — griglia a due colonne. */
+/**
+ * Da quali programmi si importa.
+ *
+ * ⚠ Scelta MULTIPLA, non singola. Chi arriva qui spesso non sta migrando da un
+ * programma soltanto: sta mettendo insieme quello che ha sparso fra Rekordbox,
+ * Serato e Traktor. Costringerlo a un solo nome significava fargli rifare la
+ * procedura una volta per programma, e ogni giro riscriveva le scelte del
+ * precedente.
+ *
+ * «Nessuna app DJ» resta mutuamente esclusiva: dichiarare di non avere
+ * programmi e poi sceglierne tre è una contraddizione, non una combinazione.
+ */
 export function AppGridStep({
   t,
   value,
   onChange
 }: {
   t: T;
-  value: string | null;
-  onChange: (id: string) => void;
+  value: string[];
+  onChange: (ids: string[]) => void;
 }) {
+  const toggle = (id: string) => {
+    if (id === 'none') {
+      onChange(value.includes('none') ? [] : ['none']);
+      return;
+    }
+    const senzaNone = value.filter((v) => v !== 'none');
+    onChange(
+      senzaNone.includes(id) ? senzaNone.filter((v) => v !== id) : [...senzaNone, id]
+    );
+  };
+
   return (
     <div className="space-y-4">
       <div>
@@ -203,9 +226,9 @@ export function AppGridStep({
         <p className="mt-1 max-w-2xl text-caption text-ink-mid">{t('appBody')}</p>
       </div>
 
-      <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label={t('appTitle')}>
+      <div className="grid gap-2 sm:grid-cols-2" role="group" aria-label={t('appTitle')}>
         {DJ_APPS.map((a) => {
-          const selected = value === a.id;
+          const selected = value.includes(a.id);
           /* Un'app le cui sorgenti non sono ancora implementate si mostra
              spenta con il motivo: toglierla lascerebbe l'utente a chiedersi se
              ha guardato male. */
@@ -214,10 +237,10 @@ export function AppGridStep({
             <button
               key={a.id}
               type="button"
-              role="radio"
+              role="checkbox"
               aria-checked={selected}
               disabled={!usable}
-              onClick={() => onChange(a.id)}
+              onClick={() => toggle(a.id)}
               className="text-left disabled:cursor-not-allowed disabled:opacity-45"
             >
               <Card
@@ -286,16 +309,19 @@ function orderedSources(app: DjApp | null) {
  */
 export function ImportPanelStep({
   t,
-  appId,
+  appIds,
   choices,
   onChange
 }: {
   t: T;
-  appId: string | null;
+  appIds: string[];
   choices: ImportChoices;
   onChange: (c: ImportChoices) => void;
 }) {
-  const app = DJ_APPS.find((a) => a.id === appId) ?? null;
+  /* Con più programmi scelti si ordinano per primi i formati del PRIMO
+     selezionato: è quello da cui l'utente sta partendo, e l'elenco completo
+     resta comunque sotto. */
+  const app = DJ_APPS.find((a) => appIds.includes(a.id)) ?? null;
   const sources = orderedSources(app);
   const current = choices.source ? importSource(choices.source) : null;
   const options = current?.options ?? [];

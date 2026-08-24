@@ -1021,7 +1021,8 @@ export const fr: PageDict = {
       'Listes intelligentes, nettoyage automatique des métadonnées et recherche en boutique ne sont pas implémentés. Nous préférons ne pas les promettre.',
     appEyebrow: 'D’où on part',
     appTitle: 'Depuis quelle appli DJ importez-vous ?',
-    appBody: 'Cela choisit le bon chemin : le format du fichier est notre problème.',
+    appBody:
+      'Tu peux en choisir plusieurs : si ta bibliothèque est éparpillée entre plusieurs logiciels, on les réunit. Le format du fichier est notre problème.',
     appRekordbox: 'Rekordbox',
     appSerato: 'Serato',
     appTraktor: 'Traktor',
@@ -2170,7 +2171,8 @@ export const de: PageDict = {
       'Intelligente Playlists, automatische Metadatenbereinigung und Shop-Suche sind nicht implementiert. Wir versprechen sie lieber nicht.',
     appEyebrow: 'Wo wir anfangen',
     appTitle: 'Aus welcher DJ-App importierst du?',
-    appBody: 'Das wählt den richtigen Weg: Das Dateiformat ist unser Problem.',
+    appBody:
+      'Du kannst mehrere wählen: Liegt deine Bibliothek verteilt in mehreren Programmen, führen wir sie zusammen. Das Dateiformat ist unser Problem.',
     appRekordbox: 'Rekordbox',
     appSerato: 'Serato',
     appTraktor: 'Traktor',

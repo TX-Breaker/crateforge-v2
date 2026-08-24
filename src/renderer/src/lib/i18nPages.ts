@@ -1021,7 +1021,8 @@ const it = {
       'Playlist dinamiche, pulizia automatica dei metadati e ricerca nei negozi non sono implementate. Preferiamo non prometterle finché non funzionano.',
     appEyebrow: 'Da dove si parte',
     appTitle: 'Da quale app DJ stai importando?',
-    appBody: 'Serve a proporti la strada giusta: il formato del file lo scegliamo noi.',
+    appBody:
+      'Puoi sceglierne più di uno: se la tua libreria è sparsa fra più programmi, li mettiamo insieme. Il formato del file lo scegliamo noi.',
     appRekordbox: 'Rekordbox',
     appSerato: 'Serato',
     appTraktor: 'Traktor',
@@ -2172,7 +2173,8 @@ const en: PageDict = {
       'Smart playlists, automatic metadata cleanup and store lookup are not implemented. We would rather not promise them until they work.',
     appEyebrow: 'Where we start',
     appTitle: 'Which DJ app are you importing from?',
-    appBody: 'This picks the right route for you: the file format is our problem, not yours.',
+    appBody:
+      'Pick more than one if your library is spread across several programs — we put them together. The file format is our problem, not yours.',
     appRekordbox: 'Rekordbox',
     appSerato: 'Serato',
     appTraktor: 'Traktor',

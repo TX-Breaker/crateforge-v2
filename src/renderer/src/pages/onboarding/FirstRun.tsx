@@ -104,7 +104,7 @@ export function FirstRun() {
     setGoalState(g);
     void window.crateforge.settings.set('wizardGoal', g);
   };
-  const [appId, setAppId] = useState<string | null>(null);
+  const [appIds, setAppIds] = useState<string[]>([]);
   const [choices, setChoices] = useState<ImportChoices>(DEFAULT_IMPORT_CHOICES);
 
   /**
@@ -371,10 +371,10 @@ export function FirstRun() {
 
           {current === 'features' && <FeaturesStep t={tp} />}
 
-          {current === 'app' && <AppGridStep t={tp} value={appId} onChange={setAppId} />}
+          {current === 'app' && <AppGridStep t={tp} value={appIds} onChange={setAppIds} />}
 
           {current === 'importPanel' && (
-            <ImportPanelStep t={tp} appId={appId} choices={choices} onChange={setChoices} />
+            <ImportPanelStep t={tp} appIds={appIds} choices={choices} onChange={setChoices} />
           )}
 
           {/* 2 — rilevamento */}
@@ -729,7 +729,7 @@ export function FirstRun() {
                    decisioni. */
               disabled={
                 (current === 'welcome' && goal === null) ||
-                (current === 'app' && appId === null) ||
+                (current === 'app' && appIds.length === 0) ||
                 (current === 'import' &&
                   (importLog.length === 0 || (failed.length > 0 && !acceptedFailures)))
               }
