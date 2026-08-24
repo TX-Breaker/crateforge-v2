@@ -42,7 +42,15 @@ interface Detection {
   checked: string[];
   modifiedAt: string | null;
   limit?: 'readOnly' | 'external' | 'directWrite';
-  kind: 'masterdb' | 'nml' | 'vdjxml' | 'seratoDir' | 'enginedb';
+  /**
+   * ⚠ Deve elencare TUTTI i tipi che `detect.djSoftware` sa restituire. Questa
+   * copia ne dichiarava cinque mentre il processo principale ne emetteva sei:
+   * `serato4db` mancava, TypeScript non poteva accorgersene, e l'instradamento
+   * lo faceva ricadere sul lettore di Engine. L'utente vedeva il `master.sqlite`
+   * di Serato rifiutato perché «manca la tabella Track» — un messaggio che
+   * mandava a cercare il problema dove non era.
+   */
+  kind: 'masterdb' | 'nml' | 'vdjxml' | 'seratoDir' | 'serato4db' | 'enginedb';
   /** l'applicazione installata: cosa diversa dall'avere una libreria */
   app: { installed: boolean; path: string | null; version: string | null };
   /** cosa cercare se la scelta passa all'utente */
@@ -117,7 +125,24 @@ export function FirstRun() {
 
   const [step, setStep] = useState(0);
   const current = flow[Math.min(step, flow.length - 1)].id;
-  const goTo = (id: string) => setStep(Math.max(0, flow.findIndex((f) => f.id === id)));
+  /**
+   * Va a un passo per nome.
+   *
+   * ⚠ Un passo inesistente NON riporta all'inizio. La versione precedente
+   * faceva `Math.max(0, findIndex(...))`: quando l'id non c'era, `findIndex`
+   * dava -1 e diventava 0, cioè la schermata di benvenuto. È il difetto per cui
+   * il wizard non si chiudeva mai: dopo l'import si chiamava `goTo('health')`,
+   * ma il passo salute esiste solo per chi ha scelto di rimettere in ordine la
+   * libreria — chi stava solo convertendo tornava al punto di partenza, e da lì
+   * ricominciava all'infinito.
+   *
+   * Ora un id sconosciuto fa avanzare di uno, che è sempre la lettura corretta
+   * di «vai avanti», e non torna mai indietro da solo.
+   */
+  const goTo = (id: string) => {
+    const i = flow.findIndex((f) => f.id === id);
+    setStep((s) => (i >= 0 ? i : Math.min(s + 1, flow.length - 1)));
+  };
   const [detections, setDetections] = useState<Detection[] | null>(null);
   const [chosen, setChosen] = useState<Set<SoftwareId>>(new Set());
   const [manual, setManual] = useState<Partial<Record<SoftwareId, string>>>({});
@@ -151,6 +176,7 @@ export function FirstRun() {
       nml: [{ name: 'collection.nml', extensions: ['nml'] }],
       vdjxml: [{ name: 'database.xml', extensions: ['xml'] }],
       enginedb: [{ name: 'Engine Library (m.db)', extensions: ['db'] }],
+      serato4db: [{ name: 'Serato DJ Pro 4 (master.sqlite)', extensions: ['sqlite'] }],
       seratoDir: []
     };
     const picked =
@@ -196,7 +222,31 @@ export function FirstRun() {
           ? { ok: true, text: tp('importedN', { n: r.tracks ?? 0 }) }
           : { ok: false, text: r.message ?? tp('importFailed') };
       }
-      const kind = d.kind === 'nml' ? 'traktor' : d.kind === 'vdjxml' ? 'virtualdj' : 'engine';
+      if (d.kind === 'serato4db') {
+        /* Serato 4 ha un lettore suo: è un database a grafo, non una tabella di
+           tracce. Prima finiva nel ramo generico qui sotto. */
+        const r = await run(NAMES[d.id], () =>
+          window.crateforge.library.importSerato4(path)
+        );
+        return r.ok
+          ? { ok: true, text: tp('importedN', { n: r.tracks ?? 0 }) }
+          : { ok: false, text: r.message ?? tp('importFailed') };
+      }
+
+      /* ⚠ Mappa ESPLICITA, non una catena di ternari con un ripiego in fondo.
+         La versione precedente finiva con `: 'engine'`, quindi qualunque tipo
+         non previsto veniva mandato al lettore di Engine e falliva con un
+         messaggio che parlava di un altro software. Con una mappa, un tipo
+         nuovo dà `undefined` e si ferma dicendo la verità: non so leggerlo. */
+      const VERSO: Partial<Record<Detection['kind'], 'traktor' | 'virtualdj' | 'engine'>> = {
+        nml: 'traktor',
+        vdjxml: 'virtualdj',
+        enginedb: 'engine'
+      };
+      const kind = VERSO[d.kind];
+      if (!kind) {
+        return { ok: false, text: tp('unknownKind', { kind: d.kind }) };
+      }
       const r = await run(NAMES[d.id], () => window.crateforge.library.importForeign(kind, path));
       return r.ok
         ? { ok: true, text: tp('importedN', { n: r.tracks }) }
@@ -521,8 +571,11 @@ export function FirstRun() {
                         size="sm"
                         variant="ghost"
                         onClick={() => {
+                          /* Avanza di uno invece di saltare a un passo per nome:
+                             quale sia il passo successivo dipende dall'obiettivo
+                             scelto, e questo pulsante non deve saperlo. */
                           setAcceptedFailures(true);
-                          goTo('health');
+                          setStep((s) => Math.min(s + 1, flow.length - 1));
                         }}
                       >
                         {tp('continueAnyway')}

@@ -136,7 +136,57 @@ describe('regola 2 — nome, dimensione e durata insieme', () => {
     expect(r.byRule.fileMatch).toBe(1);
   });
 
-  it('NON unisce due file con lo stesso nome ma dimensione diversa', () => {
+  it('⚠ unisce lo stesso file quando i software dichiarano dimensioni diverse', () => {
+    /* Il caso per cui la regola 2 esiste, e che prima non copriva. Su una
+       libreria reale lo stesso file da 8.062.629 byte era dichiarato 7.968.831
+       da Rekordbox, 7.972.864 da Traktor e 7.973.026 da Engine: ognuno
+       conserva la dimensione del momento in cui l'ha importato, e ogni
+       riscrittura dei tag ID3 la sposta di qualche kilobyte.
+
+       Pretendendo la dimensione identica al byte, la regola non scattava mai
+       fra software diversi — cioè mai nel caso per cui era stata scritta. */
+    const db = memDb();
+    add(db, {
+      source: 'masterdb',
+      source_id: '1',
+      path: 'C:/A/brano.mp3',
+      filesize: 7_968_831,
+      duration_s: 97
+    });
+    const b = add(db, {
+      source: 'traktor',
+      source_id: '2',
+      path: 'C:/B/brano.mp3',
+      filesize: 7_972_864,
+      duration_s: 98
+    });
+    linkCanonicalTracks(db);
+    expect(canonicalOf(db, b)).not.toBe(b);
+  });
+
+  it('unisce anche quando una sorgente non dichiara la dimensione', () => {
+    /* Serato ≤ 3 non espone la dimensione per nessuna traccia. L'assenza di un
+       dato non è una smentita: a decidere restano nome e durata. */
+    const db = memDb();
+    add(db, {
+      source: 'masterdb',
+      source_id: '1',
+      path: 'C:/A/brano.mp3',
+      filesize: 7_968_831,
+      duration_s: 97
+    });
+    const b = add(db, {
+      source: 'serato',
+      source_id: '2',
+      path: 'C:/B/brano.mp3',
+      filesize: null,
+      duration_s: 97
+    });
+    linkCanonicalTracks(db);
+    expect(canonicalOf(db, b)).not.toBe(b);
+  });
+
+  it('NON unisce due file con lo stesso nome ma dimensione molto diversa', () => {
     const db = memDb();
     const a = add(db, {
       source: 'masterdb',
@@ -181,10 +231,22 @@ describe('regola 2 — nome, dimensione e durata insieme', () => {
     expect(canonicalOf(db, b)).toBe(b);
   });
 
-  it('senza dimensione o senza durata la regola 2 non scatta', () => {
+  it('senza durata la regola 2 non scatta', () => {
+    /* ⚠ La durata è obbligatoria, la dimensione no. Senza durata resterebbe il
+       solo nome del file, e `intro.mp3` esiste in mille cartelle diverse: non
+       basta a dire che due righe sono lo stesso brano. */
     const db = memDb();
     add(db, { source: 'masterdb', source_id: '1', path: 'C:/A/y.mp3', filesize: 1000 });
     const b = add(db, { source: 'traktor', source_id: '2', path: 'C:/B/y.mp3', filesize: 1000 });
+    linkCanonicalTracks(db);
+    expect(canonicalOf(db, b)).toBe(b);
+  });
+
+  it('il nome file da solo non unisce niente', () => {
+    // Stesso nome, durate lontanissime: sono due brani diversi.
+    const db = memDb();
+    add(db, { source: 'masterdb', source_id: '1', path: 'C:/A/intro.mp3', duration_s: 12 });
+    const b = add(db, { source: 'traktor', source_id: '2', path: 'C:/B/intro.mp3', duration_s: 240 });
     linkCanonicalTracks(db);
     expect(canonicalOf(db, b)).toBe(b);
   });

@@ -20,12 +20,19 @@ import { canonicalizeName, canonicalizePath } from '@services/fsutil';
  *     certezza: due righe che puntano allo stesso file sullo stesso disco SONO
  *     lo stesso brano. Copre il caso normale, cioè due software che leggono la
  *     stessa cartella musicale.
- *  2. STESSO NOME FILE + DIMENSIONE IDENTICA + DURATA a meno di un secondo.
+ *  2. STESSO NOME FILE + DURATA a meno di un secondo + DIMENSIONE simile.
  *     Serve quando i percorsi divergono ma il file è lo stesso — libreria su
- *     lettera di unità diversa, o cartella spostata dopo un import. Le tre
- *     condizioni insieme perché ognuna da sola sbaglia: due file possono avere
- *     lo stesso nome, o la stessa durata, quasi mai la stessa dimensione al
- *     byte insieme al resto.
+ *     lettera di unità diversa, cartella spostata, o un software che ha in
+ *     archivio un percorso vecchio.
+ *
+ *     ⚠ La dimensione si confronta con TOLLERANZA, non al byte. La versione
+ *     precedente la pretendeva identica, e su librerie vere non combaciava
+ *     quasi mai: per lo stesso file di 8.062.629 byte, Rekordbox dichiarava
+ *     7.968.831, Traktor 7.972.864, Engine 7.973.026 e solo VirtualDJ il valore
+ *     giusto. Ognuno conserva la dimensione del momento in cui l'ha importato,
+ *     e ogni riscrittura dei tag ID3 la sposta di qualche kilobyte. Preteserla
+ *     esatta significava che la regola 2 non scattava mai fra software diversi,
+ *     cioè proprio nel caso per cui esiste.
  *  3. STESSA IMPRONTA ACUSTICA. È l'unica che sopravvive a una ricodifica, ma
  *     esiste solo dove qualcuno l'ha calcolata: il fingerprint di CrateForge, o
  *     l'AudioSig che VirtualDJ regala nel proprio database.
@@ -60,22 +67,45 @@ interface Row {
 }
 
 /**
- * Chiave della regola 2: nome file canonicalizzato + dimensione al byte.
+ * Chiave della regola 2: il solo nome file canonicalizzato.
  *
- * La durata NON entra nella chiave, si verifica dopo. Metterla dentro
- * significherebbe arrotondarla, e due letture dello stesso file che cadono ai
- * due lati di un arrotondamento (214,4 e 214,6 secondi: ogni software conta a
- * modo suo) finirebbero in secchi diversi. Una tolleranza si controlla, non si
- * arrotonda.
+ * ⚠ Né la durata né la dimensione entrano nella chiave: si verificano dopo,
+ * con tolleranza. Un valore che va confrontato con tolleranza non può stare in
+ * una chiave, perché la chiave è un confronto esatto per costruzione — due
+ * letture dello stesso file finirebbero in secchi diversi e non si
+ * incontrerebbero mai. La chiave serve a restringere i candidati; a decidere
+ * sono i controlli.
  */
 function fileKey(r: Row): string | null {
-  if (!r.path || r.filesize === null || r.filesize <= 0) return null;
+  if (!r.path) return null;
   if (r.duration_s === null || r.duration_s <= 0) return null;
-  return `${canonicalizeName(basename(r.path))}|${r.filesize}`;
+  return canonicalizeName(basename(r.path));
 }
 
 /** Scarto ammesso fra due letture della stessa durata, in secondi. */
 const DURATION_TOLERANCE_S = 1;
+
+/**
+ * Scarto RELATIVO ammesso fra due dimensioni dichiarate per lo stesso file.
+ *
+ * Il 5% è largo abbastanza per i tag — su una libreria reale lo scarto massimo
+ * osservato è stato l'1,2%, dovuto a copertine e ID3 riscritti — e stretto
+ * abbastanza da non confondere due qualità diverse dello stesso brano, che
+ * differiscono di almeno il doppio.
+ */
+const FILESIZE_TOLERANCE = 0.05;
+
+/**
+ * Due dimensioni descrivono plausibilmente lo stesso file?
+ *
+ * Se una delle due manca la risposta è sì: l'assenza non è una smentita, e a
+ * decidere restano nome e durata. È il caso di Serato ≤ 3, che non espone la
+ * dimensione per nessuna traccia.
+ */
+function dimensioniCompatibili(a: number | null, b: number | null): boolean {
+  if (a === null || b === null || a <= 0 || b <= 0) return true;
+  return Math.abs(a - b) / Math.max(a, b) <= FILESIZE_TOLERANCE;
+}
 
 /**
  * Collega fra loro le righe che descrivono lo stesso file.
@@ -95,8 +125,8 @@ export function linkCanonicalTracks(db: BetterSqlite3.Database): LinkResult {
      100.000 brani sono pochi MB, contro l'intera tabella che la regola del
      progetto vieta di materializzare. */
   const byPath = new Map<string, number>();
-  /** nome+dimensione → id e durata del primo che l'ha occupata (serve il confronto) */
-  const byFile = new Map<string, { id: number; duration: number }>();
+  /** nome file → id, durata e dimensione del primo che l'ha occupata */
+  const byFile = new Map<string, { id: number; duration: number; filesize: number | null }>();
   const byAcoustic = new Map<string, number>();
   /** id → canonico corrente, per non rileggere il DB dentro il ciclo */
   const canonicalOf = new Map<number, number>();
@@ -150,12 +180,15 @@ export function linkCanonicalTracks(db: BetterSqlite3.Database): LinkResult {
 
     if (target === null && fk) {
       const hit = byFile.get(fk);
-      // La durata si CONFRONTA qui, con tolleranza: vedi fileKey().
+      /* Durata e dimensione si CONFRONTANO qui, con tolleranza: vedi
+         `fileKey()`. Entrambe devono reggere — il nome file da solo non basta,
+         `track01.mp3` esiste in mille cartelle. */
       if (
         hit &&
         hit.id !== mine &&
         !vietata(hit.id) &&
-        Math.abs(hit.duration - (r.duration_s ?? 0)) <= DURATION_TOLERANCE_S
+        Math.abs(hit.duration - (r.duration_s ?? 0)) <= DURATION_TOLERANCE_S &&
+        dimensioniCompatibili(hit.filesize, r.filesize)
       ) {
         target = canonicalOf.get(hit.id) ?? hit.id;
         usedRule = 'fileMatch';
@@ -189,7 +222,8 @@ export function linkCanonicalTracks(db: BetterSqlite3.Database): LinkResult {
     // Registra le chiavi di questa riga puntando al proprio canonico corrente.
     const now = canonicalOf.get(r.id)!;
     if (pathKey && !byPath.has(pathKey)) byPath.set(pathKey, now);
-    if (fk && !byFile.has(fk)) byFile.set(fk, { id: now, duration: r.duration_s ?? 0 });
+    if (fk && !byFile.has(fk))
+      byFile.set(fk, { id: now, duration: r.duration_s ?? 0, filesize: r.filesize });
     if (r.acoustic_id && !byAcoustic.has(r.acoustic_id)) byAcoustic.set(r.acoustic_id, now);
   }
 
