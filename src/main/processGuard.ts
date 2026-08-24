@@ -1,23 +1,7 @@
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import type { DjSoftware } from '@core/djVersions';
-
-/**
- * Software che questa guardia sa riconoscere.
- *
- * È `DjSoftware` più djay, e la differenza non è una svista. `DjSoftware` è
- * l'elenco dei software verso cui CrateForge SCRIVE, e ogni voce lì dentro
- * porta con sé un marcatore di versione collaudato: è il gate delle scritture.
- * Di djay oggi esiste solo il lettore, quindi non ha nulla da presidiare e non
- * appartiene a quell'elenco.
- *
- * Ma leggere un database SQLite mentre l'applicazione lo tiene aperto in
- * modalità WAL può restituire uno stato a metà — righe già nel journal e non
- * ancora nel file principale — quindi la guardia serve anche alla sola
- * lettura. Da qui il tipo separato: più largo dove il rischio è più largo,
- * senza promettere una scrittura che non esiste.
- */
-export type GuardedSoftware = DjSoftware | 'djay';
+import type { GuardedSoftware } from '@core/djVersions';
+export type { GuardedSoftware };
 
 const exec = promisify(execFile);
 

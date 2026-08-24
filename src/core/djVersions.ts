@@ -30,6 +30,25 @@ export type DjSoftware =
   | 'serato4'
   | 'engine';
 
+/**
+ * Software che la guardia sui processi sa riconoscere.
+ *
+ * È `DjSoftware` più djay, e la differenza non è una svista. `DjSoftware` è
+ * l'elenco dei software verso cui CrateForge SCRIVE, e ogni voce lì dentro
+ * porta con sé un marcatore di versione collaudato (vedi `TESTED`): è il gate
+ * delle scritture. Di djay oggi esiste solo il lettore, quindi non ha nulla da
+ * presidiare e non appartiene a quell'elenco.
+ *
+ * Ma leggere un database SQLite mentre l'applicazione lo tiene aperto in
+ * modalità WAL può restituire uno stato a metà, quindi la guardia serve anche
+ * alla sola lettura. Da qui il tipo separato: più largo dove il rischio è più
+ * largo, senza promettere una scrittura che non esiste.
+ *
+ * Sta qui e non in `main/processGuard` perché è solo un tipo, e il nucleo non
+ * può dipendere dal processo principale.
+ */
+export type GuardedSoftware = DjSoftware | 'djay';
+
 export interface TestedEntry {
   /** Nome leggibile del software. */
   label: string;
