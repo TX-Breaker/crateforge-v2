@@ -229,3 +229,92 @@ export function detectClosures(
 export function shouldContinue(stop: { requested: boolean }): boolean {
   return !stop.requested;
 }
+
+/* ------------------------------------------------------- configurazione */
+
+/** Chiave in `settings`. Una sola, cosi' la configurazione resta atomica. */
+export const AUTO_SYNC_SETTING_KEY = 'sync.auto';
+
+export interface AutoSyncConfig {
+  /**
+   * Interruttore principale. SPENTO di serie, e non per prudenza generica:
+   * accendere la scrittura automatica verso le librerie di altri programmi e'
+   * una decisione che deve prendere una persona, dopo aver visto almeno una
+   * volta che cosa produce un giro manuale.
+   */
+  enabled: boolean;
+  /** Pausa temporanea, distinta dallo spegnimento: sopravvive al riavvio. */
+  paused: boolean;
+  /** Software che partecipano. Chi si chiude fa da origine, gli altri da destinazione. */
+  softwares: GuardedSoftware[];
+  /** Campi da propagare. Vuoto significa nessuno: il motore non sceglie da solo. */
+  fields: string[];
+  /** Modalita' del giro automatico. */
+  mode: 'symmetric' | 'masterSlave';
+}
+
+/**
+ * Predefiniti.
+ *
+ * ⚠ `softwares` vuoto non e' un segnaposto da riempire: senza destinazioni la
+ * decisione risponde `nothing-to-do` e non parte niente. Chi accende
+ * l'automatico deve dire anche su che cosa, perche' «tutti quelli che trovo»
+ * significherebbe scrivere in librerie che l'utente non ha mai nominato.
+ */
+export const AUTO_SYNC_DEFAULTS: AutoSyncConfig = {
+  enabled: false,
+  paused: false,
+  softwares: [],
+  fields: [],
+  mode: 'symmetric'
+};
+
+const SOFTWARE_AMMESSI: GuardedSoftware[] = [
+  'rekordbox',
+  'traktor',
+  'virtualdj',
+  'serato',
+  'serato4',
+  'engine',
+  'djay'
+];
+
+/**
+ * Legge la configurazione da cio' che c'e' in `settings`.
+ *
+ * ⚠ Tollerante per progetto. Il valore arriva da una colonna di testo che puo'
+ * essere stata scritta da una versione precedente, modificata a mano o
+ * troncata. Un errore di lettura qui non deve impedire l'avvio del programma:
+ * ogni campo illeggibile ricade sul predefinito, e i predefiniti non fanno
+ * partire niente. Il caso peggiore e' che l'automatico resti spento.
+ */
+export function parseAutoSyncConfig(raw: string | null): AutoSyncConfig {
+  if (!raw) return { ...AUTO_SYNC_DEFAULTS };
+  let letto: unknown;
+  try {
+    letto = JSON.parse(raw);
+  } catch {
+    return { ...AUTO_SYNC_DEFAULTS };
+  }
+  if (!letto || typeof letto !== 'object' || Array.isArray(letto)) {
+    return { ...AUTO_SYNC_DEFAULTS };
+  }
+  const o = letto as Record<string, unknown>;
+  const ammessi = new Set<string>(SOFTWARE_AMMESSI);
+  return {
+    enabled: o.enabled === true,
+    paused: o.paused === true,
+    /* Un nome di software non piu' riconosciuto viene scartato, non conservato:
+       tenerlo significherebbe attendere la chiusura di un programma che questa
+       versione non sa nemmeno cercare. */
+    softwares: Array.isArray(o.softwares)
+      ? (o.softwares.filter((x) => typeof x === 'string' && ammessi.has(x)) as GuardedSoftware[])
+      : [],
+    fields: Array.isArray(o.fields) ? o.fields.filter((x): x is string => typeof x === 'string') : [],
+    mode: o.mode === 'masterSlave' ? 'masterSlave' : 'symmetric'
+  };
+}
+
+export function serializeAutoSyncConfig(c: AutoSyncConfig): string {
+  return JSON.stringify(c);
+}

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
-import { AlertTriangle, ArrowLeftRight, Check, Crown, RefreshCw } from 'lucide-react';
+import { AlertTriangle, ArrowLeftRight, Check, Crown, PauseCircle, RefreshCw } from 'lucide-react';
 import { Card, CardContent, Eyebrow } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge, Checkbox, Notice, Segmented, Select, Tooltip } from '@/components/ui/misc';
+import { Badge, Checkbox, Notice, Segmented, Select, Switch, Tooltip } from '@/components/ui/misc';
 import { cn, formatClock } from '@/lib/utils';
 
 /**
@@ -20,6 +20,20 @@ import { cn, formatClock } from '@/lib/utils';
  */
 
 type Mode = 'symmetric' | 'masterSlave';
+
+/** Configurazione e stato dell'automatico, come arrivano dal processo principale. */
+interface AutoView {
+  config: { enabled: boolean; paused: boolean; softwares: string[]; fields: string[]; mode: Mode };
+  status: {
+    lastDecision:
+      | { run: true; source: string; destinations: string[] }
+      | { run: false; reason: string; message: string; retryAfterMs: number | null }
+      | null;
+    lastDecisionAt: number | null;
+    lastRunAt: number | null;
+    pendingClosures: { software: string; closedAt: number }[];
+  };
+}
 type T = (k: string, p?: Record<string, string | number>) => string;
 
 interface Summary {
@@ -84,6 +98,7 @@ export function LibrarySyncPanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
+  const [auto, setAuto] = useState<AutoView | null>(null);
 
   useEffect(() => {
     void window.crateforge.sync.fields().then((f) => {
@@ -95,7 +110,41 @@ export function LibrarySyncPanel({
   const refreshState = useCallback(async () => {
     setState(await window.crateforge.sync.libraryState());
     setConflicts(await window.crateforge.sync.conflicts(200));
+    /* ⚠ La configurazione dell'automatico si legge a parte e in modo
+       tollerante: è un di piu' rispetto a questo pannello, e se non arriva
+       deve mancare solo il suo riquadro. Farla cadere insieme allo stato delle
+       librerie renderebbe illeggibili anche i conflitti aperti, che sono la
+       ragione principale per cui si apre questa schermata. */
+    try {
+      setAuto(await window.crateforge.sync.autoConfig());
+    } catch {
+      setAuto(null);
+    }
   }, []);
+
+  /**
+   * Accendere l'automatico non basta: senza destinazioni non parte niente.
+   *
+   * ⚠ Le destinazioni si prendono dalle librerie che l'utente ha appena
+   * scelto qui sopra, invece di chiedergliele una seconda volta con parole
+   * diverse. Chi accende l'interruttore ha davanti la configurazione che sta
+   * per diventare automatica — è la stessa che ha appena provato a vuoto.
+   */
+  const cambiaAuto = useCallback(
+    async (patch: { enabled?: boolean; paused?: boolean }) => {
+      const softwares =
+        patch.enabled === true
+          ? [...new Set([...sourcesOf(a ?? ''), ...sourcesOf(b ?? '')])]
+          : undefined;
+      setAuto(
+        await window.crateforge.sync.autoSetConfig({
+          ...patch,
+          ...(softwares ? { softwares, fields, mode } : {})
+        })
+      );
+    },
+    [a, b, fields, mode, libraries]
+  );
 
   useEffect(() => {
     void refreshState();
@@ -292,6 +341,56 @@ export function LibrarySyncPanel({
             </dl>
           </div>
         )}
+
+        {/* --- esecuzione automatica -------------------------------------- */}
+        {/* ⚠ Sta QUI e non in una pagina di impostazioni: l'interruttore che fa
+            partire scritture non sorvegliate deve stare accanto ai numeri di
+            quello che quelle scritture fanno. Chi lo accende ha appena visto
+            una prova a vuoto. */}
+        <div className="space-y-1.5">
+          <p className="text-caption text-ink-mid">{t('libSyncAuto')}</p>
+          <div className="flex items-center gap-3 rounded-md border border-line bg-surface-2 px-3 py-2">
+            <Switch
+              checked={auto?.config.enabled ?? false}
+              onCheckedChange={(v) => void cambiaAuto({ enabled: v })}
+              aria-label={t('libSyncAutoOn')}
+            />
+            <div className="min-w-0">
+              <p className="text-caption text-ink-hi">{t('libSyncAutoOn')}</p>
+              <p className="text-caption text-ink-lo">{t('libSyncAutoHelp')}</p>
+            </div>
+            {auto?.config.enabled && (
+              <Tooltip content={t('libSyncAutoPauseHelp')}>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="ml-auto shrink-0"
+                  onClick={() => void cambiaAuto({ paused: !auto.config.paused })}
+                >
+                  <PauseCircle />
+                  {auto.config.paused ? t('libSyncAutoResume') : t('libSyncAutoPause')}
+                </Button>
+              </Tooltip>
+            )}
+          </div>
+
+          {/* ⚠ Il motivo per cui NON e' partito e' l'informazione che conta.
+              Un automatico che tace quando non fa niente e' indistinguibile da
+              un automatico rotto. */}
+          {auto?.config.enabled && auto.status.lastDecision && !auto.status.lastDecision.run && (
+            <p className="text-caption text-ink-lo">{auto.status.lastDecision.message}</p>
+          )}
+          {auto?.config.enabled && auto.config.softwares.length === 0 && (
+            <Notice variant="warning" title={t('libSyncAutoNoTargets')}>
+              {t('libSyncAutoNoTargetsHelp')}
+            </Notice>
+          )}
+          {auto?.status.lastRunAt && (
+            <p className="text-caption text-ink-lo">
+              {t('libSyncAutoLastRun', { when: formatClock(new Date(auto.status.lastRunAt).toISOString()) })}
+            </p>
+          )}
+        </div>
 
         {/* --- stato per libreria ---------------------------------------- */}
         {state.length > 0 && (

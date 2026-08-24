@@ -4,6 +4,33 @@ import { contextBridge, ipcRenderer } from 'electron';
  * Bridge sicuro renderer ↔ main. Espone solo funzioni tipizzate, niente
  * accesso diretto a Node dal renderer.
  */
+/** Configurazione della sincronizzazione automatica, come la vede il renderer. */
+export interface AutoSyncConfigView {
+  enabled: boolean;
+  paused: boolean;
+  softwares: string[];
+  fields: string[];
+  mode: 'symmetric' | 'masterSlave';
+}
+
+/**
+ * Stato del guardiano. `lastDecision` porta anche il MOTIVO di un rifiuto:
+ * senza, l'interfaccia potrebbe solo dire «non e' partito niente», che e'
+ * proprio l'informazione inutile quando qualcosa non parte.
+ */
+export interface AutoSyncView {
+  config: AutoSyncConfigView;
+  status: {
+    lastDecision:
+      | { run: true; source: string; destinations: string[] }
+      | { run: false; reason: string; message: string; retryAfterMs: number | null }
+      | null;
+    lastDecisionAt: number | null;
+    lastRunAt: number | null;
+    pendingClosures: { software: string; closedAt: number }[];
+  };
+}
+
 const api = {
   settings: {
     get: (key: string) => ipcRenderer.invoke('settings:get', key) as Promise<string | null>,
@@ -227,6 +254,10 @@ const api = {
       >,
     fields: () =>
       ipcRenderer.invoke('sync:fields') as Promise<{ all: string[]; defaults: string[] }>,
+    autoConfig: () =>
+      ipcRenderer.invoke('sync:autoConfig') as Promise<AutoSyncView>,
+    autoSetConfig: (patch: Partial<AutoSyncConfigView>) =>
+      ipcRenderer.invoke('sync:autoSetConfig', patch) as Promise<AutoSyncView>,
     plan: (opts: {
       originSources: string[];
       destinationSources: string[];

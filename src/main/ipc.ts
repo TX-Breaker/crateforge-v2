@@ -88,6 +88,13 @@ import {
 } from '@core/djVersions';
 import { probeRekordboxApp, probeVersion } from './versionProbe';
 import { assertNotRunning } from './processGuard';
+import { AutoSyncWatcher, readRunningSoftware } from './autoSyncWatcher';
+import {
+  AUTO_SYNC_SETTING_KEY,
+  parseAutoSyncConfig,
+  serializeAutoSyncConfig,
+  type AutoSyncConfig
+} from '@core/autoSync';
 import { checkSidecar, runSidecar, SidecarEvent } from './sidecar';
 import { rekordboxDefaultPaths } from './rekordboxPaths';
 import { detectDjSoftware } from './djSoftwarePaths';
@@ -124,6 +131,15 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
   // serializzato. Node (better-sqlite3) e Python non scrivono mai l'UDM in
   // concorrenza, e con un solo job attivo alla volta currentCancel non ha race.
   let anyJobRunning = false;
+  /**
+   * Fine dell'ultimo lavoro sulla libreria.
+   *
+   * ⚠ Serve alla sincronizzazione automatica, che non deve partire mentre
+   * l'utente sta ancora guardando il risultato di quello che ha appena fatto.
+   * Si stampa alla FINE e non all'inizio: quello che conta e' da quanto tempo
+   * l'utente ha smesso, non da quanto aveva cominciato.
+   */
+  let lastUserActivityAt: number | null = null;
   let jobChain: Promise<unknown> = Promise.resolve();
   const withJobLock = <T>(fn: () => Promise<T>): Promise<T> => {
     const run = jobChain.then(async () => {
@@ -132,6 +148,7 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
         return await fn();
       } finally {
         anyJobRunning = false;
+        lastUserActivityAt = Date.now();
       }
     });
     // Il chain non deve mai rifiutare, altrimenti blocca i job successivi.
@@ -1734,6 +1751,91 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
       .all();
   });
 
+  // ---- sincronizzazione automatica ----
+
+  const leggiAutoConfig = (): AutoSyncConfig =>
+    parseAutoSyncConfig(getSetting(db, AUTO_SYNC_SETTING_KEY));
+
+  /**
+   * Il guardiano dell'automatico.
+   *
+   * ⚠ `enabled` viene riletto a ogni giro invece di essere fotografato alla
+   * costruzione: chi spegne l'automatico si aspetta che si spenga adesso, non
+   * al prossimo riavvio. Per la stessa ragione l'elenco delle destinazioni e i
+   * campi si rileggono ogni volta.
+   */
+  const autoWatcher = new AutoSyncWatcher({
+    now: () => Date.now(),
+    readRunning: async () => {
+      const cfg = leggiAutoConfig();
+      // Spento: non si interroga nemmeno il sistema operativo.
+      if (!cfg.enabled) return 'unknown';
+      return readRunningSoftware();
+    },
+    destinations: () => (leggiAutoConfig().enabled ? leggiAutoConfig().softwares : []),
+    isPaused: () => {
+      const cfg = leggiAutoConfig();
+      return !cfg.enabled || cfg.paused;
+    },
+    isJobRunning: () => anyJobRunning,
+    lastUserActivityAt: () => lastUserActivityAt,
+    runSync: async (source, destinations) => {
+      const cfg = leggiAutoConfig();
+      /* ⚠ Passa dalla stessa coda dei lavori manuali. Non e' pignoleria: la
+         coda e' l'unica cosa che impedisce a due scritture di toccare l'UDM
+         insieme, e un giro automatico che la scavalcasse sarebbe proprio quello
+         che nessuno sta guardando. */
+      await withJobLock(async () => {
+        const opts: SyncOptions = {
+          aSources: [source],
+          bSources: destinations,
+          mode: cfg.mode,
+          fields: cfg.fields as SyncField[]
+        };
+        const piano = planLibrarySync(db, opts);
+        const r = applySync(db, piano, opts);
+        logOperation(
+          db,
+          'sync.auto',
+          `${source} → ${destinations.join(', ')}`,
+          'ok',
+          JSON.stringify({ mode: cfg.mode, ...r })
+        );
+      });
+    },
+    log: (evento, dettaglio) => logOperation(db, evento, dettaglio, 'ok', '')
+  });
+  autoWatcher.start();
+
+  /** Configurazione e stato dell'automatico, in una lettura sola. */
+  ipcMain.handle('sync:autoConfig', () => ({
+    config: leggiAutoConfig(),
+    status: autoWatcher.status()
+  }));
+
+  /**
+   * Scrive la configurazione.
+   *
+   * ⚠ Passa sempre da `parseAutoSyncConfig` prima di salvare: quello che arriva
+   * dal renderer non e' piu' affidabile di quello che c'e' nel database, e la
+   * validazione deve stare da una parte sola.
+   */
+  ipcMain.handle('sync:autoSetConfig', (_e, patch: Partial<AutoSyncConfig>) => {
+    const attuale = leggiAutoConfig();
+    const nuova = parseAutoSyncConfig(
+      JSON.stringify({ ...attuale, ...patch })
+    );
+    setSetting(db, AUTO_SYNC_SETTING_KEY, serializeAutoSyncConfig(nuova));
+    logOperation(
+      db,
+      'sync.auto.config',
+      nuova.enabled ? (nuova.paused ? 'in pausa' : 'attiva') : 'spenta',
+      'ok',
+      serializeAutoSyncConfig(nuova)
+    );
+    return { config: nuova, status: autoWatcher.status() };
+  });
+
   /** I campi che il motore sa sincronizzare, con il predefinito. */
   ipcMain.handle('sync:fields', () => ({
     all: [
@@ -2361,6 +2463,11 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
   return () => {
     try {
       daemon.stop();
+    } catch {
+      /* best-effort */
+    }
+    try {
+      autoWatcher.stop();
     } catch {
       /* best-effort */
     }

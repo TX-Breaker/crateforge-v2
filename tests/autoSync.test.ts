@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
+  AUTO_SYNC_DEFAULTS,
   FALLBACK_POLL_MS,
   MIN_BETWEEN_RUNS_MS,
   QUIET_PERIOD_MS,
   USER_IDLE_MS,
   decideAutoSync,
   detectClosures,
+  parseAutoSyncConfig,
+  serializeAutoSyncConfig,
   shouldContinue,
   type AutoSyncSnapshot
 } from '../src/core/autoSync';
@@ -191,5 +194,56 @@ describe('autoSync — interruzione', () => {
   it('si ferma solo quando gli viene chiesto', () => {
     expect(shouldContinue({ requested: false })).toBe(true);
     expect(shouldContinue({ requested: true })).toBe(false);
+  });
+});
+
+describe('autoSync — configurazione', () => {
+  it('è spento di serie', () => {
+    /* ⚠ Accendere la scrittura automatica verso le librerie di altri programmi
+       è una decisione che deve prendere una persona. Un predefinito acceso la
+       prenderebbe al posto suo, e su una macchina che non ha mai visto. */
+    expect(AUTO_SYNC_DEFAULTS.enabled).toBe(false);
+    expect(AUTO_SYNC_DEFAULTS.softwares).toEqual([]);
+    expect(parseAutoSyncConfig(null).enabled).toBe(false);
+  });
+
+  it('⚠ su una configurazione illeggibile ricade sullo spento', () => {
+    /* Il valore arriva da una colonna di testo che può essere stata scritta da
+       una versione precedente o troncata. Un errore qui non deve impedire
+       l'avvio, e il caso peggiore dev'essere che l'automatico resti fermo —
+       mai che parta con una configurazione mezza letta. */
+    for (const rotta of ['', 'non json', '[]', 'null', '42', '{"enabled":']) {
+      const c = parseAutoSyncConfig(rotta);
+      expect(c.enabled, rotta).toBe(false);
+      expect(c.softwares, rotta).toEqual([]);
+    }
+  });
+
+  it('scarta un software che questa versione non sa cercare', () => {
+    // Tenerlo significherebbe aspettare la chiusura di un programma che la
+    // guardia non ha nemmeno nell'elenco: un'attesa che non finisce mai.
+    const c = parseAutoSyncConfig(
+      JSON.stringify({ enabled: true, softwares: ['serato', 'inventato', 'engine'] })
+    );
+    expect(c.softwares).toEqual(['serato', 'engine']);
+  });
+
+  it('non accende per un valore che non sia esattamente true', () => {
+    // 'true', 1 e 'si' non sono un consenso: sono un errore di serializzazione.
+    for (const valore of ['true', 1, 'si', {}]) {
+      expect(parseAutoSyncConfig(JSON.stringify({ enabled: valore })).enabled).toBe(false);
+    }
+  });
+
+  it('sopravvive al giro di scrittura e rilettura', () => {
+    const originale = {
+      enabled: true,
+      paused: true,
+      softwares: ['serato', 'engine'] as const,
+      fields: ['bpm', 'rating'],
+      mode: 'masterSlave' as const
+    };
+    const riletta = parseAutoSyncConfig(serializeAutoSyncConfig({ ...originale, softwares: [...originale.softwares] }));
+    expect(riletta).toEqual({ ...originale, softwares: [...originale.softwares] });
   });
 });
