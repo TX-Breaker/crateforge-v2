@@ -42,8 +42,81 @@ const api = {
     set: async () => {}
   },
   security: { setGate: async () => ({ ok: true, enabled: false }) },
+  /* Il registro delle versioni: la pagina Impostazioni non monta senza. */
+  versions: {
+    detect: async () => ({
+      gate: 'standard',
+      rows: [
+        {
+          software: 'rekordbox',
+          label: 'Rekordbox',
+          marker: 'collection XML (DJ_PLAYLISTS@Version)',
+          status: 'ok',
+          detected: '1.0.0',
+          maxTested: '1.0.0',
+          testedWithApp: '7.2.16',
+          testedOn: '2026-07-29',
+          installedApp: null,
+          libraryPath: null,
+          libraryFound: false,
+          message: 'Rekordbox: versione 1.0.0, collaudata.',
+          blocksWrite: false,
+          blocksRead: false
+        }
+      ]
+    }),
+    acknowledge: async () => ({ ok: true })
+  },
+  /* ⚠ Questo spazio dei nomi mancava, e la sua assenza non si manifestava come
+     "manca sync": si manifestava come quattordici problemi diversi. Il pannello
+     di sincronizzazione chiamava `window.crateforge.sync.fields()`, il renderer
+     lanciava un TypeError, l'intera app smetteva di montare, e da li' in poi
+     mancavano <main>, le voci della sidebar, i pulsanti del nav e le
+     scorciatoie. Chi leggeva l'elenco cercava quattordici bug dove ce n'era
+     uno. Ogni volta che si aggiunge uno spazio dei nomi al preload vero, va
+     aggiunto anche qui. */
+  sync: {
+    fields: async () => ({
+      all: ['title', 'artist', 'album', 'genre', 'year', 'bpm', 'musical_key', 'rating', 'track_color'],
+      defaults: ['bpm', 'musical_key', 'rating', 'track_color']
+    }),
+    libraryState: async () => [
+      { software: 'rekordbox', tracks: 12481, lastSyncedAt: '2026-07-28 14:02:11', conflicts: 0 },
+      { software: 'serato', tracks: 9820, lastSyncedAt: null, conflicts: 3 }
+    ],
+    conflicts: async () => [],
+    resolveConflict: async () => ({ ok: true, resolved: 0 }),
+    planLibrary: async () => ({
+      ok: true,
+      summary: { tracks: 0, touched: 0, toA: 0, toB: 0, conflicts: 0, untouched: 0 },
+      skipped: 0,
+      unpaired: 0,
+      conflicts: []
+    }),
+    applyLibrary: async () => ({ ok: true, written: 0, conflicts: 0 }),
+    plan: async () => ({ ok: true, tracks: 0, cues: 0 }),
+    /* Spenta, come nell'applicazione vera: il test deve vedere lo stato in cui
+       si trova chi installa il programma, non uno che nessuno ha mai scelto. */
+    autoConfig: async () => ({
+      config: { enabled: false, paused: false, softwares: [], fields: [], mode: 'symmetric' },
+      status: { lastDecision: null, lastDecisionAt: null, lastRunAt: null, pendingClosures: [] }
+    }),
+    autoSetConfig: async () => ({
+      config: { enabled: false, paused: false, softwares: [], fields: [], mode: 'symmetric' },
+      status: { lastDecision: null, lastDecisionAt: null, lastRunAt: null, pendingClosures: [] }
+    })
+  },
   sidecar: { check: async () => ({ available: true, binaryPath: 'resources/crateforge-sidecar.exe' }), downloadKey: async () => ({ ok: true }) },
   library: {
+    /* Conteggi per software: il guscio dell'applicazione li chiede all'avvio,
+       e senza di essi il contesto di lavoro non si inizializza. */
+    sources: async () => ({
+      bySoftware: {
+        rekordbox: { tracks: 12481, playlists: 184, sources: ['rekordbox'] },
+        serato: { tracks: 9820, playlists: 96, sources: ['serato'] }
+      },
+      unified: { tracks: 12481, shared: 4200 }
+    }),
     page: async (q) => ({ rows: rows(q.limit ?? 50, q.offset ?? 0), total: 12481 }),
     pageByPlaylist: async () => ({ rows: rows(20), total: 20 }),
     stats: async () => ({ tracks: 12481, playlists: 184, needsReview: 341, lastIngest: { source: 'Rekordbox master.db', finished_at: '2026-07-28 14:02:11', status: 'ok' } }),

@@ -74,6 +74,14 @@ async function unnamedControls(dbg) {
   return { count: bad.length, byRole };
 }
 
+/**
+ * ⚠ Rete di sicurezza sull'intera esecuzione.
+ *
+ * Senza, qualunque sonda che lanci fa terminare la funzione principale senza
+ * stampare il riepilogo e senza chiamare `app.exit`: il processo resta appeso e
+ * chi lo guarda vede solo un rifiuto non gestito. Un test che muore in silenzio
+ * non dice che cosa e' rotto, e in piu' non dice nemmeno di essere rotto lui.
+ */
 app.whenReady().then(async () => {
   mkdirSync(outDir, { recursive: true });
   const win = new BrowserWindow({
@@ -257,10 +265,21 @@ app.whenReady().then(async () => {
   else console.log(`OK  densità        ${dens}`);
 
   // reduced motion
+  /* ⚠ La sonda restituisce un messaggio invece di lanciare quando l'elemento
+     non c'e'. Prima lanciava: `getComputedStyle(null)` diventava un
+     TypeError dentro la pagina, `executeJavaScript` rifiutava, e la funzione
+     principale moriva PRIMA di stampare il riepilogo. Il risultato era un test
+     che non diceva ne' quali controlli erano passati ne' quale era fallito —
+     solo un rifiuto non gestito e nessuna riga finale. Un test che muore in
+     silenzio e' peggio di un test che fallisce. */
   const rm = await win.webContents.executeJavaScript(
     `(() => {
        document.documentElement.dataset.motion = 'reduce';
        const el = document.querySelector('nav button');
+       if (!el) {
+         delete document.documentElement.dataset.motion;
+         return 'NESSUN ELEMENTO: nav button non trovato';
+       }
        const d = getComputedStyle(el).transitionDuration;
        delete document.documentElement.dataset.motion;
        return d;
@@ -301,8 +320,14 @@ app.whenReady().then(async () => {
   else console.log(`OK  modalità       Esperto ${simple} voci → Semplice ${after} voci`);
 
   /* ---- errori raccolti ---- */
-  const winErrors = await win.webContents.executeJavaScript(`window.__cfErr || []`);
-  for (const e of winErrors) problems.push(`eccezione renderer: ${e}`);
+  /* ⚠ Anche questa lettura puo' fallire, e se fallisce non deve portarsi via
+     il riepilogo di tutto cio' che e' stato verificato prima. */
+  try {
+    const winErrors = await win.webContents.executeJavaScript(`window.__cfErr || []`);
+    for (const e of winErrors) problems.push(`eccezione renderer: ${e}`);
+  } catch (err) {
+    problems.push(`impossibile leggere gli errori del renderer: ${err && err.message}`);
+  }
   for (const e of consoleErrors) problems.push(`console: ${e}`);
 
   console.log('\n=========================================');
@@ -315,6 +340,13 @@ app.whenReady().then(async () => {
   console.log('=========================================');
 
   app.exit(problems.length ? 1 : 0);
+}).catch((err) => {
+  console.log('');
+  console.log('=========================================');
+  console.log('SMOKE TEST: interrotto da un errore');
+  console.log(' - ' + (err && err.stack ? err.stack : String(err)));
+  console.log('=========================================');
+  app.exit(1);
 });
 
 app.on('window-all-closed', () => app.quit());
