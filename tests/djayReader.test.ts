@@ -10,10 +10,12 @@ import {
 import { DJAY_ROOT_PLAYLIST_UUID } from '../src/adapters/djay';
 
 /**
- * ⚠ djay non è installato sulla macchina di sviluppo: questa è una libreria
- * SINTETICA costruita con l'encoder documentato. Verifica che il lettore
- * attraversi l'archivio chiave-valore e ricostruisca l'albero, non che regga
- * su un `MediaLibrary.db` vero.
+ * Libreria SINTETICA: verifica che il lettore attraversi l'archivio
+ * chiave-valore e ricostruisca l'albero. La prova su un `MediaLibrary.db` vero
+ * sta in `realDjay.test.ts`.
+ *
+ * ⚠ I nomi delle collezioni e dei campi sono quelli OSSERVATI in una libreria
+ * reale, non nomi verosimili: vedi il commento dentro `libreriaFinta`.
  */
 
 const t = (n: number) => Buffer.from([n]);
@@ -83,6 +85,58 @@ function libreriaFinta() {
   return db;
 }
 
+/** Doppione: la stessa traccia in due collezioni, con lo stesso `uuid`. */
+function libreriaConDoppione() {
+  const db = new Database(':memory:');
+  db.exec(`CREATE TABLE database2 (
+    rowid INTEGER PRIMARY KEY, collection TEXT, key TEXT, data BLOB, metadata BLOB)`);
+  const ins = db.prepare(`INSERT INTO database2 (collection, key, data) VALUES (?, ?, ?)`);
+  const UUID = 'aaaabbbbccccddddeeeeffff00001111';
+
+  // la scheda: metadati, nessun percorso
+  ins.run(
+    'mediaItemTitleIDs',
+    UUID,
+    payload('ADCMediaItemTitleID', [
+      [encodeDjayString(UUID), 'uuid'],
+      [encodeDjayString('Brano Unico'), 'title'],
+      [encodeDjayString('Un Artista'), 'artist']
+    ])
+  );
+  // la posizione: stesso uuid, con il percorso dentro `sourceURIs`
+  ins.run(
+    'globalMediaItemLocations',
+    UUID,
+    payload('ADCMediaItemLocation', [
+      [encodeDjayString(UUID), 'uuid'],
+      [
+        Buffer.concat([
+          t(DJAY_TYPE.ARRAY_STRING),
+          (() => {
+            const n = Buffer.alloc(4);
+            n.writeUInt32LE(1, 0);
+            return n;
+          })(),
+          t(DJAY_TYPE.URI),
+          encodeDjayString('file:///musica/unico.m4a'),
+          t(DJAY_TYPE.NULL)
+        ]),
+        'sourceURIs'
+      ]
+    ])
+  );
+  // l'analisi: stesso uuid, porta il BPM misurato
+  ins.run(
+    'mediaItemAnalyzedData',
+    UUID,
+    payload('ADCMediaItemAnalyzedData', [
+      [encodeDjayString(UUID), 'uuid'],
+      [Buffer.concat([t(DJAY_TYPE.NUMBER_N), (() => { const n = Buffer.alloc(4); n.writeUInt32LE(126, 0); return n; })()]), 'bpm']
+    ])
+  );
+  return db;
+}
+
 describe('djay Pro — lettore (libreria sintetica)', () => {
   it('attraversa l’archivio chiave-valore invece di cercare una tabella di tracce', () => {
     const db = libreriaFinta();
@@ -134,6 +188,40 @@ describe('djay Pro — lettore (libreria sintetica)', () => {
       expect(pacchetti?.rows).toBe(1);
       // Ignorata per scelta, quindi non è un errore da riportare all'utente.
       expect(pacchetti?.unreadable).toBe(0);
+    } finally {
+      db.close();
+    }
+  });
+
+  it('⚠ non duplica la traccia che compare in più collezioni', () => {
+    /* Lo stesso brano ha una riga di scheda e una di posizione, con lo stesso
+       `uuid`. Senza deduplica l'utente vedrebbe la libreria raddoppiata dopo
+       l'import — e non come un errore, come un fatto. */
+    const db = libreriaConDoppione();
+    try {
+      const lib = readFrom(db);
+      expect(lib.tracks.length).toBe(1);
+      const tr = lib.tracks[0];
+      // Vince la riga con il percorso, ma i metadati dell'altra non si perdono.
+      expect(tr.path).toBe('/musica/unico.m4a');
+      expect(tr.title).toBe('Brano Unico');
+      expect(tr.artist).toBe('Un Artista');
+    } finally {
+      db.close();
+    }
+  });
+
+  it('innesta il BPM misurato da djay, che sta in una riga a parte', () => {
+    /* djay tiene il BPM analizzato in `mediaItemAnalyzedData`, non nei
+       metadati del brano. Senza l'innesto il campo resterebbe vuoto anche
+       quando djay lo conosce, e la sincronizzazione lo tratterebbe come "mai
+       analizzato" propagando un vuoto sopra un dato buono. */
+    const db = libreriaConDoppione();
+    try {
+      const lib = readFrom(db);
+      expect(lib.tracks[0].bpm).toBe(126);
+      // e l'analisi non genera una traccia per conto suo
+      expect(lib.tracks.length).toBe(1);
     } finally {
       db.close();
     }

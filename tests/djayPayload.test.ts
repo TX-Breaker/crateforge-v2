@@ -14,12 +14,15 @@ import {
 } from '../src/adapters/djay/payload';
 
 /**
- * ⚠ djay non è installato sulla macchina di sviluppo: questi test lavorano su
- * fixture SINTETICHE, costruite dall'encoder documentato. Verificano che il
- * parser rispetti le regole del formato — in particolare le due
- * controintuitive — non che legga un `MediaLibrary.db` vero.
+ * Fixture SINTETICHE: verificano che il parser rispetti le regole del formato,
+ * non che legga un `MediaLibrary.db` vero — quella prova sta in
+ * `realDjay.test.ts` e gira solo dove djay è installato.
  *
- * La verifica su file reale resta da fare, ed è dichiarata come tale.
+ * ⚠ Le regole qui sotto sono state ricavate dai byte di una libreria reale il
+ * 24/08/2026, non dedotte. Le prime versioni di queste fixture erano costruite
+ * sulle assunzioni sbagliate del parser, quindi passavano confermando i bug
+ * invece di scoprirli: little-endian dove il formato è little-endian, e
+ * allineamento a 8 per i valori a 8 byte, sono FATTI misurati.
  */
 
 /** Costruisce un payload nel formato proprietario, intestazione compresa. */
@@ -39,7 +42,88 @@ function classObj(nome: string, coppie: [Buffer, string][]): Buffer {
   return Buffer.concat(parti);
 }
 
+/** Un double, con il riempimento che il formato richiede prima del valore. */
+function doubleValue(n: number, offsetCorrente: number): Buffer {
+  // il byte di tipo è già contato: il valore parte dopo di esso
+  const dopoTipo = offsetCorrente + 1;
+  const riempi = (8 - (dopoTipo % 8)) % 8;
+  const b = Buffer.alloc(1 + riempi + 8);
+  b[0] = DJAY_TYPE.DOUBLE;
+  b.writeDoubleLE(n, 1 + riempi);
+  return b;
+}
+
 describe('djay Pro — formato proprietario', () => {
+  it('⚠ allinea a OTTO byte i valori da otto, non a quattro', () => {
+    /* Il difetto che questo test blocca non somigliava a un difetto. Con
+       l'allineamento a 4 il valore veniva letto quattro byte troppo presto, il
+       token successivo cadeva in mezzo al numero, e da lì l'oggetto diventava
+       illeggibile — ma solo DOPO quel campo, quindi i primi campi sembravano
+       corretti e il resto spariva senza errore.
+
+       La fixture mette il tipo DOUBLE a un offset dispari rispetto a 8, dove le
+       due letture divergono: con l'allineamento sbagliato la chiave successiva
+       non si trova. */
+    const testa = Buffer.concat([
+      t(DJAY_TYPE.CLASS),
+      encodeDjayString('ADCProva'),
+      encodeDjayString('x'),
+      encodeDjayString('primo')
+    ]);
+    const off = DJAY_HEADER_SIZE + testa.length;
+    // l'offset scelto NON deve essere già multiplo di 8, altrimenti le due
+    // letture coinciderebbero e il test non proverebbe nulla
+    expect((off + 1) % 8).not.toBe(0);
+
+    const buf = payload(
+      testa,
+      doubleValue(126.5, off),
+      encodeDjayString('bpm'),
+      t(DJAY_TYPE.NULL)
+    );
+    const obj = parseDjayPayload(buf) as Record<string, unknown>;
+    expect(obj.bpm).toBe(126.5);
+    expect(obj.primo).toBe('x');
+  });
+
+  it('⚠ URI è un contenitore, non una stringa', () => {
+    /* I byte reali sono `21 08 <caratteri> 00 00`: dopo il tipo URI arriva un
+       ALTRO byte di tipo, e alla fine ci sono due NUL — uno della stringa, uno
+       del contenitore. Leggerlo come stringa diretta infilava il byte di tipo
+       dentro al testo e lasciava un NUL sul flusso, che al giro dopo veniva
+       preso per una chiave: l'oggetto slittava di un posto e il controllo di
+       fine lista scattava in anticipo, perdendo tutti i campi rimanenti. */
+    const buf = payload(
+      t(DJAY_TYPE.CLASS),
+      encodeDjayString('ADCProva'),
+      t(DJAY_TYPE.URI),
+      encodeDjayString('file:///musica/uno.m4a'),
+      t(DJAY_TYPE.NULL), // terminatore del contenitore
+      encodeDjayString('sourceURI'),
+      encodeDjayString('dopo'),
+      encodeDjayString('coda'),
+      t(DJAY_TYPE.NULL)
+    );
+    const obj = parseDjayPayload(buf) as Record<string, unknown>;
+    expect(obj.sourceURI).toBe('file:///musica/uno.m4a');
+    // il campo DOPO l'URI deve esserci: è la prova che il contenitore è stato
+    // chiuso per intero e non a metà
+    expect(obj.coda).toBe('dopo');
+  });
+
+  it('non lancia RangeError su un payload che finisce dentro un numero', () => {
+    /* Un blob troncato deve dare «troncato», che il chiamante conta e supera,
+       non un RangeError di Node che fa fallire l'import di tutta la libreria
+       per una riga sola. */
+    const buf = payload(
+      t(DJAY_TYPE.CLASS),
+      encodeDjayString('ADCProva'),
+      t(DJAY_TYPE.DOUBLE),
+      Buffer.alloc(3) // meno degli otto byte richiesti
+    );
+    expect(() => parseDjayPayload(buf)).toThrow(/troncato/);
+  });
+
   it('riconosce i due formati dal magic', () => {
     expect(detectPayloadKind(Buffer.from('bplist00abcdefgh'))).toBe('bplist');
     expect(detectPayloadKind(payload(t(DJAY_TYPE.CLASS)))).toBe('djay');

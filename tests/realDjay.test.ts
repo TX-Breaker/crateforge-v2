@@ -43,19 +43,59 @@ d('djay Pro — libreria reale (sola lettura)', () => {
     expect(lib.unreadable).toBeLessThanOrEqual(lib.scanned);
   });
 
-  it('il formato proprietario si decodifica in little-endian', () => {
-    /* È la scoperta che ha cambiato il parser. In big-endian, sulla stessa
-       libreria, i conteggi degli array diventavano decine di milioni e le
-       durate dei brani denormali del tipo 6.8e-313. Il test non rilegge i
-       byte: verifica la conseguenza osservabile, cioè che le collezioni
-       strutturali si decodifichino tutte. */
+  it('decodifica ogni riga delle collezioni che importa', () => {
+    /* Prima delle correzioni del 24/08/2026 questa libreria dava 25 righe
+       illeggibili su 174, e cinque collezioni su undici non si aprivano
+       affatto — comprese quelle con i percorsi dei file e con il BPM. Ora sono
+       zero. Il test guarda le collezioni che l'import usa davvero: se una di
+       quelle smette di decodificarsi, l'utente perde dati, e va saputo subito.
+
+       Le tre correzioni erano: lettura little-endian, allineamento a 8 byte per
+       i valori da 8, e URI trattato come contenitore invece che come stringa. */
     const lib = readDjayLibrary(db!);
+    expect(lib.unreadable, 'righe illeggibili nelle collezioni importate').toBe(0);
+
     const perNome = new Map(lib.byCollection.map((c) => [c.collection, c]));
-    for (const nome of ['contentPackMediaItems', 'mediaItemTitleIDs', 'mediaItemPlaylists']) {
+    for (const nome of [
+      'mediaItemTitleIDs',
+      'globalMediaItemLocations',
+      'mediaItemAnalyzedData',
+      'mediaItemPlaylists',
+      'contentPackMediaItems'
+    ]) {
       const c = perNome.get(nome);
       if (!c) continue;
       expect(c.unreadable, `${nome}: righe illeggibili`).toBe(0);
     }
+  });
+
+  it('ricava percorso e BPM, che stanno in collezioni diverse dai metadati', () => {
+    /* ⚠ Nessun titolo o percorso finisce negli asserti: si verifica che i
+       campi ci SIANO, non quali siano.
+
+       Il percorso sta in `sourceURIs` dentro la riga di posizione; il BPM
+       misurato sta in `mediaItemAnalyzedData`, una riga a parte legata dallo
+       stesso `uuid`. Una traccia senza percorso non si ritrova su disco, e un
+       BPM vuoto verrebbe propagato dalla sincronizzazione sopra un dato buono
+       degli altri programmi. */
+    const lib = readDjayLibrary(db!);
+    if (lib.tracks.length === 0) return; // libreria djay vuota: nulla da dire
+
+    const conPercorso = lib.tracks.filter((t) => t.path !== null).length;
+    expect(conPercorso, 'nessuna traccia ha un percorso').toBeGreaterThan(0);
+
+    const conTitolo = lib.tracks.filter((t) => t.title !== null).length;
+    expect(conTitolo).toBe(lib.tracks.length);
+  });
+
+  it('non duplica la traccia presente in più collezioni', () => {
+    /* Lo stesso brano compare come scheda e come posizione, con lo stesso
+       `uuid`: senza deduplica la libreria risulterebbe raddoppiata. */
+    const lib = readDjayLibrary(db!);
+    const uuidVisti = lib.tracks
+      .map((t) => (t.formatData as { uuid?: string | null } | undefined)?.uuid ?? null)
+      .filter((u): u is string => u !== null);
+    expect(new Set(uuidVisti).size).toBe(uuidVisti.length);
   });
 
   it('non scambia i contenuti di djay per musica dell utente', () => {
@@ -77,11 +117,12 @@ d('djay Pro — libreria reale (sola lettura)', () => {
     }
   });
 
-  it('dichiara che cue, valutazioni e analisi non sono importati', () => {
+  it('dichiara che cue e valutazioni non sono importati', () => {
     // Un import che tace su ciò che non ha portato è peggio di uno che fallisce:
     // l'utente crede di avere i suoi cue e li scopre assenti in serata.
     const lib = readDjayLibrary(db!);
     expect(lib.warnings.some((w) => w.toLowerCase().includes('cue'))).toBe(true);
     expect(lib.warnings.some((w) => w.toLowerCase().includes('beatgrid'))).toBe(true);
+    expect(lib.warnings.some((w) => w.toLowerCase().includes('valutazioni'))).toBe(true);
   });
 });

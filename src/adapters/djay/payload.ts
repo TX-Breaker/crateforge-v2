@@ -134,11 +134,28 @@ class DjayReader {
         return this.readU32Block();
 
       case DJAY_TYPE.STRING:
-      case DJAY_TYPE.URI:
       case DJAY_TYPE.POINTER_STRING:
         return this.readCString();
 
+      /* ⚠ URI non è una stringa: è un CONTENITORE che avvolge un valore
+         tipizzato e si chiude con un NUL proprio. I byte lo dicono senza
+         ambiguità — dopo il tipo 33 arriva un altro byte di tipo (08, stringa)
+         e solo dopo i caratteri; alla fine ci sono DUE NUL, uno della stringa e
+         uno del contenitore.
+
+         Leggerlo come stringa diretta faceva due danni in fila: il byte di tipo
+         interno finiva dentro al testo, e il NUL del contenitore restava sul
+         flusso, dove al giro successivo veniva preso per una chiave. Da lì
+         l'oggetto slittava di un posto e il controllo di fine lista scattava in
+         anticipo, perdendo tutti i campi rimanenti. */
+      case DJAY_TYPE.URI: {
+        const inner = this.value(this.nextType());
+        if (this.data[this.offset] === 0) this.offset += 1;
+        return inner;
+      }
+
       case DJAY_TYPE.UINT16: {
+        if (this.offset + 2 > this.data.length) throw new Error('payload troncato');
         const v = this.data.readUInt16LE(this.offset);
         this.offset += 2;
         return v;
@@ -146,21 +163,37 @@ class DjayReader {
       case DJAY_TYPE.UINT32:
         return this.readU32Block();
       case DJAY_TYPE.UINT64: {
-        this.alignTo(4);
+        this.alignTo(8);
+        if (this.offset + 8 > this.data.length) throw new Error('payload troncato');
         const v = Number(this.data.readBigUInt64LE(this.offset));
         this.offset += 8;
         return v;
       }
       case DJAY_TYPE.FLOAT: {
         this.alignTo(4);
+        if (this.offset + 4 > this.data.length) throw new Error('payload troncato');
         const v = this.data.readFloatLE(this.offset);
         this.offset += 4;
         return v;
       }
+      /* ⚠ I valori a OTTO byte si allineano a OTTO, non a quattro come tutto
+         il resto. Non è un dettaglio estetico: con l'allineamento a 4 il
+         valore veniva letto quattro byte troppo presto e il token successivo
+         cadeva in mezzo al numero, con l'effetto che il resto dell'oggetto
+         diventava illeggibile. Verificato su una libreria reale: in un
+         `ADCLooperPack` il tipo DOUBLE sta a 187, quindi con allineamento a 4
+         il valore occupa 188-195 e il token dopo cade a 196, dove non c'è
+         niente; con allineamento a 8 occupa 192-199 e il token dopo cade
+         esattamente a 200, dove c'è la chiave `access`. Quattro casi
+         indipendenti nello stesso payload danno la stessa risposta. */
       case DJAY_TYPE.DOUBLE:
       case DJAY_TYPE.DATE:
       case DJAY_TYPE.POINTER_DATE: {
-        this.alignTo(4);
+        this.alignTo(8);
+        /* Un payload che finisce a metà di un numero deve dare «troncato», che
+           il chiamante sa gestire, non un RangeError di Node che risale fino
+           all'import e lo fa fallire per intero. */
+        if (this.offset + 8 > this.data.length) throw new Error('payload troncato');
         const v = this.data.readDoubleLE(this.offset);
         this.offset += 8;
         return v;
@@ -185,8 +218,15 @@ class DjayReader {
         return this.array(type);
 
       default:
-        throw new Error(`tipo djay sconosciuto: ${type}`);
+        /* Gli altri tipi elencati in `DJAY_ARRAY_FIXEDSIZE` (10, 12, 26) hanno
+           la stessa forma — conteggio e poi gli elementi — ma non si sa di che
+           cosa siano array. Trattarli come tale è comunque meglio che fermarsi:
+           su una libreria reale il tipo 12 compariva in due `contentPacks` e
+           faceva fallire l'intera riga. */
+        if (DJAY_ARRAY_FIXEDSIZE.includes(type)) return this.array(type);
+        break;
     }
+    throw new Error(`tipo djay sconosciuto: ${type}`);
   }
 
   /**
