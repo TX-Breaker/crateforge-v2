@@ -18,14 +18,64 @@ import {
  * di oggetto si tratta, `data` porta il payload serializzato. Un importatore
  * che tenti `SELECT … FROM Track` non trova nulla.
  *
- * ⚠⚠ Questo lettore non è mai stato eseguito su un `MediaLibrary.db` reale.
- * Per questo NON fallisce sulla prima riga illeggibile: conta gli errori,
- * prosegue e li riporta. Un formato non collaudato che si arrende al primo
- * intoppo non dice mai quanto ci andava vicino.
+ * ⚠⚠ Eseguito su un `MediaLibrary.db` reale il 24/08/2026, e la libreria
+ * reale ha smentito due cose che i test sintetici confermavano.
+ *
+ * La prima è nel parser dei payload: il formato è little-endian, non
+ * big-endian (vedi `payload.ts`). La seconda è qui: NON basta «ha un titolo,
+ * quindi è una traccia». Su una libreria vera quella regola importava 99
+ * `contentPacks` — i pacchetti di contenuti che djay distribuisce — come se
+ * fossero musica dell'utente, perché anche loro hanno un nome. Le collezioni
+ * ora sono elencate una per una: quello che non è riconosciuto viene contato e
+ * ignorato, mai indovinato.
+ *
+ * NON fallisce sulla prima riga illeggibile: conta gli errori per collezione,
+ * prosegue e li riporta. Un formato non del tutto decifrato che si arrende al
+ * primo intoppo non dice mai quanto ci andava vicino.
  */
 
 /** Righe lette per volta: le righe contengono blob, la libreria può essere grande. */
 const PAGE = 1000;
+
+/**
+ * Collezioni che contengono musica dell'utente.
+ *
+ * ⚠ Elenco CHIUSO, e deve restare tale. La versione precedente trattava come
+ * traccia qualunque oggetto con un titolo: su una libreria reale con un solo
+ * brano importava 80 righe, perché i pacchetti di contenuti di djay hanno un
+ * nome esattamente come un brano. Una collezione sconosciuta viene contata e
+ * saltata; se un giorno ne compare una nuova la si aggiunge qui, dopo averla
+ * guardata.
+ */
+const COLLEZIONI_TRACCE = new Set([
+  /* Metadati: title, artist, duration, isrc. */
+  'mediaitemtitleids',
+  /* Posizione del file su disco, con i metadati incorporati. */
+  'globalmediaitemlocations'
+]);
+
+/** Collezioni di playlist. */
+const COLLEZIONI_PLAYLIST = new Set(['mediaitemplaylists']);
+
+/**
+ * Collezioni note che NON sono musica dell'utente. Elencarle serve a
+ * distinguere «so cos'è e non mi serve» da «non so cos'è»: solo il secondo
+ * caso merita un avviso.
+ */
+const COLLEZIONI_IGNORATE = new Set([
+  /* Contenuti distribuiti da djay, non dell'utente. */
+  'contentpacks',
+  'contentpackmediaitems',
+  /* Stato dell'applicazione e cronologia delle serate. */
+  'databaseinfo',
+  'queues',
+  'historysessions',
+  'historysessionitems',
+  /* Valutazioni, cue e analisi: hanno una traccia a cui riferirsi, ma il
+     legame non è ancora decifrato — vedi l'avviso in coda alla lettura. */
+  'mediaitemuserdata',
+  'mediaitemanalyzeddata'
+]);
 
 interface Row {
   collection: string;
@@ -78,6 +128,15 @@ export interface DjayReadResult extends ForeignLibrary {
   unreadable: number;
   /** Righe lette in tutto, per dare un denominatore agli errori. */
   scanned: number;
+  /**
+   * Righe lette e righe fallite, collezione per collezione.
+   *
+   * Un totale unico dice «il 13% non si legge» e non aiuta: nasconde se il
+   * problema è in una collezione che non interessa a nessuno o proprio in
+   * quella che porta i brani. Questa ripartizione è il primo posto da guardare
+   * quando djay cambia formato.
+   */
+  byCollection: { collection: string; rows: number; unreadable: number; kind: string }[];
 }
 
 export function readDjayLibrary(dbPath: string): DjayReadResult {
@@ -105,6 +164,8 @@ export function readFrom(db: BetterSqlite3.Database): DjayReadResult {
   const playlistRows: { uuid: string; name: string; childUUIDs: string[]; tracks: string[] }[] = [];
   let unreadable = 0;
   let scanned = 0;
+  const sconosciute = new Set<string>();
+  const perCollezione = new Map<string, { rows: number; unreadable: number; kind: string }>();
 
   const stmt = db.prepare(
     `SELECT collection, key, data FROM database2 ORDER BY rowid LIMIT ? OFFSET ?`
@@ -116,21 +177,48 @@ export function readFrom(db: BetterSqlite3.Database): DjayReadResult {
 
     for (const row of rows) {
       scanned++;
-      if (!row.data || !Buffer.isBuffer(row.data)) continue;
+      const nomeColl = row.collection ?? '(senza nome)';
+      if (!perCollezione.has(nomeColl)) {
+        perCollezione.set(nomeColl, { rows: 0, unreadable: 0, kind: 'vuoto' });
+      }
+      const cnt = perCollezione.get(nomeColl)!;
+      cnt.rows++;
+      if (row.data && Buffer.isBuffer(row.data)) cnt.kind = detectPayloadKind(row.data);
 
-      let obj: Record<string, unknown>;
-      try {
-        const parsed = decodePayload(row.data);
-        if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) continue;
-        obj = parsed as Record<string, unknown>;
-      } catch {
+      /* La classificazione viene PRIMA della decodifica, e non è un dettaglio
+         di efficienza. `unreadable` finisce in un avviso all'utente: se
+         contasse anche le righe di collezioni che non importiamo, direbbe
+         «non leggo il 13% della tua libreria» per righe che nessuno voleva.
+         La ripartizione per collezione le registra comunque. */
+      const collection = (row.collection ?? '').toLowerCase();
+      const utile = COLLEZIONI_TRACCE.has(collection) || COLLEZIONI_PLAYLIST.has(collection);
+      if (!utile) {
+        if (!COLLEZIONI_IGNORATE.has(collection)) sconosciute.add(nomeColl);
+        continue;
+      }
+
+      if (!row.data || !Buffer.isBuffer(row.data)) {
+        cnt.unreadable++;
         unreadable++;
         continue;
       }
 
-      const collection = (row.collection ?? '').toLowerCase();
+      let obj: Record<string, unknown>;
+      try {
+        const parsed = decodePayload(row.data);
+        if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+          cnt.unreadable++;
+          unreadable++;
+          continue;
+        }
+        obj = parsed as Record<string, unknown>;
+      } catch {
+        cnt.unreadable++;
+        unreadable++;
+        continue;
+      }
 
-      if (collection.includes('playlist')) {
+      if (COLLEZIONI_PLAYLIST.has(collection)) {
         const uuid = asString(firstOf(obj, 'uuid', 'identifier')) ?? row.key;
         const children = firstOf(obj, 'childUUIDs', 'children');
         playlistRows.push({
@@ -145,10 +233,16 @@ export function readFrom(db: BetterSqlite3.Database): DjayReadResult {
         continue;
       }
 
-      // Tutto ciò che non è playlist e porta un titolo lo trattiamo come traccia.
+      /* Da qui in giù siamo dentro una collezione di tracce dichiarata sopra.
+         Un oggetto senza né titolo né percorso non è una traccia utile: si
+         conta come illeggibile, perché stava in una collezione da cui ci
+         aspettavamo un brano e non l'abbiamo ricavato. */
       const title = asString(firstOf(obj, 'title', 'songName', 'name'));
       const path = asString(firstOf(obj, 'NS.relative', 'location', 'path', 'fileURL'));
-      if (!title && !path) continue;
+      if (!title && !path) {
+        unreadable++;
+        continue;
+      }
 
       tracks.push({
         sourceId: row.key,
@@ -181,13 +275,25 @@ export function readFrom(db: BetterSqlite3.Database): DjayReadResult {
 
   if (unreadable > 0) {
     warnings.push(
-      `${unreadable} righe su ${scanned} non sono state deserializzate. Il formato di djay ` +
-        'non è ancora stato verificato su una libreria reale: segnalalo se il numero è alto.'
+      `${unreadable} righe delle collezioni di brani non sono state deserializzate ` +
+        `(su ${scanned} righe totali nel database). Il formato di djay è ricostruito ` +
+        'per osservazione: segnalalo se il numero è alto.'
+    );
+  }
+  if (sconosciute.size > 0) {
+    warnings.push(
+      `Collezioni non riconosciute e quindi ignorate: ${[...sconosciute].join(', ')}. ` +
+        'Se una di queste contiene i tuoi brani, segnalalo: verranno ignorati.'
     );
   }
   warnings.push(
     'I cue di djay non sono stati importati: stanno nei blocchi binari, che questo ' +
       'lettore salta perché il loro formato non è documentato.'
+  );
+  warnings.push(
+    'Valutazioni, BPM analizzati e beatgrid non sono stati importati: stanno in ' +
+      '`mediaItemUserData` e `mediaItemAnalyzedData`, e il legame fra quelle righe e ' +
+      'il singolo brano non è ancora stato decifrato.'
   );
 
   return {
@@ -197,7 +303,10 @@ export function readFrom(db: BetterSqlite3.Database): DjayReadResult {
     playlists: buildPlaylistTree(playlistRows, tracks),
     warnings,
     unreadable,
-    scanned
+    scanned,
+    byCollection: [...perCollezione.entries()]
+      .map(([collection, c]) => ({ collection, ...c }))
+      .sort((a, b) => b.rows - a.rows)
   };
 }
 

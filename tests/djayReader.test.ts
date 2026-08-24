@@ -33,8 +33,14 @@ function libreriaFinta() {
     rowid INTEGER PRIMARY KEY, collection TEXT, key TEXT, data BLOB, metadata BLOB)`);
   const ins = db.prepare(`INSERT INTO database2 (collection, key, data) VALUES (?, ?, ?)`);
 
+  /* ⚠ I nomi delle collezioni sono quelli OSSERVATI in un `MediaLibrary.db`
+     reale, non nomi verosimili. La versione precedente di questa fixture usava
+     'mediaItem' e 'Playlist', che in una libreria vera non esistono: il test
+     passava perché il lettore accettava qualunque collezione con un titolo, ed
+     è esattamente il difetto che la fixture avrebbe dovuto scoprire. Una
+     fixture inventata conferma il codice invece di metterlo alla prova. */
   ins.run(
-    'mediaItem',
+    'mediaItemTitleIDs',
     'uuid-brano-1',
     payload('ADCMediaItem', [
       [encodeDjayString('Primo Brano'), 'title'],
@@ -43,7 +49,7 @@ function libreriaFinta() {
     ])
   );
   ins.run(
-    'mediaItem',
+    'globalMediaItemLocations',
     'uuid-brano-2',
     payload('ADCMediaItem', [
       [encodeDjayString('Secondo Brano'), 'title'],
@@ -51,10 +57,23 @@ function libreriaFinta() {
     ])
   );
   // Riga illeggibile: il lettore la deve contare, non morire.
-  ins.run('mediaItem', 'uuid-rotto', Buffer.from('non sono un payload valido'));
+  ins.run('mediaItemTitleIDs', 'uuid-rotto', Buffer.from('non sono un payload valido'));
+
+  /* Un pacchetto di contenuti di djay. Ha un nome come un brano, e su una
+     libreria reale ce ne sono un centinaio: se il lettore lo scambia per
+     musica, l'utente si ritrova la libreria piena di roba che non ha mai
+     comprato. */
+  ins.run(
+    'contentPacks',
+    'uuid-pacchetto',
+    payload('ADCContentPack', [
+      [encodeDjayString('Pacchetto Contenuti'), 'name'],
+      [encodeDjayString('Electronic'), 'category']
+    ])
+  );
 
   ins.run(
-    'Playlist',
+    'mediaItemPlaylists',
     DJAY_ROOT_PLAYLIST_UUID,
     payload('ADCPlaylist', [
       [encodeDjayString(DJAY_ROOT_PLAYLIST_UUID), 'uuid'],
@@ -94,8 +113,27 @@ describe('djay Pro — lettore (libreria sintetica)', () => {
       // Un formato non collaudato che si ferma al primo intoppo non dice mai
       // quanto ci andava vicino.
       expect(lib.unreadable).toBe(1);
-      expect(lib.scanned).toBe(4);
+      // 5 righe in tutto: 2 brani, 1 rotta, 1 pacchetto di contenuti, 1 playlist.
+      expect(lib.scanned).toBe(5);
       expect(lib.warnings.some((w) => w.includes('1 righe'))).toBe(true);
+    } finally {
+      db.close();
+    }
+  });
+
+  it('⚠ non importa i pacchetti di contenuti di djay come musica', () => {
+    /* Su una libreria reale i `contentPacks` sono un centinaio e hanno tutti un
+       nome. La regola «ha un titolo, quindi è una traccia» li importava tutti.
+       Il pacchetto deve comparire nella ripartizione — la riga esiste, non si
+       finge il contrario — ma non fra le tracce. */
+    const db = libreriaFinta();
+    try {
+      const lib = readFrom(db);
+      expect(lib.tracks.some((t) => (t.title ?? '').includes('Pacchetto'))).toBe(false);
+      const pacchetti = lib.byCollection.find((c) => c.collection === 'contentPacks');
+      expect(pacchetti?.rows).toBe(1);
+      // Ignorata per scelta, quindi non è un errore da riportare all'utente.
+      expect(pacchetti?.unreadable).toBe(0);
     } finally {
       db.close();
     }

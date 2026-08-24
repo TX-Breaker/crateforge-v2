@@ -787,12 +787,17 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
    * dentro blob serializzati, in due formati diversi che convivono nella stessa
    * libreria.
    *
-   * ⚠⚠ Sperimentale: il lettore è scritto sulla specifica ma non è mai stato
-   * eseguito su una libreria djay reale, perché djay non è installato sulla
-   * macchina di sviluppo. Per questo l'esito riporta quante righe non sono state
-   * decifrate: è il numero da guardare per capire se il formato regge.
+   * ⚠⚠ Sperimentale, ma non più alla cieca: il lettore è stato eseguito su una
+   * libreria djay reale il 24/08/2026. L'esito riporta quante righe non sono
+   * state decifrate e in quale collezione: è il numero da guardare per capire
+   * se il formato regge.
    *
-   * Sola lettura. Non esiste un percorso di scrittura verso djay.
+   * Sola lettura — non esiste un percorso di scrittura verso djay — ma la
+   * guardia sui processi si applica lo stesso: `MediaLibrary.db` è un database
+   * SQLite in modalità WAL, e leggerlo mentre djay ci scrive può restituire uno
+   * stato a metà. Qui una lettura sbagliata non danneggia la libreria di djay,
+   * ma importa dati falsi nella nostra, che è poi ciò da cui l'utente
+   * sincronizza tutto il resto.
    */
   ipcMain.handle('library:importDjay', async (_e, dbPath?: string) => {
     if (anyJobRunning) throw new Error('Un altro lavoro è già in corso.');
@@ -807,6 +812,7 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
         };
       }
       try {
+        await assertNotRunning('djay', 'djay Pro');
         const lib = readDjayLibrary(path);
         const result = importForeignLibrary(db, lib, (done, total) =>
           progress.update({ jobId, phase: 'import-djay', done, total })
@@ -816,7 +822,13 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
         progress.finish({ jobId, phase: 'import-djay', done: result.tracks, total: result.tracks });
         logOperation(db, 'import.djay', path, 'ok', JSON.stringify(result));
         relinkIdentity('import.djay');
-        return { ok: true, ...result, unreadable: lib.unreadable, scanned: lib.scanned };
+        return {
+          ok: true,
+          ...result,
+          unreadable: lib.unreadable,
+          scanned: lib.scanned,
+          byCollection: lib.byCollection
+        };
       } catch (err) {
         progress.finish({ jobId, phase: 'import-djay', done: 1, total: 1 });
         logOperation(db, 'import.djay', path, 'error', String(err));

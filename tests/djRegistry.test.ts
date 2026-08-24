@@ -85,9 +85,13 @@ describe('registro dei software DJ', () => {
   });
 
   it('dichiara quali pattern di processo sono assunzioni e quali no', () => {
-    // Il flag è il promemoria di un debito: finché è false, un mancato
-    // rilevamento è previsto e non va scambiato per un bug.
+    /* Il flag è il promemoria di un debito: finché è false, un mancato
+       rilevamento è previsto e non va scambiato per un bug.
+       Il 24/08/2026 il debito è stato saldato: i nomi sono stati letti da
+       `tasklist` con i cinque programmi aperti insieme. Se qualcuno aggiunge un
+       software al registro senza fare la stessa verifica, questo test lo
+       ferma. */
     const assunti = TUTTI.filter((s) => !PROCESS_PATTERNS[s].verified);
-    expect(assunti.sort()).toEqual(['engine', 'rekordbox', 'traktor'].sort());
+    expect(assunti).toEqual([]);
   });
 });

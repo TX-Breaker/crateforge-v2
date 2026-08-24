@@ -91,7 +91,7 @@ class DjayReader {
   private readU32Block(): number {
     this.alignTo(4);
     if (this.offset + 4 > this.data.length) throw new Error('payload troncato');
-    const v = this.data.readUInt32BE(this.offset);
+    const v = this.data.readUInt32LE(this.offset);
     this.offset += 4;
     return v;
   }
@@ -139,7 +139,7 @@ class DjayReader {
         return this.readCString();
 
       case DJAY_TYPE.UINT16: {
-        const v = this.data.readUInt16BE(this.offset);
+        const v = this.data.readUInt16LE(this.offset);
         this.offset += 2;
         return v;
       }
@@ -147,13 +147,13 @@ class DjayReader {
         return this.readU32Block();
       case DJAY_TYPE.UINT64: {
         this.alignTo(4);
-        const v = Number(this.data.readBigUInt64BE(this.offset));
+        const v = Number(this.data.readBigUInt64LE(this.offset));
         this.offset += 8;
         return v;
       }
       case DJAY_TYPE.FLOAT: {
         this.alignTo(4);
-        const v = this.data.readFloatBE(this.offset);
+        const v = this.data.readFloatLE(this.offset);
         this.offset += 4;
         return v;
       }
@@ -161,7 +161,7 @@ class DjayReader {
       case DJAY_TYPE.DATE:
       case DJAY_TYPE.POINTER_DATE: {
         this.alignTo(4);
-        const v = this.data.readDoubleBE(this.offset);
+        const v = this.data.readDoubleLE(this.offset);
         this.offset += 8;
         return v;
       }

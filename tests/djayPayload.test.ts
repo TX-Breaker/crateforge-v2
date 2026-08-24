@@ -109,12 +109,19 @@ describe('djay Pro — formato proprietario', () => {
   });
 
   it('salta i blocchi binari invece di provare a interpretarli', () => {
-    /* ⚠ ASSUNZIONE non verificabile senza un file reale: la lunghezza del
-       blocco binario viene letta su un confine di 4 byte contato dall'inizio
-       del payload. La specifica dichiara che esiste un allineamento a blocchi
-       di 4, ma non rispetto a cosa. La fixture qui sotto è costruita ALLINEATA,
-       coerentemente con quella lettura; se un `MediaLibrary.db` vero mostrasse
-       il contrario, è questo il punto da correggere. */
+    /* ⚠ ASSUNZIONE ancora non verificata: la lunghezza del blocco binario
+       viene letta su un confine di 4 byte contato dall'inizio del payload. La
+       specifica dichiara che un allineamento a blocchi di 4 esiste, ma non
+       rispetto a cosa, e nella libreria reale usata per il collaudo i blocchi
+       binari cadevano già allineati: il caso disallineato non si è presentato,
+       quindi non prova nulla. La fixture è costruita ALLINEATA, coerentemente
+       con quella lettura; resta questo il punto da correggere se un file vero
+       mostrasse il contrario.
+
+       La lunghezza è invece little-endian per FATTO, non per assunzione: su
+       una libreria reale la lettura big-endian trasformava i conteggi degli
+       array in decine di milioni e le durate dei brani in denormali del tipo
+       6.8e-313. In little-endian gli stessi byte danno 1 e 372.63. */
     const prefisso = payload(
       Buffer.concat([t(DJAY_TYPE.CLASS), encodeDjayString('B'), t(DJAY_TYPE.BINARY)])
     );
@@ -123,7 +130,7 @@ describe('djay Pro — formato proprietario', () => {
     const buf = Buffer.concat([
       prefisso,
       padding,
-      Buffer.from([0, 0, 0, 4]),
+      Buffer.from([4, 0, 0, 0]),
       Buffer.from([0xde, 0xad, 0xbe, 0xef]),
       encodeDjayString('waveform'),
       encodeDjayString('ok'),
