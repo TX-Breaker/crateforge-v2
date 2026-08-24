@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import Database from 'better-sqlite3';
 import { existsSync } from 'fs';
+import { detectPayloadKind, parseDjayPayload } from '../src/adapters/djay/payload';
 import { readDjayLibrary } from '../src/adapters/djay/reader';
 import { djayDatabasePath, DJAY_DB_FILENAME } from '../src/adapters/djay';
 
@@ -86,6 +88,49 @@ d('djay Pro — libreria reale (sola lettura)', () => {
 
     const conTitolo = lib.tracks.filter((t) => t.title !== null).length;
     expect(conTitolo).toBe(lib.tracks.length);
+  });
+
+  it('⚠ lo stesso brano dà gli stessi metadati da collezioni diverse', () => {
+    /* Il controllo che mancava. Un brano compare come scheda e come posizione,
+       e i suoi metadati devono coincidere: se non lo fanno, uno dei due percorsi
+       di lettura sta sbagliando.
+
+       È così che si è scoperto che `POINTER_STRING` non era una stringa ma un
+       riferimento: lo stesso titolo usciva di dodici caratteri da una parte e
+       sedici dall'altra, perché i byte di indice finivano dentro al testo.
+       Entrambe le stringhe erano non vuote, quindi ogni controllo di presenza
+       passava. ⚠ Qui non si stampa nessun titolo: si confrontano fra loro. */
+    const db2 = new Database(db!, { readonly: true, fileMustExist: true });
+    try {
+      const perCollezione = new Map<string, Record<string, unknown>>();
+      for (const c of ['mediaItemTitleIDs', 'globalMediaItemLocations']) {
+        const r = db2.prepare(`SELECT data FROM database2 WHERE collection = ?`).get(c) as
+          | { data: Buffer }
+          | undefined;
+        if (!r?.data || detectPayloadKind(r.data) !== 'djay') continue;
+        const o = parseDjayPayload(r.data);
+        if (o && typeof o === 'object' && !Array.isArray(o)) {
+          perCollezione.set(c, o as Record<string, unknown>);
+        }
+      }
+      const scheda = perCollezione.get('mediaItemTitleIDs');
+      const posizione = perCollezione.get('globalMediaItemLocations');
+      if (!scheda || !posizione) return; // libreria senza entrambe: nulla da confrontare
+
+      const titolo = (o: Record<string, unknown>): unknown => {
+        if (typeof o.title === 'string') return o.title;
+        const t = o.titleIDs;
+        const primo = Array.isArray(t) ? (t[0] as Record<string, unknown> | undefined) : undefined;
+        return primo?.title;
+      };
+      const a = titolo(scheda);
+      const b = titolo(posizione);
+      if (typeof a === 'string' && typeof b === 'string') {
+        expect(b).toBe(a);
+      }
+    } finally {
+      db2.close();
+    }
   });
 
   it('non duplica la traccia presente in più collezioni', () => {

@@ -106,11 +106,25 @@ class DjayReader {
     return this.value(this.nextType());
   }
 
+  /**
+   * Tavola delle stringhe già emesse, nell'ordine in cui sono comparse.
+   *
+   * ⚠ Serve ai riferimenti all'indietro (`POINTER_STRING`). Le chiavi si
+   * ripetono a ogni oggetto — `uuid`, `title`, `artist` — e djay non le riscrive
+   * ogni volta: le rimanda per indice. Il nome della classe entra in tavola come
+   * tutto il resto, ed è l'elemento 0.
+   */
+  private readonly stringhe: string[] = [];
+
+  /** Come `stringhe`, ma per i valori a virgola mobile: anche loro si rimandano. */
+  private readonly numeri: number[] = [];
+
   private readCString(): string {
     const end = this.data.indexOf(0, this.offset);
     const stop = end === -1 ? this.data.length : end;
     const s = this.data.subarray(this.offset, stop).toString('utf8');
     this.offset = stop + 1;
+    this.stringhe.push(s);
     return s;
   }
 
@@ -134,8 +148,28 @@ class DjayReader {
         return this.readU32Block();
 
       case DJAY_TYPE.STRING:
-      case DJAY_TYPE.POINTER_STRING:
         return this.readCString();
+
+      /* ⚠ NON è una stringa: è un RIFERIMENTO a una stringa già emessa, per
+         indice su un solo byte. I byte lo dicono senza ambiguità — dentro un
+         `ADCMediaItemTitleID` annidato compare `05 01 05 02 08 "In Gods Arms"`,
+         dove `05 01` è il valore dell'uuid e `05 02` la chiave `uuid`, già
+         scritti per esteso nell'oggetto che lo contiene.
+
+         Leggerlo come stringa terminata da NUL ingoiava i byte di indice e i
+         tipi successivi, e il danno non somigliava a un errore: il titolo
+         usciva con quattro caratteri di spazzatura davanti. Lo stesso brano
+         dava dodici caratteri letto da una collezione e sedici dall'altra, e
+         nessun test se ne accorgeva perché entrambe le stringhe erano non
+         vuote. */
+      case DJAY_TYPE.POINTER_STRING: {
+        const indice = this.nextType();
+        const s = this.stringhe[indice];
+        if (s === undefined) {
+          throw new Error(`riferimento a stringa inesistente: ${indice}`);
+        }
+        return s;
+      }
 
       /* ⚠ URI non è una stringa: è un CONTENITORE che avvolge un valore
          tipizzato e si chiude con un NUL proprio. I byte lo dicono senza
@@ -186,9 +220,35 @@ class DjayReader {
          niente; con allineamento a 8 occupa 192-199 e il token dopo cade
          esattamente a 200, dove c'è la chiave `access`. Quattro casi
          indipendenti nello stesso payload danno la stessa risposta. */
-      case DJAY_TYPE.DOUBLE:
-      case DJAY_TYPE.DATE:
+      /* ⚠ Come `POINTER_STRING`: un RIFERIMENTO, non un valore. La coda di un
+         `ADCMediaItemUserData` reale finisce con `02 03 05 0f 00` — valore
+         `02 03` (il numero già emesso all'indice 3), chiave `05 0f` (la stringa
+         all'indice 15), poi il terminatore. Letto come double inline avrebbe
+         preteso otto byte dove ne restano quattro, e faceva fallire l'intera
+         riga con un errore di troncamento che non c'entrava niente. */
       case DJAY_TYPE.POINTER_DATE: {
+        const indice = this.nextType();
+        const v = this.numeri[indice];
+        if (v === undefined) {
+          /* ⚠ LIMITE NOTO, non un guasto da correggere alla cieca. La forma
+             `02 <indice>` è certa — rispecchia `05 <indice>` e i byte tornano —
+             ma su una riga `mediaItemUserData` reale l'indice vale 3 mentre i
+             valori a virgola mobile emessi fino a quel punto sono tre (0, 1, 2).
+             Quindi la tavola dei numeri si riempie anche da qualcos'altro che
+             non è stato ancora identificato.
+
+             Si ferma invece di indovinare: un valore inventato al posto di un
+             riferimento non risolto entrerebbe nella libreria dell'utente senza
+             che niente lo segnali. */
+          throw new Error(
+            `riferimento a numero non risolto (indice ${indice}, ne conosco ${this.numeri.length})`
+          );
+        }
+        return v;
+      }
+
+      case DJAY_TYPE.DOUBLE:
+      case DJAY_TYPE.DATE: {
         this.alignTo(8);
         /* Un payload che finisce a metà di un numero deve dare «troncato», che
            il chiamante sa gestire, non un RangeError di Node che risale fino
@@ -196,6 +256,7 @@ class DjayReader {
         if (this.offset + 8 > this.data.length) throw new Error('payload troncato');
         const v = this.data.readDoubleLE(this.offset);
         this.offset += 8;
+        this.numeri.push(v);
         return v;
       }
 

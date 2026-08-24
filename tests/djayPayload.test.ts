@@ -86,6 +86,46 @@ describe('djay Pro — formato proprietario', () => {
     expect(obj.primo).toBe('x');
   });
 
+  it('⚠ POINTER_STRING è un riferimento all indietro, non una stringa', () => {
+    /* Le chiavi si ripetono a ogni oggetto — `uuid`, `title` — e djay non le
+       riscrive: le rimanda per indice sulla tavola delle stringhe già emesse,
+       col nome della classe in posizione 0.
+
+       Il difetto che questo test blocca non somigliava a un difetto. Leggendo
+       `05` come stringa terminata da NUL, il byte di indice e i tipi seguenti
+       finivano dentro al testo: lo stesso brano usciva con dodici caratteri di
+       titolo letto da una collezione e sedici dall'altra, ed entrambe le
+       stringhe erano non vuote, quindi nessun controllo se ne accorgeva. */
+    const buf = payload(
+      t(DJAY_TYPE.CLASS),
+      encodeDjayString('ADCProva'), // indice 0
+      encodeDjayString('Brano'), // indice 1 (valore)
+      encodeDjayString('title'), // indice 2 (chiave)
+      t(DJAY_TYPE.POINTER_STRING),
+      Buffer.from([1]), // rimanda a "Brano"
+      t(DJAY_TYPE.POINTER_STRING),
+      Buffer.from([2]), // rimanda a "title", usata come chiave di nuovo
+      t(DJAY_TYPE.NULL)
+    );
+    const obj = parseDjayPayload(buf) as Record<string, unknown>;
+    expect(obj.title).toBe('Brano');
+  });
+
+  it('non inventa un valore per un riferimento fuori tavola', () => {
+    /* Un riferimento che non si risolve deve fermare la riga, non produrre un
+       valore plausibile: quel valore finirebbe nella libreria dell'utente senza
+       che niente lo segnali. */
+    const buf = payload(
+      t(DJAY_TYPE.CLASS),
+      encodeDjayString('ADCProva'),
+      t(DJAY_TYPE.POINTER_STRING),
+      Buffer.from([99]),
+      encodeDjayString('campo'),
+      t(DJAY_TYPE.NULL)
+    );
+    expect(() => parseDjayPayload(buf)).toThrow(/riferimento/);
+  });
+
   it('⚠ URI è un contenitore, non una stringa', () => {
     /* I byte reali sono `21 08 <caratteri> 00 00`: dopo il tipo URI arriva un
        ALTRO byte di tipo, e alla fine ci sono due NUL — uno della stringa, uno
