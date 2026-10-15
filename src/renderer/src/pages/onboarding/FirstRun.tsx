@@ -22,6 +22,8 @@ import { LOCALES } from '@/lib/i18n';
 import { pageText } from '@/lib/i18nPages';
 import { CrateTile } from '@/components/Brand';
 import { cn, formatClock, shortenPath } from '@/lib/utils';
+import type { DjSoftware } from '@core/djVersions';
+import type { DjSoftwareDetection } from '@core/djDetection';
 import {
   AppGridStep,
   DEFAULT_IMPORT_CHOICES,
@@ -32,36 +34,17 @@ import {
   type WizardGoal
 } from './WizardSteps';
 
-type SoftwareId = 'rekordbox' | 'traktor' | 'virtualdj' | 'serato' | 'engine';
-
-interface Detection {
-  id: SoftwareId;
-  found: boolean;
-  path: string | null;
-  companionPath?: string | null;
-  checked: string[];
-  modifiedAt: string | null;
-  limit?: 'readOnly' | 'external' | 'directWrite';
-  /**
-   * ⚠ Deve elencare TUTTI i tipi che `detect.djSoftware` sa restituire. Questa
-   * copia ne dichiarava cinque mentre il processo principale ne emetteva sei:
-   * `serato4db` mancava, TypeScript non poteva accorgersene, e l'instradamento
-   * lo faceva ricadere sul lettore di Engine. L'utente vedeva il `master.sqlite`
-   * di Serato rifiutato perché «manca la tabella Track» — un messaggio che
-   * mandava a cercare il problema dove non era.
-   */
-  kind: 'masterdb' | 'nml' | 'vdjxml' | 'seratoDir' | 'serato4db' | 'enginedb';
-  /** l'applicazione installata: cosa diversa dall'avere una libreria */
-  app: { installed: boolean; path: string | null; version: string | null };
-  /** cosa cercare se la scelta passa all'utente */
-  hint: { fileName: string | null; typicalPath: string };
-}
+/* Tipi dal core, non copie locali: vedi `core/djDetection` per che cosa è
+   successo quando ognuno aveva la sua versione. */
+type SoftwareId = DjSoftware;
+type Detection = DjSoftwareDetection;
 
 const NAMES: Record<SoftwareId, string> = {
   rekordbox: 'Rekordbox',
   traktor: 'Traktor',
   virtualdj: 'VirtualDJ',
   serato: 'Serato',
+  serato4: 'Serato DJ Pro 4',
   engine: 'Engine DJ'
 };
 

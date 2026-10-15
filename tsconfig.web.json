@@ -23,6 +23,7 @@
     "src/core/camelot.ts",
     "src/core/harmony.ts",
     "src/core/djVersions.ts",
+    "src/core/djDetection.ts",
     "src/core/djRegistry.ts",
     "tests/i18nParity.test.ts",
     "tests/djRegistry.wizard.test.ts"

@@ -92,6 +92,7 @@ import {
 } from '@core/djVersions';
 import { probeRekordboxApp, probeVersion } from './versionProbe';
 import { assertNotRunning } from './processGuard';
+import { isLiveLibraryTarget, liveLibraryMessage } from './liveLibraryGuard';
 import { AutoSyncWatcher, readRunningSoftware } from './autoSyncWatcher';
 import {
   AUTO_SYNC_SETTING_KEY,
@@ -628,6 +629,15 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
 
   // ---- import da altri software DJ (pure-Node, sola lettura sul sorgente) ----
   ipcMain.handle('library:importForeign', async (_e, kind: 'traktor' | 'virtualdj' | 'engine', path: string) => {
+    /* ⚠ Il tipo del parametro è una dichiarazione, non un controllo: all'IPC
+       arriva quello che il renderer manda. Prima, qualunque valore diverso da
+       'traktor' ed 'engine' veniva letto come VirtualDJ, e un tipo imprevisto
+       produceva un errore di parsing XML che parlava del software sbagliato —
+       lo stesso schema per cui il master.sqlite di Serato 4 finiva nel lettore
+       di Engine. Un tipo sconosciuto si ferma qui, dicendo quale. */
+    if (kind !== 'traktor' && kind !== 'virtualdj' && kind !== 'engine') {
+      throw new Error(`Formato d'import non gestito: ${String(kind)}`);
+    }
     if (anyJobRunning) throw new Error('Un altro lavoro è già in corso.');
     return withJobLock(async () => {
       const progress = new ThrottledProgress(wc());
@@ -642,7 +652,7 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
             ? readTraktorNml(path)
             : kind === 'engine'
               ? readEngineLibrary(path)
-              : readVirtualDjXml(path);
+              : readVirtualDjXml(path); // 'virtualdj': gli altri valori sono già stati respinti
         const result = importForeignLibrary(db, lib, (done, total) =>
           progress.update({ jobId, phase: `import-${kind}`, done, total })
         );
@@ -1146,6 +1156,11 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
     return r;
   });
   ipcMain.handle('export:traktorNml', (_e, outPath: string, sel) => {
+    const live = detectDjSoftware().find((s) => s.id === 'traktor')?.path;
+    if (isLiveLibraryTarget('traktor', outPath, live)) {
+      logOperation(db, 'export.traktor-nml', outPath, 'error', 'destinazione = libreria viva');
+      throw new Error(liveLibraryMessage('Traktor'));
+    }
     const r = writeTraktorNml(db, outPath, sel ?? {});
     logOperation(db, 'export.traktor-nml', outPath, 'ok', JSON.stringify(r));
     return r;
@@ -1166,6 +1181,11 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
   );
 
   ipcMain.handle('export:virtualdjXml', (_e, outPath: string, sel) => {
+    const live = detectDjSoftware().find((s) => s.id === 'virtualdj')?.path;
+    if (isLiveLibraryTarget('virtualdj', outPath, live)) {
+      logOperation(db, 'export.virtualdj-xml', outPath, 'error', 'destinazione = libreria viva');
+      throw new Error(liveLibraryMessage('VirtualDJ'));
+    }
     const r = writeVirtualDjXml(db, outPath, sel ?? {});
     logOperation(db, 'export.virtualdj-xml', outPath, 'ok', JSON.stringify(r));
     return r;

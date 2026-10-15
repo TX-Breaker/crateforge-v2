@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
+import type { DjSoftwareDetection } from '@core/djDetection';
 
 /**
  * Bridge sicuro renderer ↔ main. Espone solo funzioni tipizzate, niente
@@ -548,19 +549,10 @@ const api = {
   // Rilevamento delle installazioni DJ presenti sulla macchina (primo avvio).
   // Solo lettura di percorsi: nessun file viene aperto lato main.
   detect: {
+    // Il tipo viene da `core/djDetection`, l'unica fonte: le copie scritte a
+    // mano qui e nel wizard erano rimaste indietro di un tipo di sorgente.
     djSoftware: () =>
-      ipcRenderer.invoke('detect:djSoftware') as Promise<
-        {
-          id: 'rekordbox' | 'traktor' | 'virtualdj' | 'serato' | 'engine';
-          found: boolean;
-          path: string | null;
-          companionPath?: string | null;
-          checked: string[];
-          modifiedAt: string | null;
-          limit?: 'readOnly' | 'external';
-          kind: 'masterdb' | 'nml' | 'vdjxml' | 'seratoDir' | 'enginedb';
-        }[]
-      >
+      ipcRenderer.invoke('detect:djSoftware') as Promise<DjSoftwareDetection[]>
   },
   // Chrome della finestra: su Windows i pulsanti di sistema sono disegnati
   // dall'OS (Window Controls Overlay), quindi al cambio tema va aggiornato solo

@@ -36,50 +36,13 @@ export type DjSoftwareId = DjSoftware;
  * diverse, e il primo messaggio dato al posto del secondo lo manda a cercare
  * un file che non esiste. Su questa macchina è successo esattamente questo.
  */
-export interface DjAppInstall {
-  installed: boolean;
-  /** cartella dell'installazione, verificata su disco */
-  path: string | null;
-  /** versione, quando ricavabile senza lanciare processi */
-  version: string | null;
-}
-
-/**
- * Che cosa deve cercare l'utente se tocca a lui. Serve al selettore file: un
- * filtro per estensione non basta — nella cartella di VirtualDJ l'unico .xml
- * è `settings.xml`, ed è il file sbagliato.
- */
-export interface DjSourceHint {
-  /** nome esatto del file da cercare (null per Serato: è una cartella) */
-  fileName: string | null;
-  /** dove sta di solito su QUESTA piattaforma, già espanso */
-  typicalPath: string;
-}
-
-export interface DjSoftwareDetection {
-  id: DjSoftwareId;
-  /** true se almeno un candidato esiste davvero su disco */
-  found: boolean;
-  /** percorso verificato da passare all'import, quando trovato */
-  path: string | null;
-  /** percorso di supporto (options.json di Rekordbox), se esiste */
-  companionPath?: string | null;
-  /** percorsi controllati, per poterli mostrare in chiaro all'utente */
-  checked: string[];
-  /** ultima modifica del file/cartella trovato, ISO */
-  modifiedAt: string | null;
-  /** l'applicazione installata, indipendentemente dalla sua libreria */
-  app: DjAppInstall;
-  /** cosa cercare, se la selezione passa all'utente */
-  hint: DjSourceHint;
-  /**
-   * Limite dichiarato del canale: Serato si legge ma non si riscrive, Engine
-   * spesso vive su un supporto esterno. La UI lo mostra sulla card, non in nota.
-   */
-  limit?: 'readOnly' | 'external' | 'directWrite';
-  /** tipo di sorgente da passare alla IPC di import */
-  kind: 'masterdb' | 'nml' | 'vdjxml' | 'seratoDir' | 'serato4db' | 'enginedb';
-}
+export type {
+  DjAppInstall,
+  DjSourceHint,
+  DjSoftwareDetection,
+  DjDetectionKind
+} from '@core/djDetection';
+import type { DjAppInstall, DjSoftwareDetection, DjSourceHint } from '@core/djDetection';
 
 function firstExisting(candidates: string[]): string | null {
   return candidates.find((c) => {

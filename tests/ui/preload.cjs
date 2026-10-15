@@ -65,7 +65,9 @@ const api = {
         }
       ]
     }),
-    acknowledge: async () => ({ ok: true })
+    acknowledge: async () => ({ ok: true }),
+    revoke: async () => ({ ok: true }),
+    setGate: async () => ({ ok: true })
   },
   /* ⚠ Questo spazio dei nomi mancava, e la sua assenza non si manifestava come
      "manca sync": si manifestava come quattordici problemi diversi. Il pannello
@@ -108,6 +110,10 @@ const api = {
   },
   sidecar: { check: async () => ({ available: true, binaryPath: 'resources/crateforge-sidecar.exe' }), downloadKey: async () => ({ ok: true }) },
   library: {
+    linkIdentity: async () => ({ linked: 0, shared: 0, byRule: { path: 0, fileMatch: 0, acoustic: 0 } }),
+    importSerato4: async () => ({ ok: true, tracks: 0 }),
+    importDjay: async () => ({ ok: true, tracks: 0, unreadable: 0, scanned: 0, byCollection: [] }),
+    importUsbLibrary: async () => ({ ok: true, tracks: 0 }),
     /* Conteggi per software: il guscio dell'applicazione li chiede all'avvio,
        e senza di essi il contesto di lavoro non si inizializza. */
     sources: async () => ({
@@ -144,7 +150,14 @@ const api = {
   quarantine: { list: async () => [], restore: async () => ({ restored: 0, skipped: [] }) },
   shell: { showFolder: async () => ({ ok: true }) },
   report: { generate: async () => ({ rows: 0, outPath: '' }), view: async () => ({ columns: [], rows: [], totalRows: 0, sheetName: '' }) },
-  exporter: { limits: async () => ({}), rekordboxXml: async () => ({ tracks: 0, playlists: 0 }), traktorNml: async () => ({ tracks: 0 }), virtualdjXml: async () => ({ tracks: 0 }), beatshiftPreview: async () => ({ ok: true, tracks: 0, cues: 0, shiftedCues: 0, byCase: { A: 0, B: 0, C: 0, D: 0, unknown: 0, other: 0 }, shifts: [], sameApp: 0 }) },
+  exporter: { limits: async () => ({}), rekordboxXml: async () => ({ tracks: 0, playlists: 0 }), traktorNml: async () => ({ tracks: 0 }), virtualdjXml: async () => ({ tracks: 0 }), beatshiftPreview: async () => ({ ok: true, tracks: 0, cues: 0, shiftedCues: 0, byCase: { A: 0, B: 0, C: 0, D: 0, unknown: 0, other: 0 }, shifts: [], sameApp: 0 }),
+    engineLibrary: async () => ({ ok: true, tracks: 0 }),
+    seratoCues: async () => ({ ok: true, dryRun: true, files: 0, cues: 0, loops: 0 }),
+    seratoCrates: async () => ({ ok: true, written: 0 }),
+    serato4Crates: async () => ({ ok: true, written: 0 }),
+    seratoDatabase: async () => ({ ok: true })
+  },
+  exportAll: async () => ({ outDir: '', results: [], skipped: [] }),
   relocator: { findBroken: async () => [], matchAndWrite: async () => ({ broken: 0, matched: 0, ambiguous: 0, written: 0 }) },
   relocatorFp: { match: async () => ({ ok: true, broken: 0, matched: 0, scanned: 0 }), writeXml: async () => ({ written: 0 }) },
   oplog: {
