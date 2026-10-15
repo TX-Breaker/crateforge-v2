@@ -897,6 +897,17 @@ def cmd_write_tags(args: argparse.Namespace) -> None:
         try:
             if not path or not os.path.exists(path):
                 raise FileNotFoundError("file non trovato")
+            # ⚠ Fuori da ID3 (FLAC, OGG, M4A) Serato usa un campo diverso con un
+            # secondo strato base64, la cui forma NON è verificata su file reali.
+            # Prima si arrivava fino a `tags.add(GEOB)`, che su quei contenitori
+            # non esiste: eccezione e rollback, con un messaggio che non diceva
+            # perché. Ora ci si ferma qui, prima di toccare il file.
+            _probe = mutagen.File(path)
+            if _probe is not None and _serato_container_kind(_probe) != "id3":
+                raise ValueError(
+                    "cue Serato in FLAC/OGG/M4A: formato non verificato su file reali, "
+                    "scrittura non eseguita (supportati MP3, AIFF, WAV)"
+                )
             src_hash = _sha256(path)
             backup = os.path.join(args.backup_dir, f"{i:04d}_{os.path.basename(path)}")
             shutil.copy2(path, backup)
@@ -1305,13 +1316,107 @@ def _serato_volume_root(serato_dir: str) -> str:
 _SERATO_AUDIO_EXT = (".mp3", ".aiff", ".aif", ".wav", ".flac", ".m4a")
 
 
-def _serato_has_markers(tags) -> bool:
+_SERATO_B64_ALPHABET = frozenset(
+    b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+)
+
+# Nome del campo "Serato Markers2" per contenitore. In ID3 è un frame GEOB con
+# quella descrizione; negli altri contenitori Serato usa un campo testuale che
+# porta lo stesso contenuto avvolto in un secondo strato base64.
+_SERATO_MARKERS2_KEYS = {
+    "flac": ("serato_markers_v2",),
+    "ogg": ("serato_markers2",),
+    "mp4": ("----:com.serato.dj:markersv2",),
+}
+
+
+def _serato_unwrap_container(raw: bytes, frame_name: bytes = b"Serato Markers2") -> bytes | None:
+    """Toglie lo strato esterno che Serato usa fuori da ID3.
+
+    Il valore è base64 di: `application/octet-stream` + NUL + NUL + nome del
+    frame + NUL + lo STESSO contenuto che in ID3 sta dentro il GEOB. La
+    decodifica è tollerante come quella di Serato: si scartano i caratteri fuori
+    dall'alfabeto (gli a capo ogni 72 caratteri, per esempio) e un resto di 1
+    carattere su 4 si completa con `A==`. Nella variante MP4 il padding `=` è
+    sostituito da `A`, che decodifica in byte nulli in coda: innocui, perché il
+    contenuto interno si chiude con un NUL comunque.
+
+    ⚠ NON verificato su file reali: sulla macchina di collaudo non esiste
+    nessun FLAC o M4A taggato da Serato (614 MP3 e 32 WAV sì, tutti in ID3). La
+    forma viene dalla specifica del formato. Se fosse sbagliata il risultato è
+    `None` o un contenuto che il parser delle entry non riconosce — cioè nessun
+    cue, mai cue inventati: il parser pretende nome, lunghezza e payload
+    coerenti.
+    """
+    import base64
+
+    filtered = bytes(c for c in raw if c in _SERATO_B64_ALPHABET or c == ord("="))
+    filtered = filtered.rstrip(b"=")
+    resto = len(filtered) % 4
+    if resto == 1:
+        filtered += b"A=="
+    elif resto:
+        filtered += b"=" * (4 - resto)
+    try:
+        decoded = base64.b64decode(filtered)
+    except Exception:
+        return None
+    marker = frame_name + b"\x00"
+    if marker not in decoded:
+        return None
+    return decoded.split(marker)[-1]
+
+
+def _serato_container_kind(audio) -> str:
+    """'id3' | 'flac' | 'ogg' | 'mp4' | 'unknown' — dal tipo dei tag mutagen."""
+    tags = getattr(audio, "tags", None)
+    nome = type(tags).__name__ if tags is not None else ""
+    if nome in ("ID3", "_WaveID3", "_IFFID3") or hasattr(tags, "getall"):
+        return "id3"
+    if nome == "MP4Tags":
+        return "mp4"
+    if nome == "VCFLACDict":
+        return "flac"
+    if nome in ("VCommentDict", "OggVCommentDict") or nome.endswith("VComment"):
+        return "ogg"
+    return "unknown"
+
+
+def _serato_markers2_data(tags, kind: str) -> bytes | None:
+    """Il contenuto "Serato Markers2" nella forma GEOB, qualunque sia il contenitore."""
     if not tags:
-        return False
-    for gk in tags.keys():
-        if str(gk).startswith("GEOB") and getattr(tags[gk], "desc", "") == "Serato Markers2":
-            return True
-    return False
+        return None
+    if kind == "id3":
+        for gk in tags.keys():
+            if str(gk).startswith("GEOB") and getattr(tags[gk], "desc", "") == "Serato Markers2":
+                return bytes(tags[gk].data)
+        return None
+    chiavi = _SERATO_MARKERS2_KEYS.get(kind, ())
+    for k in list(tags.keys()):
+        if str(k).lower() not in chiavi:
+            continue
+        v = tags[k]
+        v = v[0] if isinstance(v, list) and v else v
+        raw = bytes(v) if isinstance(v, (bytes, bytearray)) else str(v).encode("ascii", "ignore")
+        return _serato_unwrap_container(raw)
+    return None
+
+
+def _serato_has_markers(tags, kind: str = "id3") -> bool:
+    return _serato_markers2_data(tags, kind) is not None
+
+
+def _serato_tlen_seconds(tlen: str | None) -> float | None:
+    """`tlen` del database V2 ("mm:ss.cc") in secondi. Solo ripiego: è arrotondato."""
+    if not tlen:
+        return None
+    m = re.match(r"^\s*(\d+):(\d{1,2})(?:\.(\d+))?\s*$", tlen)
+    if not m:
+        return None
+    if int(m.group(2)) >= 60:
+        return None
+    frac = float("0." + m.group(3)) if m.group(3) else 0.0
+    return int(m.group(1)) * 60 + int(m.group(2)) + frac
 
 
 def _serato_import_one(udm, MutagenFile, abs_path, source_id, meta) -> int:
@@ -1319,20 +1424,52 @@ def _serato_import_one(udm, MutagenFile, abs_path, source_id, meta) -> int:
     numero di cue importati. `meta['_tags']` (se presente) evita di riaprire il
     file quando i tag sono già stati letti dallo scan."""
     title, artist, key_name = meta.get("title"), meta.get("artist"), meta.get("key")
+
+    # ⚠ Durata e dimensione si leggono dal FILE, non dal database V2. Prima non
+    # si leggevano affatto: su una libreria reale tutte le 114 tracce Serato
+    # entravano senza, e la regola d'identità che unisce lo stesso file visto da
+    # software diversi (nome + durata + dimensione) non poteva scattare per
+    # nessuna. Il database V2 ha `tlen` e `tsiz`, ma come testo arrotondato
+    # ("02:34.12", "8.2MB"): il file è la fonte esatta, e `tlen` resta come
+    # ripiego quando il file non è raggiungibile.
+    audio = meta.get("_audio")
+    if audio is None:
+        try:
+            audio = MutagenFile(abs_path)
+        except Exception:
+            audio = None
+        meta["_audio"] = audio
+    duration_s = None
+    try:
+        length = getattr(getattr(audio, "info", None), "length", None)
+        duration_s = float(length) if length and length > 0 else None
+    except Exception:
+        duration_s = None
+    if duration_s is None:
+        duration_s = _serato_tlen_seconds(meta.get("tlen"))
+    try:
+        filesize = os.path.getsize(abs_path)
+    except OSError:
+        filesize = None
+
     udm.execute(
         """INSERT INTO tracks (source, source_id, title, artist, album, genre,
-               bpm, musical_key, camelot, path, has_tag_issues, needs_review)
+               bpm, musical_key, camelot, path, duration_s, filesize,
+               has_tag_issues, needs_review)
            VALUES ('serato', :sid, :title, :artist, :album, :genre, :bpm, :key,
-               :camelot, :path, :issue, 0)
+               :camelot, :path, :duration, :filesize, :issue, 0)
            ON CONFLICT(source, source_id) DO UPDATE SET
                title=excluded.title, artist=excluded.artist, album=excluded.album,
                genre=excluded.genre, bpm=excluded.bpm, musical_key=excluded.musical_key,
-               camelot=excluded.camelot, path=excluded.path""",
+               camelot=excluded.camelot, path=excluded.path,
+               duration_s=COALESCE(excluded.duration_s, tracks.duration_s),
+               filesize=COALESCE(excluded.filesize, tracks.filesize)""",
         {
             "sid": source_id, "title": title, "artist": artist,
             "album": meta.get("album"), "genre": meta.get("genre"),
             "bpm": meta.get("bpm"), "key": key_name, "camelot": to_camelot(key_name),
-            "path": abs_path, "issue": 1 if (not title or not artist) else 0,
+            "path": abs_path, "duration": duration_s, "filesize": filesize,
+            "issue": 1 if (not title or not artist) else 0,
         },
     )
     trow = udm.execute(
@@ -1343,24 +1480,27 @@ def _serato_import_one(udm, MutagenFile, abs_path, source_id, meta) -> int:
     tid = trow[0]
     udm.execute("DELETE FROM cues WHERE track_id=?", (tid,))
     n = 0
+    # ⚠ I cue Serato non stanno solo nel GEOB di ID3. In FLAC, OGG e M4A stanno
+    # in un campo testuale con un nome diverso, e prima venivano ignorati in
+    # silenzio: il brano entrava senza cue e niente lo segnalava.
+    audio = meta.get("_audio")
     tags = meta.get("_tags")
-    if tags is None:
+    if audio is None:
         try:
-            tags = getattr(MutagenFile(abs_path), "tags", None)
+            audio = MutagenFile(abs_path)
         except Exception:
-            tags = None
-    for gk in list(tags.keys()) if tags else []:
-        if not str(gk).startswith("GEOB"):
-            continue
-        fr = tags[gk]
-        if getattr(fr, "desc", "") == "Serato Markers2":
-            for c in parse_serato_markers2(bytes(fr.data)):
-                udm.execute(
-                    "INSERT INTO cues (track_id, cue_type, cue_index, position_ms,"
-                    " length_ms, color, label) VALUES (?,?,?,?,?,?,?)",
-                    (tid, c[0], c[1], c[2], c[3], c[4], c[5]),
-                )
-                n += 1
+            audio = None
+    if tags is None:
+        tags = getattr(audio, "tags", None)
+    kind = _serato_container_kind(audio) if audio is not None else "id3"
+    data = _serato_markers2_data(tags, kind)
+    for c in parse_serato_markers2(data) if data else []:
+        udm.execute(
+            "INSERT INTO cues (track_id, cue_type, cue_index, position_ms,"
+            " length_ms, color, label) VALUES (?,?,?,?,?,?,?)",
+            (tid, c[0], c[1], c[2], c[3], c[4], c[5]),
+        )
+        n += 1
     return n
 
 
@@ -2158,7 +2298,7 @@ def cmd_read_serato(args: argparse.Namespace) -> None:
                         "artist": val("tart"),
                         "album": val("talb"),
                         "genre": val("tgen"),
-                        "bpm": bpm, "key": val("tkey"),
+                        "bpm": bpm, "key": val("tkey"), "tlen": val("tlen"),
                     },
                 )
                 imported.add(abs_path)
@@ -2194,10 +2334,12 @@ def cmd_read_serato(args: argparse.Namespace) -> None:
                 if ap in imported:
                     continue
                 try:
-                    tags = getattr(MutagenFile(ap), "tags", None)
+                    audio_f = MutagenFile(ap)
+                    tags = getattr(audio_f, "tags", None)
                 except Exception:
                     continue
-                if not _serato_has_markers(tags):
+                kind = _serato_container_kind(audio_f) if audio_f is not None else "id3"
+                if not _serato_has_markers(tags, kind):
                     continue
                 bpm = None
                 try:
@@ -2210,7 +2352,7 @@ def cmd_read_serato(args: argparse.Namespace) -> None:
                     {
                         "title": _txt(tags, "TIT2"), "artist": _txt(tags, "TPE1"),
                         "album": _txt(tags, "TALB"), "genre": _txt(tags, "TCON"),
-                        "bpm": bpm, "key": _txt(tags, "TKEY"), "_tags": tags,
+                        "bpm": bpm, "key": _txt(tags, "TKEY"), "_tags": tags, "_audio": audio_f,
                     },
                 )
                 imported.add(ap)
