@@ -24,6 +24,7 @@ import type { SyncField } from '@core/syncDiff';
 import { readTraktorNml } from '@adapters/traktor/nmlReader';
 import { readVirtualDjXml } from '@adapters/virtualdj/vdjReader';
 import { readEngineLibrary } from '@adapters/engine/engineReader';
+import { createBeatshiftCache } from '@services/beatshiftProbe';
 import { executeBackup, planBackup, BackupOptions, BackupPlan } from '@services/backup/incrementalBackup';
 import {
   deleteOrphans,
@@ -40,7 +41,9 @@ import { writeRelocationXml } from '@adapters/rekordbox/relocationXml';
 import { writeTraktorNml } from '@adapters/traktor/nmlWriter';
 import { writeVirtualDjXml } from '@adapters/virtualdj/vdjWriter';
 import { writeEngineLibrary } from '@adapters/engine/engineWriter';
-import { REKORDBOX_XML_LIMITS } from '@adapters/common';
+import { REKORDBOX_XML_LIMITS, applyBeatshift, previewBeatshift } from '@adapters/common';
+import { appFromSource, type BeatshiftApp } from '@core/beatshift';
+
 import { SERATO_STATUS } from '@adapters/serato';
 import { crateNameFor, loadPlaylistTree } from '@adapters/serato/crateNames';
 import { serato4DatabasePath } from '@adapters/serato4';
@@ -53,6 +56,7 @@ import { applyProposals, proposeTags, TagProposal, TagProvider } from '@services
 import { app } from 'electron';
 import { join, basename } from 'path';
 import { copyFileSync, existsSync, mkdirSync, statSync, writeFileSync, rmSync } from 'fs';
+
 
 /**
  * Scrive un payload JSON in un file temporaneo e lo passa al sidecar via
@@ -99,6 +103,9 @@ import { checkSidecar, runSidecar, SidecarEvent } from './sidecar';
 import { rekordboxDefaultPaths } from './rekordboxPaths';
 import { detectDjSoftware } from './djSoftwarePaths';
 import { getLastPreflight, runPreflight } from './preflight';
+
+/** Destinazioni per cui la correzione dello scarto MP3 ha senso. */
+const BEATSHIFT_TARGETS = new Set(['rekordbox', 'traktor', 'serato', 'virtualdj', 'engine']);
 
 /**
  * Registrazione handler IPC. Regole:
@@ -1143,6 +1150,21 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
     logOperation(db, 'export.traktor-nml', outPath, 'ok', JSON.stringify(r));
     return r;
   });
+  /**
+   * Anteprima della correzione dello scarto fra decoder MP3, per un export
+   * verso `target`. Non scrive niente: legge l'inizio dei file per
+   * classificarli e conta quanti cue si sposterebbero e di quanto.
+   */
+  ipcMain.handle(
+    'export:beatshiftPreview',
+    (_e, target: string, sel?: { source?: string; playlistIds?: number[] }) => {
+      const app = appFromSource(target) ?? (BEATSHIFT_TARGETS.has(target) ? (target as BeatshiftApp) : null);
+      if (!app) return { ok: false, message: `Destinazione non gestita: ${target}` };
+      const probe = createBeatshiftCache();
+      return { ok: true, ...previewBeatshift(db, sel ?? {}, app, probe) };
+    }
+  );
+
   ipcMain.handle('export:virtualdjXml', (_e, outPath: string, sel) => {
     const r = writeVirtualDjXml(db, outPath, sel ?? {});
     logOperation(db, 'export.virtualdj-xml', outPath, 'ok', JSON.stringify(r));
@@ -1173,6 +1195,7 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
       opts?: {
         source?: string;
         sync?: { originSources: string[]; mode: 'fill' | 'overwrite' };
+        beatshift?: boolean;
       }
     ) => {
       const detected = new Set(
@@ -1210,7 +1233,7 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
           opts?.sync && !opts.sync.originSources.includes(t.id)
             ? { ...opts.sync, destination: t.id }
             : undefined;
-        const sel = { source: opts?.source, sync };
+        const sel = { source: opts?.source, sync, beatshift: opts?.beatshift === true };
         try {
           const r = writeSel(t, outPath, sel);
           logOperation(db, `export.all.${t.id}`, outPath, 'ok', JSON.stringify(r));
@@ -1277,7 +1300,10 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
    */
   ipcMain.handle(
     'export:seratoCues',
-    async (_e, sel?: { playlistIds?: number[]; source?: string; dryRun?: boolean }) => {
+    async (
+      _e,
+      sel?: { playlistIds?: number[]; source?: string; dryRun?: boolean; beatshift?: boolean }
+    ) => {
     if (getSetting(db, 'directWrites') !== '1') {
       throw new Error(
         'Serato salva i cue dentro i file audio: serve attivare le scritture dirette in Impostazioni → Esperto.'
@@ -1320,9 +1346,9 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
       params.push(...sel.playlistIds);
     }
     const where = conds.length ? `AND ${conds.join(' AND ')}` : '';
-    const rows = db
+    const rawRows = db
       .prepare(
-        `SELECT t.path, c.cue_type, c.cue_index, c.position_ms, c.length_ms, c.color, c.label
+        `SELECT t.path, t.source, c.cue_type, c.cue_index, c.position_ms, c.length_ms, c.color, c.label
          FROM cues c JOIN tracks t ON t.id = c.track_id
          WHERE t.path IS NOT NULL AND c.cue_type IN ('hot','loop')
            AND c.cue_index IS NOT NULL AND c.cue_index BETWEEN 0 AND 7 ${where}
@@ -1330,6 +1356,7 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
       )
       .all(...params) as {
       path: string;
+      source: string | null;
       cue_type: string;
       cue_index: number;
       position_ms: number;
@@ -1337,6 +1364,14 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
       color: string | null;
       label: string | null;
     }[];
+    /* Scarto dei decoder MP3 (vedi `core/beatshift`): solo se richiesto, e
+       solo sui cue che arrivano da un altro software. */
+    const seratoShift = sel?.beatshift
+      ? { target: 'serato' as const, probe: createBeatshiftCache() }
+      : null;
+    const rows = seratoShift
+      ? rawRows.map((r) => applyBeatshift([r], r.source, r.path, seratoShift)[0])
+      : rawRows;
 
     interface SeratoJob {
       path: string;

@@ -654,6 +654,15 @@ export const fr: PageDict = {
       '{fmt} n\'a que les huit pads et aucun conteneur en dehors : {n} points n\'entrent pas et disparaissent. Dans Rekordbox, Traktor et VirtualDJ ils seraient conservés en points mémoire.',
     syncSeratoNote:
       'Les cues Serato vivent dans les fichiers audio : cet export a sa propre carte et sa propre confirmation, et ne passe pas par ici.',
+    bsLabel: 'Corriger le décalage des décodeurs MP3',
+    bsHint:
+      'Le même cue tombe 26–51 ms plus tôt ou plus tard selon le logiciel qui décode le MP3. Décale les cues à l’export selon le type de fichier ; la bibliothèque interne ne change pas.',
+    bsPreviewFor: 'Vers {fmt} :',
+    bsConfirmTitle: 'Correction du décalage MP3',
+    bsSummary: '{shifted} cues sur {cues} seraient décalés.',
+    bsNone: 'Aucun cue à décaler pour cette destination.',
+    bsUnknown: '{n} MP3 illisibles : leurs cues restent en place.',
+    bsSame: '{n} morceaux viennent déjà de ce logiciel : ils ne sont pas touchés.',
     syncBadge: 'Points depuis {sw}',
     directDesc:
       'Importe la bibliothèque source et la réécrit dans le format d’arrivée. La source est seulement lue.',
@@ -1804,6 +1813,15 @@ export const de: PageDict = {
       '{fmt} hat nur die acht Pads und keinen Behälter außerhalb: {n} Punkte passen nicht und verschwinden. In Rekordbox, Traktor und VirtualDJ blieben sie als Memory-Punkte erhalten.',
     syncSeratoNote:
       'Serato-Cues stecken in den Audiodateien: Dieser Export hat seine eigene Karte und seine eigene Bestätigung und läuft nicht hierüber.',
+    bsLabel: 'MP3-Decoder-Versatz korrigieren',
+    bsHint:
+      'Derselbe Cue liegt je nach Programm, das die MP3 dekodiert, 26–51 ms früher oder später. Verschiebt Cues beim Export je nach Dateityp; die interne Bibliothek ändert sich nicht.',
+    bsPreviewFor: 'Nach {fmt}:',
+    bsConfirmTitle: 'MP3-Versatzkorrektur',
+    bsSummary: '{shifted} von {cues} Cues würden verschoben.',
+    bsNone: 'Keine Cues für dieses Ziel zu verschieben.',
+    bsUnknown: '{n} unlesbare MP3s: ihre Cues bleiben, wo sie sind.',
+    bsSame: '{n} Titel stammen bereits aus diesem Programm: unverändert.',
     syncBadge: 'Punkte aus {sw}',
     directDesc:
       'Importiert die Quellbibliothek und schreibt sie im Zielformat neu. Die Quelle wird nur gelesen.',

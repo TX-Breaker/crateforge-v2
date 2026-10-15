@@ -279,7 +279,11 @@ const api = {
    */
   exportAll: (
     outDir: string,
-    opts?: { source?: string; sync?: { originSources: string[]; mode: 'fill' | 'overwrite' } }
+    opts?: {
+      source?: string;
+      sync?: { originSources: string[]; mode: 'fill' | 'overwrite' };
+      beatshift?: boolean;
+    }
   ) =>
     ipcRenderer.invoke('export:allDetected', outDir, opts) as Promise<{
       outDir: string;
@@ -362,7 +366,25 @@ const api = {
        il numero va mostrato nella conferma PRIMA di scrivere sugli originali.
        `source` limita la scrittura ai brani di quella sorgente — senza, una
        conversione riscriverebbe i tag di tutta la libreria. */
-    seratoCues: (sel?: { playlistIds?: number[]; source?: string; dryRun?: boolean }) =>
+    /** Anteprima della correzione dello scarto fra decoder MP3: non scrive niente. */
+    beatshiftPreview: (target: string, sel?: { source?: string; playlistIds?: number[] }) =>
+      ipcRenderer.invoke('export:beatshiftPreview', target, sel) as Promise<{
+        ok: boolean;
+        message?: string;
+        target?: string;
+        tracks?: number;
+        cues?: number;
+        shiftedCues?: number;
+        byCase?: Record<'A' | 'B' | 'C' | 'D' | 'unknown' | 'other', number>;
+        shifts?: { ms: number; cues: number }[];
+        sameApp?: number;
+      }>,
+    seratoCues: (sel?: {
+      playlistIds?: number[];
+      source?: string;
+      dryRun?: boolean;
+      beatshift?: boolean;
+    }) =>
       ipcRenderer.invoke('export:seratoCues', sel) as Promise<{
         ok: boolean;
         dryRun?: boolean;

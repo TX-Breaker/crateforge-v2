@@ -205,6 +205,61 @@ function SyncFacts({
   );
 }
 
+interface BeatshiftPreview {
+  tracks: number;
+  cues: number;
+  shiftedCues: number;
+  byCase: Record<'A' | 'B' | 'C' | 'D' | 'unknown' | 'other', number>;
+  shifts: { ms: number; cues: number }[];
+  sameApp: number;
+}
+
+/**
+ * Che cosa farebbe la correzione dello scarto MP3 verso una destinazione.
+ *
+ * ⚠ I numeri stanno PRIMA della scrittura: è una correzione di decine di
+ * millisecondi che tocca potenzialmente centinaia di cue, e non si accende
+ * sulla fiducia. Gli MP3 non leggibili si contano a parte, perché restano
+ * fermi — chi legge deve sapere che non sono stati corretti.
+ */
+function BeatshiftFacts({
+  p,
+  locale,
+  tp
+}: {
+  p: BeatshiftPreview;
+  locale: string;
+  tp: (k: string, v?: Record<string, string | number>) => string;
+}) {
+  if (p.shiftedCues === 0) {
+    return <p className="text-caption text-ink-lo">{tp('bsNone')}</p>;
+  }
+  const fmt = (ms: number) => `${ms > 0 ? '+' : ''}${ms.toLocaleString(locale)} ms`;
+  return (
+    <div className="space-y-1 rounded-md border border-line bg-surface-2 px-3 py-2">
+      <p className="text-caption text-ink-hi">
+        {tp('bsSummary', {
+          shifted: p.shiftedCues.toLocaleString(locale),
+          cues: p.cues.toLocaleString(locale)
+        })}
+      </p>
+      <p className="font-mono text-caption tabular-nums text-ink-mid">
+        {p.shifts.map((s) => `${fmt(s.ms)} × ${s.cues.toLocaleString(locale)}`).join(' · ')}
+      </p>
+      {p.byCase.unknown > 0 && (
+        <p className="text-caption text-warning">
+          {tp('bsUnknown', { n: p.byCase.unknown.toLocaleString(locale) })}
+        </p>
+      )}
+      {p.sameApp > 0 && (
+        <p className="text-caption text-ink-lo">
+          {tp('bsSame', { n: p.sameApp.toLocaleString(locale) })}
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function ConvertPage() {
   const { locale } = useAppState();
   const tp = (k: string, p?: Record<string, string | number>) =>
@@ -241,6 +296,11 @@ export function ConvertPage() {
     scope === 'all' ? null : scope
   );
   const [syncMode, setSyncMode] = useState<SyncMode>('fill');
+  /* Correzione dello scarto fra decoder MP3. SPENTA di serie: si accende per
+     un export preciso, dopo averne visto i numeri. */
+  const [beatshift, setBeatshift] = useState(false);
+  const [bsPreview, setBsPreview] = useState<BeatshiftPreview | null>(null);
+  const [bsPending, setBsPending] = useState<BeatshiftPreview | null>(null);
   const [syncDest, setSyncDest] = useState<SoftwareId>(
     target !== 'ask' && SYNC_DESTS.includes(target) ? target : 'traktor'
   );
@@ -268,6 +328,42 @@ export function ConvertPage() {
       )
       .catch(() => setDetected([]));
   }, []);
+
+  /* Anteprima della correzione per la destinazione scelta nella scheda. Si
+     calcola solo se l'opzione è accesa: legge l'inizio di ogni MP3, e non c'è
+     motivo di farlo per un'opzione che l'utente non sta usando. */
+  useEffect(() => {
+    if (!beatshift) {
+      setBsPreview(null);
+      return;
+    }
+    let vivo = true;
+    void window.crateforge.exporter
+      .beatshiftPreview(syncDest, convertSource ? { source: convertSource } : undefined)
+      .then((r) => vivo && setBsPreview(r.ok ? (r as unknown as BeatshiftPreview) : null))
+      .catch(() => vivo && setBsPreview(null));
+    return () => {
+      vivo = false;
+    };
+  }, [beatshift, syncDest, convertSource]);
+
+  /* Anteprima per la destinazione VERA, quando si apre una conferma: è quella
+     che conta, perché può differire dalla destinazione scelta nella scheda. */
+  const confirmTarget = seratoPlan !== null ? 'serato' : pending;
+  useEffect(() => {
+    if (!beatshift || !confirmTarget) {
+      setBsPending(null);
+      return;
+    }
+    let vivo = true;
+    void window.crateforge.exporter
+      .beatshiftPreview(confirmTarget, convertSource ? { source: convertSource } : undefined)
+      .then((r) => vivo && setBsPending(r.ok ? (r as unknown as BeatshiftPreview) : null))
+      .catch(() => vivo && setBsPending(null));
+    return () => {
+      vivo = false;
+    };
+  }, [beatshift, confirmTarget, convertSource]);
 
   /** Le destinazioni che il pulsante "verso tutti" tocca davvero. */
   const allTargets = (detected ?? []).filter((d) => d !== 'engine' && d !== 'serato');
@@ -297,7 +393,8 @@ export function ConvertPage() {
           source: convertSource ?? undefined,
           sync: syncOrigin
             ? { originSources: SOURCES_OF[syncOrigin], mode: syncMode }
-            : undefined
+            : undefined,
+          beatshift
         })
       );
       const done = r.results.filter((x) => x.ok);
@@ -483,7 +580,8 @@ export function ConvertPage() {
     try {
       const r = await window.crateforge.exporter.seratoCues({
         ...(convertSource ? { source: convertSource } : {}),
-        dryRun: true
+        dryRun: true,
+        beatshift
       });
       if (!r.ok) {
         setError(r.message ?? tp('convErr'));
@@ -505,7 +603,7 @@ export function ConvertPage() {
     setWarnings([]);
     setBusy(true);
     try {
-      const sel = convertSource ? { source: convertSource } : undefined;
+      const sel = { ...(convertSource ? { source: convertSource } : {}), beatshift };
       /* Non annullabile di proposito: il ripristino promesso all'utente è un
          blocco `except` dentro il sidecar, e un processo terminato a forza non
          lo esegue mai. Meglio niente pulsante che un pulsante che lascia un
@@ -591,7 +689,7 @@ export function ConvertPage() {
     setWarnings([]);
     setBusy(true);
     try {
-      const sel = { source: convertSource ?? undefined, sync: syncFor('engine') };
+      const sel = { source: convertSource ?? undefined, sync: syncFor('engine'), beatshift };
       const r = await run(tp('jobExport', { fmt: 'Engine DJ' }), () =>
         window.crateforge.exporter.engineLibrary(outDir, template, sel as never)
       );
@@ -627,7 +725,7 @@ export function ConvertPage() {
     ]);
     if (!outPath) return;
     const sync = syncFor(fmt.id);
-    const sel = convertSource || sync ? { source: convertSource ?? undefined, sync } : undefined;
+    const sel = { source: convertSource ?? undefined, sync, beatshift };
     setError(null);
     setOutcome(null);
     setWarnings([]);
@@ -789,6 +887,31 @@ export function ConvertPage() {
               <p className="text-caption text-ink-lo">{tp('syncSeratoNote')}</p>
             </>
           )}
+          {/* Correzione dello scarto fra decoder MP3. Sta qui perché riguarda
+              i punti, e vale per ogni export di questa pagina — anche per
+              Engine, che non ha una finestra di conferma. */}
+          <div className="space-y-2 border-t border-line-subtle pt-3">
+            <label className="flex cursor-pointer items-start gap-2.5 text-caption text-ink-mid">
+              <Checkbox
+                className="mt-px"
+                checked={beatshift}
+                onCheckedChange={(v) => setBeatshift(v === true)}
+                disabled={busy}
+              />
+              <span>
+                <span className="text-ink-hi">{tp('bsLabel')}</span>
+                <span className="block text-ink-lo">{tp('bsHint')}</span>
+              </span>
+            </label>
+            {beatshift && bsPreview && (
+              <div className="space-y-1.5">
+                <p className="text-caption text-ink-mid">
+                  {tp('bsPreviewFor', { fmt: SOFTWARE_LABEL[syncDest] })}
+                </p>
+                <BeatshiftFacts p={bsPreview} locale={locale} tp={tp} />
+              </div>
+            )}
+          </div>
         </CardContent>
       </Card>
 
@@ -1045,7 +1168,12 @@ export function ConvertPage() {
           },
           { label: tp('seratoFactBackup'), value: tp('yes') }
         ]}
-        description={<p>{tp('seratoConfirmBody')}</p>}
+        description={
+          <div className="space-y-2">
+            <p>{tp('seratoConfirmBody')}</p>
+            {beatshift && bsPending && <BeatshiftFacts p={bsPending} locale={locale} tp={tp} />}
+          </div>
+        }
       />
 
       {/* Verso tutti: la conferma elenca le destinazioni una per una, con i
@@ -1109,6 +1237,12 @@ export function ConvertPage() {
                 <p className="text-caption text-ink-mid">{tp('dlgNote')}</p>
                 {/* Se questo export porta i punti di un'altra libreria, i conti
                     stanno qui: sono quelli della destinazione scelta davvero. */}
+                {beatshift && bsPending && (
+                  <div className="space-y-1.5">
+                    <p className="text-caption text-ink-mid">{tp('bsConfirmTitle')}</p>
+                    <BeatshiftFacts p={bsPending} locale={locale} tp={tp} />
+                  </div>
+                )}
                 {pendingPlan && (
                   <div className="space-y-2">
                     <SyncFacts plan={pendingPlan} locale={locale} tp={tp} />

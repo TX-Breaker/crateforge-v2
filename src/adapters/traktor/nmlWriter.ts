@@ -1,4 +1,5 @@
 import { create } from 'xmlbuilder2';
+import { createBeatshiftCache } from '@services/beatshiftProbe';
 import { readdirSync, realpathSync, writeFileSync } from 'fs';
 import { dirname } from 'path';
 import type BetterSqlite3 from 'better-sqlite3';
@@ -21,6 +22,10 @@ export function writeTraktorNml(
   sel: ExportSelection = {},
   onProgress?: (done: number) => void
 ): { tracks: number; playlists: number; warnings: string[] } {
+  /* Scarto dei decoder MP3 fra software (vedi `core/beatshift`): solo se
+     richiesto per questo export, e con la classificazione dei file
+     memorizzata per tutta l'operazione. */
+  const shift = sel.beatshift ? { target: 'traktor' as const, probe: createBeatshiftCache() } : null;
   const doc = create({ version: '1.0', encoding: 'UTF-8', standalone: false });
   const nml = doc.ele('NML', { VERSION: '19' });
   nml.ele('HEAD', { COMPANY: 'CrateForge', PROGRAM: 'CrateForge' });
@@ -89,7 +94,7 @@ export function writeTraktorNml(
     // Pad hot già occupati: un loop su un pad già usato da un hot cue viene
     // degradato a HOTCUE=-1 (in Traktor un pad tiene un solo elemento).
     const usedHot = new Set<number>();
-    for (const c of getCuesForTrack(db, t.id, sel.sync)) {
+    for (const c of getCuesForTrack(db, t.id, sel.sync, shift)) {
       if (c.color) colouredCues++;
       if (c.cue_type === 'hot' && c.cue_index !== null && c.cue_index < 8) {
         usedHot.add(c.cue_index);

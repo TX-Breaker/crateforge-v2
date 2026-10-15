@@ -1,4 +1,5 @@
 import { create } from 'xmlbuilder2';
+import { createBeatshiftCache } from '@services/beatshiftProbe';
 import { mkdirSync, writeFileSync } from 'fs';
 import { dirname, join } from 'path';
 import type BetterSqlite3 from 'better-sqlite3';
@@ -39,6 +40,10 @@ export function writeVirtualDjXml(
   sel: ExportSelection = {},
   onProgress?: (done: number) => void
 ): { tracks: number; playlists: number; warnings: string[] } {
+  /* Scarto dei decoder MP3 fra software (vedi `core/beatshift`): solo se
+     richiesto per questo export, e con la classificazione dei file
+     memorizzata per tutta l'operazione. */
+  const shift = sel.beatshift ? { target: 'virtualdj' as const, probe: createBeatshiftCache() } : null;
   const doc = create({ version: '1.0', encoding: 'UTF-8' });
   const root = doc.ele('VirtualDJ_Database', { Version: '2024' });
 
@@ -78,7 +83,7 @@ export function writeVirtualDjXml(
     if (t.musical_key) scan.Key = t.musical_key;
     if (Object.keys(scan).length) song.ele('Scan', scan);
 
-    for (const c of getCuesForTrack(db, t.id, sel.sync)) {
+    for (const c of getCuesForTrack(db, t.id, sel.sync, shift)) {
       const pos = (c.position_ms / 1000).toFixed(4);
       const color = vdjColorAttr(c.color);
       if (c.cue_type === 'hot' && c.cue_index !== null) {

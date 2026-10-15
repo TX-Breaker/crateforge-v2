@@ -144,7 +144,7 @@ const api = {
   quarantine: { list: async () => [], restore: async () => ({ restored: 0, skipped: [] }) },
   shell: { showFolder: async () => ({ ok: true }) },
   report: { generate: async () => ({ rows: 0, outPath: '' }), view: async () => ({ columns: [], rows: [], totalRows: 0, sheetName: '' }) },
-  exporter: { limits: async () => ({}), rekordboxXml: async () => ({ tracks: 0, playlists: 0 }), traktorNml: async () => ({ tracks: 0 }), virtualdjXml: async () => ({ tracks: 0 }) },
+  exporter: { limits: async () => ({}), rekordboxXml: async () => ({ tracks: 0, playlists: 0 }), traktorNml: async () => ({ tracks: 0 }), virtualdjXml: async () => ({ tracks: 0 }), beatshiftPreview: async () => ({ ok: true, tracks: 0, cues: 0, shiftedCues: 0, byCase: { A: 0, B: 0, C: 0, D: 0, unknown: 0, other: 0 }, shifts: [], sameApp: 0 }) },
   relocator: { findBroken: async () => [], matchAndWrite: async () => ({ broken: 0, matched: 0, ambiguous: 0, written: 0 }) },
   relocatorFp: { match: async () => ({ ok: true, broken: 0, matched: 0, scanned: 0 }), writeXml: async () => ({ written: 0 }) },
   oplog: {

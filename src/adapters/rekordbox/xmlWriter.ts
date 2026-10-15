@@ -1,4 +1,5 @@
 import { create } from 'xmlbuilder2';
+import { createBeatshiftCache } from '@services/beatshiftProbe';
 import { writeFileSync } from 'fs';
 import type BetterSqlite3 from 'better-sqlite3';
 import {
@@ -23,6 +24,10 @@ export function writeRekordboxXml(
   sel: ExportSelection = {},
   onProgress?: (done: number) => void
 ): { tracks: number; playlists: number; warnings: string[] } {
+  /* Scarto dei decoder MP3 fra software (vedi `core/beatshift`): solo se
+     richiesto per questo export, e con la classificazione dei file
+     memorizzata per tutta l'operazione. */
+  const shift = sel.beatshift ? { target: 'rekordbox' as const, probe: createBeatshiftCache() } : null;
   const doc = create({ version: '1.0', encoding: 'UTF-8' });
   const root = doc.ele('DJ_PLAYLISTS', { Version: '1.0.0' });
   root.ele('PRODUCT', { Name: 'CrateForge', Version: '0.1.0', Company: 'TX-Breaker' });
@@ -63,7 +68,7 @@ export function writeRekordboxXml(
       });
     }
     // Max 8 hot cue: il limite va applicato QUI, non lasciato all'import.
-    const cues = getCuesForTrack(db, t.id, sel.sync);
+    const cues = getCuesForTrack(db, t.id, sel.sync, shift);
     // Num del pad hot (0-7) allocato SENZA collisioni tra hot cue e hot loop
     // (in Rekordbox XML due POSITION_MARK con lo stesso Num sono invalidi e uno
     // sovrascrive l'altro). Prova l'indice sorgente se libero e valido,

@@ -655,6 +655,15 @@ const it = {
       '{fmt} ha solo gli otto pad e nessun contenitore fuori: {n} punti non entrano e spariscono. In Rekordbox, Traktor e VirtualDJ verrebbero conservati come memory.',
     syncSeratoNote:
       'I cue Serato vivono dentro i file audio: quell\'export ha la sua scheda e la sua conferma, e non passa da qui.',
+    bsLabel: 'Correggi lo scarto dei decoder MP3',
+    bsHint:
+      'Lo stesso cue cade 26–51 ms prima o dopo a seconda del software che legge l’MP3. Sposta i cue in uscita secondo il tipo di file; l’archivio interno non cambia.',
+    bsPreviewFor: 'Verso {fmt}:',
+    bsConfirmTitle: 'Correzione dello scarto MP3',
+    bsSummary: '{shifted} cue su {cues} verrebbero spostati.',
+    bsNone: 'Nessun cue da spostare per questa destinazione.',
+    bsUnknown: '{n} MP3 non leggibili: i loro cue restano dove sono.',
+    bsSame: '{n} brani vengono già da questo software: non si toccano.',
     syncBadge: 'Punti da {sw}',
     directDesc:
       'Importa la libreria di partenza e la riscrive nel formato di arrivo. La libreria originale viene solo letta.',
@@ -1806,6 +1815,15 @@ const en: PageDict = {
       '{fmt} only has the eight pads and no container outside them: {n} points do not fit and disappear. In Rekordbox, Traktor and VirtualDJ they would be kept as memory points.',
     syncSeratoNote:
       'Serato cues live inside the audio files: that export has its own card and its own confirmation, and does not go through here.',
+    bsLabel: 'Correct the MP3 decoder offset',
+    bsHint:
+      'The same cue lands 26–51 ms early or late depending on which program decodes the MP3. Shifts cues on export according to the file type; the internal library does not change.',
+    bsPreviewFor: 'Towards {fmt}:',
+    bsConfirmTitle: 'MP3 offset correction',
+    bsSummary: '{shifted} of {cues} cues would move.',
+    bsNone: 'No cues to move for this destination.',
+    bsUnknown: '{n} unreadable MP3s: their cues stay where they are.',
+    bsSame: '{n} tracks already come from this program: left untouched.',
     syncBadge: 'Points from {sw}',
     directDesc:
       'Imports the source library and rewrites it in the destination format. The source library is only read.',

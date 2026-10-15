@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+import { createBeatshiftCache } from '@services/beatshiftProbe';
 import { createHash } from 'crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { join, relative, sep } from 'path';
@@ -169,6 +170,10 @@ export function writeEngineLibrary(
    */
   pathBase?: string
 ): EngineExportResult {
+  /* Scarto dei decoder MP3 fra software (vedi `core/beatshift`): solo se
+     richiesto per questo export, e con la classificazione dei file
+     memorizzata per tutta l'operazione. */
+  const shift = sel.beatshift ? { target: 'engine' as const, probe: createBeatshiftCache() } : null;
   const warnings: string[] = [];
   if (!existsSync(templateDbPath)) {
     throw new Error(
@@ -315,7 +320,7 @@ export function writeEngineLibrary(
 
         // Cue e loop: gli 8 pad di Engine.
         const sampleRate = 44100; // ricalcolata da Engine all'analisi
-        const cues = getCuesForTrack(db, t.id, sel.sync);
+        const cues = getCuesForTrack(db, t.id, sel.sync, shift);
         const slots: ({ label: string; positionSamples: number; color: string } | null)[] = new Array(
           ENGINE_SLOTS
         ).fill(null);

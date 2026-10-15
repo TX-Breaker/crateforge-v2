@@ -1,6 +1,14 @@
 import type BetterSqlite3 from 'better-sqlite3';
 import type { TrackRow } from '@core/udm';
 import { DEST_CAPABILITY, resolveCues, type SyncMode } from '@core/sync';
+import {
+  appFromSource,
+  audioKindOf,
+  beatshiftSeconds,
+  type BeatshiftApp,
+  type BeatshiftCase,
+  type Mp3Probe
+} from '@core/beatshift';
 
 export interface CueRow {
   id: number;
@@ -35,6 +43,52 @@ export interface ExportSelection {
    * propri.
    */
   sync?: SyncSelection;
+  /**
+   * Corregge lo scarto fra i decoder MP3 dei software (vedi `core/beatshift`).
+   *
+   * ⚠ SPENTO di serie, ed è una scelta: i valori sono misurati, non derivati,
+   * e la tabella non è antisimmetrica. Chi lo accende lo fa per un export
+   * preciso, dopo averne visto l'anteprima. Lo spostamento si applica solo a
+   * ciò che si scrive: i cue nell'archivio interno restano quelli importati,
+   * così andata e ritorno fra due software non accumulano deriva.
+   */
+  beatshift?: boolean;
+}
+
+/**
+ * Correzione da applicare ai cue che un writer sta per scrivere.
+ * `probe` classifica un MP3 dal percorso; va creato una volta per export.
+ */
+export interface BeatshiftContext {
+  target: BeatshiftApp;
+  probe: (path: string) => Mp3Probe | null;
+}
+
+/**
+ * Sposta i cue di una riga dal tempo del software d'origine a quello del
+ * destinatario.
+ *
+ * Il caso A–D si legge dal file. Se il file non c'è, o non è un MP3
+ * leggibile, il caso resta ignoto e `beatshiftSeconds` restituisce 0: meglio
+ * nessuna correzione che una a metà.
+ */
+export function applyBeatshift<T extends { position_ms: number }>(
+  cues: T[],
+  originSource: string | null,
+  path: string | null,
+  ctx: BeatshiftContext | null | undefined
+): T[] {
+  if (!ctx || cues.length === 0) return cues;
+  const origin = appFromSource(originSource);
+  if (!origin || origin === ctx.target) return cues;
+  const kind = audioKindOf(path);
+  if (kind === 'other') return cues;
+  const mp3Case = kind === 'mp3' && path ? (ctx.probe(path)?.case ?? null) : null;
+  const shiftMs = beatshiftSeconds({ origin, target: ctx.target, kind, mp3Case }) * 1000;
+  if (shiftMs === 0) return cues;
+  // Un cue non può finire prima dell'inizio del brano. La lunghezza dei loop
+  // non cambia: si sposta il punto d'inizio, la fine lo segue.
+  return cues.map((c) => ({ ...c, position_ms: Math.max(0, c.position_ms + shiftMs) }));
 }
 
 /** Limiti del canale XML Rekordbox (§4): da mostrare PRIMA di ogni export. */
@@ -91,14 +145,96 @@ export interface SyncSelection {
   mode: SyncMode;
 }
 
+/** Esito dell'anteprima: che cosa farebbe la correzione, senza scrivere niente. */
+export interface BeatshiftPreview {
+  target: BeatshiftApp;
+  /** Brani con almeno un cue nella selezione. */
+  tracks: number;
+  cues: number;
+  /** Cue che verrebbero spostati. */
+  shiftedCues: number;
+  /** Brani per caso; `unknown` = MP3 non leggibile, `other` = formato senza frame informativo. */
+  byCase: Record<'A' | 'B' | 'C' | 'D' | 'unknown' | 'other', number>;
+  /** Spostamenti distinti, in millisecondi, con quanti cue ciascuno. */
+  shifts: { ms: number; cues: number }[];
+  /** Brani che vengono già dal software di destinazione: non si toccano. */
+  sameApp: number;
+}
+
+/**
+ * Anteprima della correzione per un export verso `target`.
+ *
+ * Considera i cue PROPRI di ogni riga, cioè quelli che un export senza
+ * sincronizzazione scriverebbe. Serve a far vedere all'utente, prima di
+ * accendere l'opzione, quanti punti si muovono e di quanto: una correzione di
+ * decine di millisecondi su centinaia di cue non si accende sulla fiducia.
+ */
+export function previewBeatshift(
+  db: BetterSqlite3.Database,
+  sel: ExportSelection,
+  target: BeatshiftApp,
+  probe: (path: string) => Mp3Probe | null
+): BeatshiftPreview {
+  const out: BeatshiftPreview = {
+    target,
+    tracks: 0,
+    cues: 0,
+    shiftedCues: 0,
+    byCase: { A: 0, B: 0, C: 0, D: 0, unknown: 0, other: 0 },
+    shifts: [],
+    sameApp: 0
+  };
+  const perShift = new Map<number, number>();
+  const countCues = db.prepare(`SELECT COUNT(*) AS n FROM cues WHERE track_id = ?`);
+  for (const t of iterateTracks(db, { source: sel.source, playlistIds: sel.playlistIds })) {
+    const n = (countCues.get(t.id) as { n: number }).n;
+    if (n === 0) continue;
+    out.tracks++;
+    out.cues += n;
+    const origin = appFromSource(t.source);
+    if (origin === target) {
+      out.sameApp++;
+      continue;
+    }
+    const kind = audioKindOf(t.path);
+    let mp3Case: BeatshiftCase | null = null;
+    if (kind === 'other') out.byCase.other++;
+    else if (kind === 'mp3') {
+      mp3Case = t.path ? (probe(t.path)?.case ?? null) : null;
+      if (mp3Case) out.byCase[mp3Case]++;
+      else out.byCase.unknown++;
+    }
+    const ms = Math.round(beatshiftSeconds({ origin, target, kind, mp3Case }) * 1000 * 10) / 10;
+    if (ms !== 0) {
+      out.shiftedCues += n;
+      perShift.set(ms, (perShift.get(ms) ?? 0) + n);
+    }
+  }
+  out.shifts = [...perShift.entries()]
+    .map(([ms, cues]) => ({ ms, cues }))
+    .sort((a, b) => b.cues - a.cues);
+  return out;
+}
+
 export function getCuesForTrack(
   db: BetterSqlite3.Database,
   trackId: number,
-  sync?: SyncSelection
+  sync?: SyncSelection,
+  shift?: BeatshiftContext | null
 ): CueRow[] {
-  const own = db
-    .prepare(`SELECT * FROM cues WHERE track_id = ? ORDER BY cue_type, cue_index, position_ms`)
-    .all(trackId) as CueRow[];
+  const info = (id: number) =>
+    db.prepare(`SELECT source, path FROM tracks WHERE id = ?`).get(id) as
+      | { source: string | null; path: string | null }
+      | undefined;
+  const me = shift ? info(trackId) : undefined;
+  const own = applyBeatshift(
+    db
+      .prepare(`SELECT * FROM cues WHERE track_id = ? ORDER BY cue_type, cue_index, position_ms`)
+      .all(trackId) as CueRow[],
+    me?.source ?? null,
+    me?.path ?? null,
+    shift
+  );
   if (!sync) return own;
 
   /* In sincronizzazione i punti arrivano dalla libreria di origine, per lo
@@ -118,7 +254,19 @@ export function getCuesForTrack(
   const stmt = db.prepare(
     `SELECT * FROM cues WHERE track_id = ? ORDER BY cue_type, cue_index, position_ms`
   );
-  const origin = originRows.flatMap((r) => stmt.all(r.id) as CueRow[]);
+  /* Ogni riga d'origine si sposta dal SUO software: in una sincronizzazione
+     da più librerie i punti possono arrivare da decoder diversi. Il file è
+     lo stesso brano, quindi per il caso A–D vale anche il percorso della riga
+     di destinazione se quella d'origine non ne ha uno. */
+  const origin = originRows.flatMap((r) => {
+    const o = shift ? info(r.id) : undefined;
+    return applyBeatshift(
+      stmt.all(r.id) as CueRow[],
+      o?.source ?? null,
+      o?.path ?? me?.path ?? null,
+      shift
+    );
+  });
   const cap = DEST_CAPABILITY[sync.destination];
   if (!cap) return own;
 
