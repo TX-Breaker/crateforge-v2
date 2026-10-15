@@ -723,6 +723,27 @@ def cmd_match_fingerprints(args: argparse.Namespace) -> None:
 # analyze-cues (Fase 2.1, sperimentale) — richiede librerie AI opzionali
 # ---------------------------------------------------------------------------
 
+def _snap_to_beat(t: float, beats: list[float]) -> float:
+    """Porta `t` sul battito rilevato più vicino.
+
+    Un hot cue fuori battito non serve a un DJ: premuto a tempo, parte in
+    anticipo o in ritardo sul colpo e "sbava". Si sposta solo se il battito
+    più vicino dista meno di mezzo intervallo fra battiti, cioè se è davvero
+    quello giusto; senza battiti, o con battiti troppo radi, `t` resta com'è.
+    """
+    if len(beats) < 2:
+        return t
+    import bisect
+
+    i = bisect.bisect_left(beats, t)
+    candidati = [b for b in (beats[i - 1] if i > 0 else None, beats[i] if i < len(beats) else None) if b is not None]
+    vicino = min(candidati, key=lambda b: abs(b - t))
+    # Intervallo locale fra battiti: quello attorno al battito scelto.
+    j = beats.index(vicino)
+    passo = beats[j + 1] - beats[j] if j + 1 < len(beats) else beats[j] - beats[j - 1]
+    return vicino if abs(vicino - t) <= passo / 2 else t
+
+
 def cmd_analyze_cues(args: argparse.Namespace) -> None:
     """Propone fino a 8 cue. Ordine di preferenza dei backend:
     aubio (onset/beat) → fallback errore pulito se nessuna libreria AI.
@@ -754,13 +775,16 @@ def cmd_analyze_cues(args: argparse.Namespace) -> None:
         tempo = aubio.tempo("default", 1024, hop, sr)
 
         onsets_s: list[float] = []
+        # Istanti dei battiti rilevati: servono ad allineare i cue proposti.
+        beats_s: list[float] = []
         energies: list[float] = []
         total_frames = 0
         while True:
             samples, read = src()
             if onset(samples):
                 onsets_s.append(onset.get_last_s())
-            tempo(samples)
+            if tempo(samples):
+                beats_s.append(tempo.get_last_s())
             energies.append(float(np.sqrt(np.mean(samples**2))))
             total_frames += read
             if read < hop:
@@ -780,6 +804,10 @@ def cmd_analyze_cues(args: argparse.Namespace) -> None:
     cues: list[dict] = []
 
     def add(label: str, t: float, color: str) -> None:
+        # ⚠ Il drop si cerca su finestre di un secondo e l'outro si mette a
+        # durata - 32 s: entrambi cadevano su istanti arbitrari, non su un
+        # battito. Ora si allineano al battito più vicino.
+        t = _snap_to_beat(t, beats_s)
         if 0 <= t < duration and len(cues) < 8:
             cues.append({"label": label, "positionMs": round(t * 1000), "color": color})
 
@@ -820,6 +848,7 @@ def cmd_analyze_cues(args: argparse.Namespace) -> None:
             "cues": cues,
             "envelope": envelope,
             "backend": "aubio-energy",
+            "beatAligned": len(beats_s) >= 2,
         },
     })
 
