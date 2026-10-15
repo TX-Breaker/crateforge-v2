@@ -897,17 +897,6 @@ def cmd_write_tags(args: argparse.Namespace) -> None:
         try:
             if not path or not os.path.exists(path):
                 raise FileNotFoundError("file non trovato")
-            # ⚠ Fuori da ID3 (FLAC, OGG, M4A) Serato usa un campo diverso con un
-            # secondo strato base64, la cui forma NON è verificata su file reali.
-            # Prima si arrivava fino a `tags.add(GEOB)`, che su quei contenitori
-            # non esiste: eccezione e rollback, con un messaggio che non diceva
-            # perché. Ora ci si ferma qui, prima di toccare il file.
-            _probe = mutagen.File(path)
-            if _probe is not None and _serato_container_kind(_probe) != "id3":
-                raise ValueError(
-                    "cue Serato in FLAC/OGG/M4A: formato non verificato su file reali, "
-                    "scrittura non eseguita (supportati MP3, AIFF, WAV)"
-                )
             src_hash = _sha256(path)
             backup = os.path.join(args.backup_dir, f"{i:04d}_{os.path.basename(path)}")
             shutil.copy2(path, backup)
@@ -2093,6 +2082,17 @@ def cmd_write_serato_cues(args: argparse.Namespace) -> None:
         try:
             if not path or not os.path.exists(path):
                 raise FileNotFoundError("file non trovato")
+            # ⚠ Fuori da ID3 (FLAC, OGG, M4A) Serato usa un campo diverso con un
+            # secondo strato base64, la cui forma NON è verificata su file reali.
+            # Prima si arrivava fino a `tags.add(GEOB)`, che su quei contenitori
+            # non esiste: eccezione e rollback, con un messaggio che non diceva
+            # perché. Ora ci si ferma qui, prima di toccare il file.
+            _probe = mutagen.File(path)
+            if _probe is not None and _serato_container_kind(_probe) != "id3":
+                raise ValueError(
+                    "cue Serato in FLAC/OGG/M4A: formato non verificato su file reali, "
+                    "scrittura non eseguita (supportati MP3, AIFF, WAV)"
+                )
             src_hash = _sha256(path)
             backup = os.path.join(args.backup_dir, f"{i:04d}_{os.path.basename(path)}")
             shutil.copy2(path, backup)
