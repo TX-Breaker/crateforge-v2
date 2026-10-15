@@ -9,9 +9,8 @@ import { findBrokenTracks, matchByFilename } from '@services/relocator/relocator
 import { writeRelocationXml } from '@adapters/rekordbox/relocationXml';
 
 /**
- * Relocator sul caso REALE di questa macchina: la libreria Rekordbox punta a
- * `Desktop\BEATS\BEAT\…`, ma i file sono stati riorganizzati sotto
- * `Desktop\CREATION MUSIQUE\BEATS\` (sottocartelle BEAT HARD / BEAT SOFT).
+ * Relocator sul caso REALE di questa macchina: una libreria Rekordbox i cui
+ * file sono stati riorganizzati in un'altra cartella.
  *
  * È lo scenario per cui il relocator esiste: nomi file invariati, alberatura
  * cambiata. Il test si auto-salta dove i dati non ci sono (CI, altre
@@ -28,7 +27,8 @@ const MASTER_DB =
     : join(homedir(), 'Library', 'Pioneer', 'rekordbox', 'master.db'));
 
 const NEW_ROOT =
-  process.env.CRATEFORGE_TEST_MUSICROOT ?? join(homedir(), 'Desktop', 'CREATION MUSIQUE', 'BEATS');
+  // Nessun ripiego cablato: la cartella è un dato personale e non sta nel codice.
+  process.env.CRATEFORGE_TEST_MUSICROOT ?? '';
 
 const SIDECAR_DIR = join(__dirname, '..', 'python-sidecar');
 const VENV_PY =
@@ -37,7 +37,7 @@ const VENV_PY =
     : join(SIDECAR_DIR, '.venv', 'bin', 'python');
 const SCRIPT = join(SIDECAR_DIR, 'sidecar.py');
 
-const canRun = existsSync(MASTER_DB) && existsSync(VENV_PY) && existsSync(NEW_ROOT);
+const canRun = NEW_ROOT !== '' && existsSync(MASTER_DB) && existsSync(VENV_PY) && existsSync(NEW_ROOT);
 
 let tmp: string;
 let db: InstanceType<typeof Database>;
@@ -64,30 +64,34 @@ describe.skipIf(!canRun)('relocator su libreria reale spostata', () => {
     if (tmp) rmSync(tmp, { recursive: true, force: true });
   });
 
-  it('trova i brani il cui file non esiste più al percorso salvato', () => {
-    const broken = findBrokenTracks(db);
+  /* ⚠ Lo scenario dipende dallo stato della libreria, che cambia: se l'utente
+     ricollega i file dentro Rekordbox, i percorsi rotti spariscono. Prima il
+     test pretendeva di trovarne e diventava rosso su una libreria sana — cioè
+     falliva esattamente quando non c'era niente da riparare. Ora, senza brani
+     rotti, si dichiara saltato: lo scenario non c'è, non è un difetto.
+
+     ⚠ Nessun titolo né percorso nell'output: sono dati personali, e un test
+     che li stampa li copia in ogni log. Si riportano solo conteggi. */
+  const rotti = () => findBrokenTracks(db);
+
+  it('trova i brani il cui file non esiste più al percorso salvato', (ctx) => {
+    const broken = rotti();
     const total = (db.prepare('SELECT COUNT(*) c FROM tracks').get() as { c: number }).c;
     console.log(`[reloc] ${broken.length} brani rotti su ${total} totali`);
+    if (broken.length === 0) ctx.skip();
     expect(broken.length).toBeGreaterThan(0);
   });
 
-  it('ricollega i file spostati cercandoli per nome nella nuova cartella', async () => {
-    const broken = findBrokenTracks(db);
+  it('ricollega i file spostati cercandoli per nome nella nuova cartella', async (ctx) => {
+    const broken = rotti();
+    if (broken.length === 0) ctx.skip();
     const matches = await matchByFilename(broken, NEW_ROOT);
     const found = matches.filter((m) => m.newPath !== null);
     const ambiguous = matches.filter((m) => m.ambiguous.length > 0);
     const notFound = matches.filter((m) => m.newPath === null);
-
     console.log(
       `[reloc] ricollegati ${found.length}/${broken.length} · ambigui ${ambiguous.length} · non trovati ${notFound.length}`
     );
-    for (const m of notFound.slice(0, 5)) {
-      console.log(`[reloc]   non trovato: ${m.oldPath}`);
-    }
-    for (const m of found.slice(0, 3)) {
-      console.log(`[reloc]   ${m.track.title ?? '?'}\n[reloc]      → ${m.newPath}`);
-    }
-
     // Il caso d'uso reale: i beat spostati devono essere ritrovati.
     expect(found.length).toBeGreaterThan(0);
     // Ogni file ritrovato deve esistere davvero sul disco.
@@ -96,12 +100,13 @@ describe.skipIf(!canRun)('relocator su libreria reale spostata', () => {
     }
   }, 120_000);
 
-  it('produce un XML di rilocazione importabile, senza toccare il master.db', async () => {
-    const broken = findBrokenTracks(db);
+  it('produce un XML di rilocazione importabile, senza toccare il master.db', async (ctx) => {
+    const broken = rotti();
+    if (broken.length === 0) ctx.skip();
     const matches = await matchByFilename(broken, NEW_ROOT);
     const out = join(tmp, 'relocation.xml');
     const r = writeRelocationXml(matches, out);
-    console.log(`[reloc] XML: ${r.written} ricollegati, ${r.unmatched} non risolti → ${out}`);
+    console.log(`[reloc] XML: ${r.written} ricollegati, ${r.unmatched} non risolti`);
     expect(existsSync(out)).toBe(true);
     expect(r.written).toBeGreaterThan(0);
   }, 120_000);

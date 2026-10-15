@@ -242,16 +242,41 @@ export function encodeLoops(loops: (EngineLoopSlot | null)[]): Buffer {
 /* -------------------------------------------------------------- beatData  */
 
 /**
- * Intestazione di `beatData` — la sola parte del blob che sia documentata.
+ * `beatData` — intestazione e griglia.
  *
- * ⚠ Big-endian, e i due valori sono `double` IEEE-754, non interi. Letti come
- * uint32 il sample rate diventa 1088421504: un numero abbastanza plausibile da
- * non far scattare nessun controllo, e abbastanza sbagliato da rovinare ogni
- * conversione di posizione.
+ * Layout (payload già decompresso, verificato su 114 tracce reali di Engine
+ * 5.0, schema 3.0.2):
  *
- * Il corpo che segue — i marker veri e propri — NON è documentato, e questo
- * modulo non lo interpreta. Vedi `decodeBeatDataHeader` per il perché.
+ *   double BE  sample rate
+ *   double BE  numero di campioni
+ *   uint8      flag (significato ignoto, conservato)
+ *   uint64 BE  numero di marker della griglia DI DEFAULT, poi i marker
+ *   uint64 BE  numero di marker della griglia CORRETTA, poi i marker
+ *   coda       9 byte su tutte le tracce osservate, conservati
+ *
+ *   marker (24 byte, LITTLE-endian, al contrario dell'intestazione):
+ *     double LE  posizione in campioni
+ *     int64  LE  indice del battito
+ *     uint32 LE  battiti fino al marker successivo
+ *     4 byte     non interpretati
+ *
+ * ⚠ Una versione precedente di questo modulo leggeva SOLO l'intestazione e
+ * dichiarava i marker illeggibili: li aveva interpretati come record da 56 byte,
+ * ne ricavava 72,59 BPM su un brano da 71, e giustamente si rifiutava di usare
+ * una griglia sbagliata del 2%. L'errore era nella dimensione del record, non
+ * nel formato. Con marker da 24 byte il tempo ricavato coincide con
+ * `bpmAnalyzed` su tutte le 114 tracce, con scarto massimo zero.
+ *
+ * L'endianness mista non è un refuso: intestazione big-endian, marker
+ * little-endian. Per questo i controlli di plausibilità sotto sono espliciti:
+ * un marker letto con l'endianness sbagliata dà numeri assurdi ma finiti.
  */
+export interface EngineBeatMarker {
+  positionSamples: number;
+  beatIndex: number;
+  beatsToNext: number;
+}
+
 export interface EngineBeatDataHeader {
   sampleRate: number;
   totalSamples: number;
@@ -261,44 +286,124 @@ export interface EngineBeatDataHeader {
   unparsedBytes: number;
 }
 
+export interface EngineBeatData extends EngineBeatDataHeader {
+  defaultGrid: EngineBeatMarker[];
+  /** La griglia che l'utente vede in Engine: è quella da usare. */
+  adjustedGrid: EngineBeatMarker[];
+}
+
 /** Il rapporto campioni/sample-rate deve dare una durata di brano credibile. */
 const MIN_TRACK_SECONDS = 1;
 const MAX_TRACK_SECONDS = 4 * 60 * 60;
+const MARKER_BYTES = 24;
+/** Oltre questo valore un indice di battito non è un dato, è un disallineamento. */
+const MAX_PLAUSIBLE_BEATS = 100_000;
+const MAX_MARKERS = 10_000;
 
-/**
- * Legge l'intestazione di `beatData`, e SOLO quella.
- *
- * ⚠ Perché non anche i marker. La specifica dichiara il corpo del blob come non
- * verificato, e l'ispezione di una libreria reale non lo ha chiarito: la
- * struttura sembra fatta di record da 56 byte con posizione in `double`
- * little-endian e numero di battito in `int64` little-endian, ma ricavando il
- * tempo dai due marker di una traccia a 71 BPM ne risultano 72,59 — un errore
- * del 2%. Su una griglia, il 2% non è un'imprecisione: è un downbeat che a metà
- * brano è fuori di mezza battuta.
- *
- * Una griglia sbagliata è peggio di una griglia assente, perché sembra giusta.
- * Finché il layout non è confermato su più versioni di Engine, da qui esce solo
- * ciò che è certo — e chi legge sa esattamente quanto resta fuori.
- */
-export function decodeBeatDataHeader(payload: Buffer): EngineBeatDataHeader | null {
+function readHeader(payload: Buffer): EngineBeatDataHeader | null {
   if (payload.length < 17) return null;
   const sampleRate = payload.readDoubleBE(0);
   const totalSamples = payload.readDoubleBE(8);
-
-  // Controlli di plausibilità: servono a distinguere un blob valido da uno di
-  // una versione con un layout diverso, che altrimenti darebbe numeri assurdi
+  // Controlli di plausibilità: distinguono un blob valido da uno di una
+  // versione con un layout diverso, che altrimenti darebbe numeri assurdi
   // trattati come veri.
   if (!Number.isFinite(sampleRate) || sampleRate < 8000 || sampleRate > 192000) return null;
   if (!Number.isFinite(totalSamples) || totalSamples <= 0) return null;
   const seconds = totalSamples / sampleRate;
   if (seconds < MIN_TRACK_SECONDS || seconds > MAX_TRACK_SECONDS) return null;
+  return { sampleRate, totalSamples, flag: payload[16], unparsedBytes: payload.length - 17 };
+}
 
+function readGrid(payload: Buffer, start: number): { markers: EngineBeatMarker[]; next: number } | null {
+  let off = start;
+  if (off + 8 > payload.length) return null;
+  const count = Number(payload.readBigUInt64BE(off));
+  off += 8;
+  if (count > MAX_MARKERS || off + count * MARKER_BYTES > payload.length) return null;
+  const markers: EngineBeatMarker[] = [];
+  for (let i = 0; i < count; i++) {
+    const positionSamples = payload.readDoubleLE(off);
+    const beatIndex = Number(payload.readBigInt64LE(off + 8));
+    const beatsToNext = payload.readUInt32LE(off + 16);
+    off += MARKER_BYTES;
+    if (!Number.isFinite(positionSamples)) return null;
+    if (Math.abs(beatIndex) > MAX_PLAUSIBLE_BEATS || beatsToNext > MAX_PLAUSIBLE_BEATS) return null;
+    markers.push({ positionSamples, beatIndex, beatsToNext });
+  }
+  return { markers, next: off };
+}
+
+/** Solo l'intestazione: basta quando serve la sample rate. */
+export function decodeBeatDataHeader(payload: Buffer): EngineBeatDataHeader | null {
+  return readHeader(payload);
+}
+
+/**
+ * Intestazione e due griglie. `null` se il blob non rispetta il layout: meglio
+ * nessuna griglia che una griglia letta di traverso.
+ */
+export function decodeBeatData(payload: Buffer): EngineBeatData | null {
+  const header = readHeader(payload);
+  if (!header) return null;
+  const def = readGrid(payload, 17);
+  if (!def) return null;
+  const adj = readGrid(payload, def.next);
+  if (!adj) return null;
   return {
-    sampleRate,
-    totalSamples,
-    flag: payload[16],
-    unparsedBytes: payload.length - 17
+    ...header,
+    unparsedBytes: payload.length - adj.next,
+    defaultGrid: def.markers,
+    adjustedGrid: adj.markers
   };
+}
+
+export interface ConstantBeatgrid {
+  bpm: number;
+  /** Istante del battito di indice 0, il primo downbeat, in millisecondi. */
+  anchorMs: number;
+  /**
+   * true se la griglia ha più segmenti con tempo diverso. Il modello interno
+   * rappresenta solo griglie a BPM costante: in quel caso bpm e ancora vengono
+   * dal primo segmento, e chi legge deve saperlo.
+   */
+  variable: boolean;
+}
+
+/** Scarto ammesso fra i tempi di due segmenti perché la griglia sia "costante". */
+const CONSTANT_TEMPO_TOLERANCE_BPM = 0.01;
+
+/**
+ * Griglia a BPM costante ricavata dai marker.
+ *
+ * ⚠ L'ancora è il battito di INDICE 0, non il primo marker. Engine mette il
+ * primo marker a un indice negativo (-4 su tutte le tracce reali), cioè prima
+ * dell'inizio del file: usarlo come ancora darebbe un istante negativo, e un
+ * writer che lo azzerasse sposterebbe tutta la griglia di quattro battiti.
+ */
+export function beatgridFromMarkers(
+  markers: EngineBeatMarker[],
+  sampleRate: number
+): ConstantBeatgrid | null {
+  if (markers.length < 2 || !(sampleRate > 0)) return null;
+  const tempi: number[] = [];
+  for (let i = 0; i + 1 < markers.length; i++) {
+    const a = markers[i];
+    const b = markers[i + 1];
+    const beats = b.beatIndex - a.beatIndex;
+    const seconds = (b.positionSamples - a.positionSamples) / sampleRate;
+    if (beats <= 0 || seconds <= 0) return null;
+    tempi.push((beats / seconds) * 60);
+  }
+  const bpm = tempi[0];
+  if (!(bpm > 20 && bpm < 400)) return null;
+  const variable = tempi.some((t) => Math.abs(t - bpm) > CONSTANT_TEMPO_TOLERANCE_BPM);
+  const first = markers[0];
+  const secondsPerBeat = 60 / bpm;
+  let anchorS = first.positionSamples / sampleRate - first.beatIndex * secondsPerBeat;
+  // Un'ancora prima dell'inizio del brano si porta avanti di battute intere,
+  // così resta un downbeat.
+  while (anchorS < 0) anchorS += 4 * secondsPerBeat;
+  return { bpm, anchorMs: anchorS * 1000, variable };
 }
 
 /* ------------------------------------------------------------- trackData  */

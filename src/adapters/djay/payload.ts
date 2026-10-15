@@ -152,7 +152,7 @@ class DjayReader {
 
       /* ⚠ NON è una stringa: è un RIFERIMENTO a una stringa già emessa, per
          indice su un solo byte. I byte lo dicono senza ambiguità — dentro un
-         `ADCMediaItemTitleID` annidato compare `05 01 05 02 08 "In Gods Arms"`,
+         `ADCMediaItemTitleID` annidato compare `05 01 05 02 08 "<titolo>"`,
          dove `05 01` è il valore dell'uuid e `05 02` la chiave `uuid`, già
          scritti per esteso nell'oggetto che lo contiene.
 

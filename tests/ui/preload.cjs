@@ -168,9 +168,9 @@ const api = {
   masterdb: { createPlaylist: async () => ({ ok: true, added: 0, missing: 0, backupDir: '' }) },
   detect: {
     djSoftware: async () => [
-      { id: 'rekordbox', found: true, path: 'C:/Users/Vale/AppData/Roaming/Pioneer/rekordbox/master.db', companionPath: 'C:/Users/Vale/AppData/Roaming/Pioneer/rekordboxAgent/storage/options.json', checked: [], modifiedAt: '2026-07-28T14:02:00.000Z', kind: 'masterdb' },
-      { id: 'traktor', found: true, path: 'C:/Users/Vale/Documents/Native Instruments/Traktor 4.0.2/collection.nml', checked: [], modifiedAt: '2026-07-05T10:11:00.000Z', kind: 'nml' },
-      { id: 'serato', found: true, path: 'C:/Users/Vale/Music/_Serato_', checked: [], modifiedAt: null, limit: 'readOnly', kind: 'seratoDir' },
+      { id: 'rekordbox', found: true, path: 'C:/Users/utente/AppData/Roaming/Pioneer/rekordbox/master.db', companionPath: 'C:/Users/utente/AppData/Roaming/Pioneer/rekordboxAgent/storage/options.json', checked: [], modifiedAt: '2026-07-28T14:02:00.000Z', kind: 'masterdb' },
+      { id: 'traktor', found: true, path: 'C:/Users/utente/Documents/Native Instruments/Traktor 4.0.2/collection.nml', checked: [], modifiedAt: '2026-07-05T10:11:00.000Z', kind: 'nml' },
+      { id: 'serato', found: true, path: 'C:/Users/utente/Music/_Serato_', checked: [], modifiedAt: null, limit: 'readOnly', kind: 'seratoDir' },
       { id: 'virtualdj', found: false, path: null, checked: [], modifiedAt: null, kind: 'vdjxml' },
       { id: 'engine', found: false, path: null, checked: [], modifiedAt: null, limit: 'external', kind: 'enginedb' }
     ]
@@ -178,10 +178,10 @@ const api = {
   window: { setOverlayTheme: async () => {} },
   rekordbox: {
     defaultPaths: async () => ({
-      dir: 'C:/Users/Vale/AppData/Roaming/Pioneer/rekordbox',
-      masterDb: 'C:/Users/Vale/AppData/Roaming/Pioneer/rekordbox/master.db',
+      dir: 'C:/Users/utente/AppData/Roaming/Pioneer/rekordbox',
+      masterDb: 'C:/Users/utente/AppData/Roaming/Pioneer/rekordbox/master.db',
       masterDbExists: true,
-      optionsJson: 'C:/Users/Vale/AppData/Roaming/Pioneer/rekordboxAgent/storage/options.json',
+      optionsJson: 'C:/Users/utente/AppData/Roaming/Pioneer/rekordboxAgent/storage/options.json',
       optionsJsonExists: true
     })
   },

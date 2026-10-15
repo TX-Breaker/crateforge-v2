@@ -4,7 +4,11 @@ import { existsSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
 import { inflateSync } from 'zlib';
-import { decodeBeatDataHeader } from '../src/adapters/engine/engineCodec';
+import {
+  beatgridFromMarkers,
+  decodeBeatData,
+  decodeBeatDataHeader
+} from '../src/adapters/engine/engineCodec';
 import { readEngineLibrary } from '../src/adapters/engine/engineReader';
 
 /**
@@ -100,19 +104,44 @@ d('Engine DJ — beatData e i due BPM (libreria reale)', () => {
     }
   });
 
-  it('il corpo dei marker resta dichiaratamente non interpretato', () => {
-    // Il test difende una DECISIONE, non un comportamento: finché il layout dei
-    // marker non è confermato, da qui non esce un'ancora di griglia. Se un
-    // giorno la si implementa, questo test va cambiato apposta.
+  it('la griglia ricavata dai marker coincide con il BPM analizzato da Engine', () => {
+    /* ⚠ Questo test sostituisce quello che difendeva la decisione opposta. Una
+       versione precedente leggeva i marker come record da 56 byte, ne ricavava
+       72,59 BPM su un brano da 71 e giustamente rifiutava la griglia. Il record
+       è da 24 byte: con quello il tempo coincide su ogni traccia. Lo scarto
+       ammesso è piccolissimo apposta — una griglia sbagliata dell'1% è mezza
+       battuta fuori a metà brano. */
     const db = apri();
     try {
-      const r = db
-        .prepare(`SELECT beatData FROM PerformanceData WHERE beatData IS NOT NULL LIMIT 1`)
-        .get() as { beatData: Buffer };
-      const header = decodeBeatDataHeader(inflateSync(r.beatData.subarray(4)));
-      expect(header!.unparsedBytes).toBeGreaterThan(0);
+      const rows = db
+        .prepare(
+          `SELECT t.bpmAnalyzed AS bpm, p.beatData AS bd
+             FROM Track t JOIN PerformanceData p ON p.trackId = t.id
+            WHERE p.beatData IS NOT NULL AND t.bpmAnalyzed > 0`
+        )
+        .all() as { bpm: number; bd: Buffer }[];
+      expect(rows.length).toBeGreaterThan(0);
+      for (const r of rows) {
+        const bd = decodeBeatData(inflateSync(r.bd.subarray(4)));
+        expect(bd).not.toBeNull();
+        const grid = beatgridFromMarkers(bd!.adjustedGrid, bd!.sampleRate);
+        expect(grid).not.toBeNull();
+        expect(Math.abs(grid!.bpm - r.bpm)).toBeLessThan(0.01);
+        // L'ancora è un downbeat dentro la prima battuta, mai negativa.
+        expect(grid!.anchorMs).toBeGreaterThanOrEqual(0);
+        expect(grid!.anchorMs).toBeLessThan(4 * (60_000 / grid!.bpm));
+      }
     } finally {
       db.close();
+    }
+  });
+
+  it('il lettore porta la griglia nel modello interno', () => {
+    const lib = readEngineLibrary(dbPath);
+    const conGriglia = lib.tracks.filter((t) => t.beatgridBpm != null && t.beatgridAnchorMs != null);
+    expect(conGriglia.length).toBeGreaterThan(0);
+    for (const t of conGriglia) {
+      expect(Math.abs((t.beatgridBpm ?? 0) - (t.bpm ?? 0))).toBeLessThan(0.01);
     }
   });
 

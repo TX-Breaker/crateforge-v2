@@ -16,7 +16,7 @@ describe('riconoscimento dei percorsi di rete', () => {
 
   it('non scambia per rete un percorso locale', () => {
     expect(isUncPath('C:\\Users\\Vale\\Music\\m.db')).toBe(false);
-    expect(isUncPath('/Users/vale/Music/m.db')).toBe(false);
+    expect(isUncPath('/Users/utente/Music/m.db')).toBe(false);
     expect(isUncPath('')).toBe(false);
     // Una singola barra iniziale non è UNC: è la radice su Unix.
     expect(isUncPath('/nas/musica')).toBe(false);

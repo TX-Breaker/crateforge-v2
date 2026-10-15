@@ -22,7 +22,8 @@ const MASTER_DB =
     ? join(process.env.APPDATA ?? '', 'Pioneer', 'rekordbox', 'master.db')
     : join(homedir(), 'Library', 'Pioneer', 'rekordbox', 'master.db'));
 const NEW_ROOT =
-  process.env.CRATEFORGE_TEST_MUSICROOT ?? join(homedir(), 'Desktop', 'CREATION MUSIQUE', 'BEATS');
+  // Nessun ripiego cablato: la cartella è un dato personale e non sta nel codice.
+  process.env.CRATEFORGE_TEST_MUSICROOT ?? '';
 
 const SIDECAR_DIR = join(__dirname, '..', 'python-sidecar');
 const VENV_PY =

@@ -19,7 +19,8 @@ import { readEngineLibrary } from '@adapters/engine/engineReader';
 
 const ENGINE_DB = join(homedir(), 'Music', 'Engine Library', 'Database2', 'm.db');
 const SERATO_MUSIC_ROOT =
-  process.env.CRATEFORGE_TEST_MUSICROOT ?? join(homedir(), 'Desktop', 'CREATION MUSIQUE', 'BEATS');
+  // Nessun ripiego cablato: la cartella è un dato personale e non sta nel codice.
+  process.env.CRATEFORGE_TEST_MUSICROOT ?? '';
 
 const SIDECAR_DIR = join(__dirname, '..', 'python-sidecar');
 const VENV_PY =

@@ -2,7 +2,7 @@ import Database from 'better-sqlite3';
 import { dirname, join, resolve } from 'path';
 import { inflateSync } from 'zlib';
 import type { ForeignLibrary, NormCue, NormPlaylist, NormTrack } from '@core/foreignImport';
-import { decodeBeatDataHeader } from './engineCodec';
+import { beatgridFromMarkers, decodeBeatData, decodeBeatDataHeader } from './engineCodec';
 
 /**
  * Reader Engine DJ (Denon / Engine Prime / Engine OS).
@@ -80,22 +80,25 @@ function sampleRateOf(trackData: unknown, beatData?: unknown): { rate: number; s
   return { rate: 44100, source: 'ripiego' };
 }
 
-/* ⚠ BEATGRID DI ENGINE — quello che si legge e quello che no.
+/* BEATGRID DI ENGINE.
  *
- * Di `beatData` è documentata l'INTESTAZIONE: due `double` big-endian con
- * sample rate e numero di campioni, poi un byte di flag. Quella viene letta
- * (`decodeBeatDataHeader`) e usata come seconda fonte per la sample rate.
- *
- * Il corpo — i marker della griglia — NON è documentato, e l'ispezione di una
- * libreria reale non lo ha chiarito: la forma sembra fatta di record da 56 byte
- * con posizione in `double` little-endian e battito in `int64` little-endian,
- * ma ricavando il tempo dai marker di una traccia a 71 BPM ne risultano 72,59.
- * Un errore del 2% su una griglia significa mezza battuta di scarto a metà
- * brano.
- *
- * Quindi l'ancora della griglia NON viene estratta, e i writer continuano a
- * ripiegare su una griglia a BPM costante da zero. Una griglia sbagliata è
- * peggio di una assente: sembra giusta finché non si suona. */
+ * `beatData` porta due griglie: quella di default e quella corretta, che è la
+ * griglia che l'utente vede e su cui ha eventualmente lavorato. Si usa la
+ * corretta e se ne ricava una griglia a BPM costante con ancora sul battito 0.
+ * Il formato è descritto in `decodeBeatData`. */
+function readBeatgrid(beatData: unknown, sampleRate: number) {
+  if (!beatData) return null;
+  try {
+    const raw = decodeFramedZlib(beatData);
+    if (!raw) return null;
+    const bd = decodeBeatData(raw);
+    if (!bd) return null;
+    const markers = bd.adjustedGrid.length >= 2 ? bd.adjustedGrid : bd.defaultGrid;
+    return beatgridFromMarkers(markers, bd.sampleRate || sampleRate);
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Decodifica i cue Engine dai blob PerformanceData (roadmap §7.9, prima persi).
@@ -305,6 +308,7 @@ export function readEngineLibrary(dbPath: string): ForeignLibrary {
       const perf = perfByTrack.get(String(r.id));
       const sr = perf ? sampleRateOf(perf.trackData, perf.beatData) : { rate: 44100, source: 'assente' };
       const cues = perf ? readEngineCues(perf.quickCues, perf.loops, sr.rate) : [];
+      const grid = perf ? readBeatgrid(perf.beatData, sr.rate) : null;
       const rating = r.rating != null ? Number(r.rating) : null;
 
       /* Ciò che Engine porta e il modello interno non normalizza. Solo valori
@@ -315,6 +319,9 @@ export function readEngineLibrary(dbPath: string): ForeignLibrary {
       if (r.thirdPartySourceId != null) extra.thirdPartySourceId = Number(r.thirdPartySourceId);
       if (r.lastEditTime != null) extra.lastEditTime = Number(r.lastEditTime);
       if (perf && sr.source !== 'assente') extra.sampleRate = sr.rate;
+      // Il modello interno tiene solo griglie costanti: se Engine ne ha una a
+      // tempo variabile lo si dichiara, invece di far finta che sia costante.
+      if (grid?.variable) extra.beatgridVariable = true;
       return {
         sourceId: String(r.id),
         title: r.title != null ? String(r.title) : null,
@@ -329,6 +336,8 @@ export function readEngineLibrary(dbPath: string): ForeignLibrary {
         filesize: r.filesize != null ? Number(r.filesize) || null : null,
         cues,
         rating: rating != null && !Number.isNaN(rating) ? rating : null,
+        beatgridBpm: grid ? grid.bpm : null,
+        beatgridAnchorMs: grid ? grid.anchorMs : null,
         formatData: Object.keys(extra).length ? extra : undefined
       };
     });
