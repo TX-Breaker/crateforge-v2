@@ -51,6 +51,13 @@ export interface AutoSyncSnapshot {
   lastUserActivityAt: number | null;
   /** Fine dell'ultimo giro automatico, per non ripeterlo a raffica. */
   lastRunAt: number | null;
+  /**
+   * Programma master, in modalità master → slave. Solo la SUA chiusura fa
+   * partire un giro: chi lavora su uno slave non deve vedere le sue modifiche
+   * propagarsi al master, è esattamente ciò che la modalità esclude.
+   * `null` in modalità simmetrica.
+   */
+  master?: GuardedSoftware | null;
 }
 
 export type AutoSyncReason =
@@ -62,7 +69,8 @@ export type AutoSyncReason =
   | 'job-running'
   | 'user-active'
   | 'too-soon'
-  | 'nothing-to-do';
+  | 'nothing-to-do'
+  | 'slave-closed';
 
 export type AutoSyncDecision =
   | { run: true; source: GuardedSoftware; destinations: GuardedSoftware[] }
@@ -117,6 +125,16 @@ export function decideAutoSync(s: AutoSyncSnapshot): AutoSyncDecision {
 
   if (s.destinations.length === 0) {
     return no('nothing-to-do', 'Nessun software di destinazione configurato.', null);
+  }
+  /* Prima di tutto il resto: la chiusura di uno slave non è un innesco, e va
+     scartata subito invece di restare in coda ad aspettare condizioni che non
+     la renderebbero comunque valida. */
+  if (s.master && s.source !== s.master) {
+    return no(
+      'slave-closed',
+      `${s.source} è uno slave: le sue modifiche non si propagano. Si sincronizza quando si chiude il master (${s.master}).`,
+      null
+    );
   }
 
   /* ⚠ Prima dei controlli sui singoli software: se non sappiamo che cosa sta
@@ -251,6 +269,12 @@ export interface AutoSyncConfig {
   fields: string[];
   /** Modalita' del giro automatico. */
   mode: 'symmetric' | 'masterSlave';
+  /**
+   * Il programma master in modalità master → slave. Deve essere uno dei
+   * partecipanti: un master fuori dall'elenco non si chiuderebbe mai agli occhi
+   * del guardiano, e l'automatico resterebbe acceso senza fare niente.
+   */
+  master: GuardedSoftware | null;
 }
 
 /**
@@ -266,7 +290,8 @@ export const AUTO_SYNC_DEFAULTS: AutoSyncConfig = {
   paused: false,
   softwares: [],
   fields: [],
-  mode: 'symmetric'
+  mode: 'symmetric',
+  master: null
 };
 
 const SOFTWARE_AMMESSI: GuardedSoftware[] = [
@@ -301,20 +326,73 @@ export function parseAutoSyncConfig(raw: string | null): AutoSyncConfig {
   }
   const o = letto as Record<string, unknown>;
   const ammessi = new Set<string>(SOFTWARE_AMMESSI);
+  const softwares = Array.isArray(o.softwares)
+    ? ([...new Set(o.softwares.filter((x) => typeof x === 'string' && ammessi.has(x)))] as GuardedSoftware[])
+    : [];
+  const mode = o.mode === 'masterSlave' ? 'masterSlave' : 'symmetric';
   return {
     enabled: o.enabled === true,
     paused: o.paused === true,
     /* Un nome di software non piu' riconosciuto viene scartato, non conservato:
        tenerlo significherebbe attendere la chiusura di un programma che questa
        versione non sa nemmeno cercare. */
-    softwares: Array.isArray(o.softwares)
-      ? (o.softwares.filter((x) => typeof x === 'string' && ammessi.has(x)) as GuardedSoftware[])
-      : [],
+    softwares,
     fields: Array.isArray(o.fields) ? o.fields.filter((x): x is string => typeof x === 'string') : [],
-    mode: o.mode === 'masterSlave' ? 'masterSlave' : 'symmetric'
+    mode,
+    /* Il master conta solo in master → slave, e solo se partecipa. */
+    master:
+      mode === 'masterSlave' && typeof o.master === 'string' && softwares.includes(o.master as GuardedSoftware)
+        ? (o.master as GuardedSoftware)
+        : null
   };
 }
 
 export function serializeAutoSyncConfig(c: AutoSyncConfig): string {
   return JSON.stringify(c);
+}
+
+/* -------------------------------------------- programmi e archivio interno */
+
+/**
+ * Valori di `tracks.source` che appartengono a ciascun programma.
+ *
+ * ⚠ Il guardiano ragiona per PROGRAMMA (quale processo si è chiuso), il motore
+ * per SORGENTE (quali righe dell'archivio). Prima del giro completo il nome del
+ * programma veniva passato tale e quale come sorgente: per Rekordbox, le cui
+ * righe stanno sotto `masterdb` e `xml`, il giro non trovava niente e non lo
+ * diceva. La traduzione sta qui, in un posto solo.
+ *
+ * Serato 3 e Serato 4 condividono `serato`: sono due porte sulla stessa
+ * libreria di un utente, e i lettori scrivono sotto lo stesso nome.
+ */
+export const SOURCES_OF_SOFTWARE: Record<GuardedSoftware, string[]> = {
+  rekordbox: ['masterdb', 'xml'],
+  traktor: ['traktor'],
+  virtualdj: ['virtualdj'],
+  serato: ['serato'],
+  serato4: ['serato'],
+  engine: ['engine'],
+  djay: ['djay']
+};
+
+/** Il programma a cui appartiene una sorgente dell'archivio, o null. */
+export function softwareOfSource(source: string, among: GuardedSoftware[]): GuardedSoftware | null {
+  return among.find((s) => SOURCES_OF_SOFTWARE[s].includes(source)) ?? null;
+}
+
+/**
+ * Le coppie da riconciliare in un giro, nell'ordine in cui vanno fatte.
+ *
+ * - Master → slave: master contro ogni slave, una passata.
+ * - Simmetrica: chi si è chiuso contro ogni altro partecipante, DUE passate.
+ *   La seconda porta agli altri ciò che la prima ha raccolto: senza, una
+ *   modifica fatta in B arriverebbe in A ma non in C fino al giro successivo.
+ */
+export function syncPairs(
+  mode: AutoSyncConfig['mode'],
+  source: GuardedSoftware,
+  destinations: GuardedSoftware[]
+): { a: GuardedSoftware; b: GuardedSoftware; mode: AutoSyncConfig['mode'] }[] {
+  const una = destinations.filter((d) => d !== source).map((b) => ({ a: source, b, mode }));
+  return mode === 'masterSlave' ? una : [...una, ...una];
 }

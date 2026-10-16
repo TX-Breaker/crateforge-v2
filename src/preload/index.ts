@@ -12,6 +12,7 @@ export interface AutoSyncConfigView {
   softwares: string[];
   fields: string[];
   mode: 'symmetric' | 'masterSlave';
+  master?: string | null;
 }
 
 /**

@@ -10,6 +10,9 @@ import {
   parseAutoSyncConfig,
   serializeAutoSyncConfig,
   shouldContinue,
+  SOURCES_OF_SOFTWARE,
+  softwareOfSource,
+  syncPairs,
   type AutoSyncSnapshot
 } from '../src/core/autoSync';
 import type { GuardedSoftware } from '../src/core/djVersions';
@@ -241,9 +244,66 @@ describe('autoSync — configurazione', () => {
       paused: true,
       softwares: ['serato', 'engine'] as const,
       fields: ['bpm', 'rating'],
-      mode: 'masterSlave' as const
+      mode: 'masterSlave' as const,
+      master: 'serato' as const
     };
     const riletta = parseAutoSyncConfig(serializeAutoSyncConfig({ ...originale, softwares: [...originale.softwares] }));
     expect(riletta).toEqual({ ...originale, softwares: [...originale.softwares] });
+  });
+});
+
+describe('autoSync — programma master', () => {
+  it('⚠ la chiusura di uno slave non fa partire niente', () => {
+    /* È la definizione della modalità: chi lavora su uno slave non deve vedere
+       le sue modifiche arrivare al master. */
+    const d = decideAutoSync(stato({ source: 'serato', destinations: ['rekordbox', 'engine'], master: 'rekordbox' }));
+    expect(d.run).toBe(false);
+    if (!d.run) expect(d.reason).toBe('slave-closed');
+  });
+
+  it('la chiusura del master parte', () => {
+    const d = decideAutoSync(stato({ master: 'rekordbox' }));
+    expect(d.run).toBe(true);
+  });
+
+  it('un master che non partecipa viene scartato alla lettura', () => {
+    const c = parseAutoSyncConfig(
+      JSON.stringify({ enabled: true, softwares: ['serato', 'engine'], mode: 'masterSlave', master: 'rekordbox' })
+    );
+    expect(c.master).toBeNull();
+  });
+
+  it('in modalità simmetrica il master non esiste', () => {
+    const c = parseAutoSyncConfig(
+      JSON.stringify({ enabled: true, softwares: ['rekordbox', 'engine'], mode: 'symmetric', master: 'rekordbox' })
+    );
+    expect(c.master).toBeNull();
+  });
+
+  it('i partecipanti doppi si contano una volta', () => {
+    const c = parseAutoSyncConfig(JSON.stringify({ softwares: ['engine', 'engine', 'traktor'] }));
+    expect(c.softwares).toEqual(['engine', 'traktor']);
+  });
+});
+
+describe('autoSync — programmi e sorgenti', () => {
+  it('⚠ Rekordbox vive sotto due sorgenti, nessuna delle quali si chiama «rekordbox»', () => {
+    /* Prima il nome del programma passava tale e quale come sorgente, e per
+       Rekordbox il giro non trovava nessuna riga. */
+    expect(SOURCES_OF_SOFTWARE.rekordbox).toEqual(['masterdb', 'xml']);
+    expect(softwareOfSource('xml', ['rekordbox', 'traktor'])).toBe('rekordbox');
+    expect(softwareOfSource('engine', ['rekordbox', 'traktor'])).toBeNull();
+  });
+
+  it('master → slave: una passata, dal master verso ognuno', () => {
+    expect(syncPairs('masterSlave', 'rekordbox', ['traktor', 'engine'])).toEqual([
+      { a: 'rekordbox', b: 'traktor', mode: 'masterSlave' },
+      { a: 'rekordbox', b: 'engine', mode: 'masterSlave' }
+    ]);
+  });
+
+  it('simmetrica: due passate, così ciò che arriva da uno raggiunge anche gli altri', () => {
+    const p = syncPairs('symmetric', 'traktor', ['traktor', 'engine', 'virtualdj']);
+    expect(p.map((x) => x.b)).toEqual(['engine', 'virtualdj', 'engine', 'virtualdj']);
   });
 });

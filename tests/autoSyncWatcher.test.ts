@@ -24,7 +24,8 @@ function banco(p: Partial<AutoSyncDeps> = {}) {
   const deps: AutoSyncDeps = {
     now: () => orologio,
     readRunning: async () => running,
-    destinations: () => ['serato', 'engine'],
+    // I partecipanti, origine compresa: il guardiano toglie da solo chi si è chiuso.
+    destinations: () => ['rekordbox', 'serato', 'engine'],
     isPaused: () => false,
     isJobRunning: () => false,
     lastUserActivityAt: () => null,
@@ -92,7 +93,7 @@ describe('AutoSyncWatcher', () => {
     /* Chi chiude Rekordbox e poi Serato ha modificato due librerie. Tenere solo
        l'ultima chiusura perderebbe il primo giro senza un errore: semplicemente
        non succederebbe niente, che in automatico nessuno nota. */
-    const b = banco({ destinations: () => ['engine'] });
+    const b = banco({ destinations: () => ['rekordbox', 'serato', 'engine'] });
     b.imposta(aperto('rekordbox', 'serato'));
     await b.watcher.tick();
 
@@ -182,5 +183,30 @@ describe('AutoSyncWatcher', () => {
     expect(s.lastDecision).toBeNull();
     expect(s.lastRunAt).toBeNull();
     expect(s.pendingClosures).toEqual([]);
+  });
+
+  it('⚠ la chiusura di un programma che non partecipa viene ignorata', async () => {
+    /* Prima diventava l'origine di un giro verso tutti i partecipanti: chiudere
+       un programma mai scelto scriveva nelle librerie degli altri. */
+    const b = banco({ destinations: () => ['serato', 'engine'] });
+    b.imposta(aperto('rekordbox'));
+    await b.watcher.tick();
+    b.imposta(aperto());
+    await b.watcher.tick();
+    expect(b.watcher.status().pendingClosures).toEqual([]);
+  });
+
+  it('⚠ in master → slave la chiusura di uno slave si scarta', async () => {
+    const b = banco({ master: () => 'rekordbox' });
+    b.imposta(aperto('serato'));
+    await b.watcher.tick();
+    b.imposta(aperto());
+    // Scartata subito, alla chiusura: non aspetta la quiete per poi non partire.
+    const d = await b.watcher.tick();
+    expect(d && !d.run && d.reason).toBe('slave-closed');
+    b.avanza(QUIET_PERIOD_MS + 1);
+    expect(await b.watcher.tick()).toBeNull();
+    expect(b.giri).toEqual([]);
+    expect(b.watcher.status().pendingClosures).toEqual([]);
   });
 });

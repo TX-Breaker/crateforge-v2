@@ -96,6 +96,7 @@ import { isLiveLibraryTarget, liveLibraryMessage } from './liveLibraryGuard';
 import { AutoSyncWatcher, readRunningSoftware } from './autoSyncWatcher';
 import {
   AUTO_SYNC_SETTING_KEY,
+  SOURCES_OF_SOFTWARE,
   parseAutoSyncConfig,
   serializeAutoSyncConfig,
   type AutoSyncConfig
@@ -1828,6 +1829,7 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
       return readRunningSoftware();
     },
     destinations: () => (leggiAutoConfig().enabled ? leggiAutoConfig().softwares : []),
+    master: () => leggiAutoConfig().master,
     isPaused: () => {
       const cfg = leggiAutoConfig();
       return !cfg.enabled || cfg.paused;
@@ -1841,9 +1843,12 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
          insieme, e un giro automatico che la scavalcasse sarebbe proprio quello
          che nessuno sta guardando. */
       await withJobLock(async () => {
+        /* Il guardiano parla di programmi, il motore di sorgenti dell'archivio:
+           passare il nome del programma come sorgente lasciava fuori Rekordbox,
+           le cui righe stanno sotto `masterdb` e `xml`. */
         const opts: SyncOptions = {
-          aSources: [source],
-          bSources: destinations,
+          aSources: SOURCES_OF_SOFTWARE[source],
+          bSources: [...new Set(destinations.flatMap((d) => SOURCES_OF_SOFTWARE[d]))],
           mode: cfg.mode,
           fields: cfg.fields as SyncField[]
         };

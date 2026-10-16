@@ -110,7 +110,7 @@ export function KeepPanel({ a, b }: { a: SoftwareId | null; b: SoftwareId | null
     setAuto(
       await window.crateforge.sync.autoSetConfig(
         on && a && b
-          ? { enabled: true, softwares: [...SOURCES_OF[a], ...SOURCES_OF[b]], fields, mode }
+          ? { enabled: true, softwares: [a, b], fields, mode, master: mode === 'masterSlave' ? a : null }
           : { enabled: on }
       )
     );

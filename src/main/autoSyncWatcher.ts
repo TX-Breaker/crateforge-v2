@@ -28,6 +28,8 @@ export interface AutoSyncDeps {
   readRunning: () => Promise<Set<GuardedSoftware> | 'unknown'>;
   /** Software di destinazione configurati dall'utente. */
   destinations: () => GuardedSoftware[];
+  /** Programma master in modalità master → slave, `null` se simmetrica. */
+  master?: () => GuardedSoftware | null;
   /** Interruttore di pausa, che sopravvive al riavvio. */
   isPaused: () => boolean;
   /** Un altro lavoro è in corso. */
@@ -99,7 +101,12 @@ export class AutoSyncWatcher {
     /* ⚠ La prima osservazione non può produrre chiusure: non c'è un "prima" con
        cui confrontarla. Senza questo, l'avvio del programma sembrerebbe la
        chiusura simultanea di tutto ciò che non è aperto. */
+    /* ⚠ Solo i programmi che partecipano. Prima ogni chiusura valeva come
+       innesco: chiudere un programma che l'utente non aveva scelto lo faceva
+       diventare l'origine di un giro verso tutti gli altri. */
+    const partecipanti = new Set(this.deps.destinations());
     for (const software of detectClosures(this.precedente, attuale)) {
+      if (!partecipanti.has(software)) continue;
       this.chiusure.set(software, ora);
       this.deps.log?.('autosync.closure', software);
     }
@@ -121,7 +128,8 @@ export class AutoSyncWatcher {
       paused: this.deps.isPaused(),
       jobRunning: this.deps.isJobRunning(),
       lastUserActivityAt: this.deps.lastUserActivityAt(),
-      lastRunAt: this.lastRunAt
+      lastRunAt: this.lastRunAt,
+      master: this.deps.master?.() ?? null
     };
 
     const decisione = decideAutoSync(snapshot);
@@ -133,7 +141,11 @@ export class AutoSyncWatcher {
          riprovati all'infinito: se l'origine è di nuovo aperta, la chiusura che
          avevamo osservato non vale più niente. Tenerla in coda farebbe partire
          un giro appena l'utente richiude, saltando la quiete. */
-      if (decisione.reason === 'source-still-open' || decisione.reason === 'nothing-to-do') {
+      if (
+        decisione.reason === 'source-still-open' ||
+        decisione.reason === 'nothing-to-do' ||
+        decisione.reason === 'slave-closed'
+      ) {
         this.chiusure.delete(origine);
       }
       this.deps.log?.('autosync.skip', `${origine}: ${decisione.reason}`);
