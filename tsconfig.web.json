@@ -25,7 +25,7 @@
     "src/core/djVersions.ts",
     "src/core/djDetection.ts",
     "src/core/djRegistry.ts",
-    "tests/i18nParity.test.ts",
+    "tests/stringsParity.test.ts",
     "tests/djRegistry.wizard.test.ts"
   ]
 }

@@ -9,8 +9,6 @@ import {
   type ImportSourceId
 } from '../src/core/djRegistry';
 import { TESTED, type DjSoftware } from '../src/core/djVersions';
-import { pageText } from '../src/renderer/src/lib/i18nPages';
-import { LOCALES } from '../src/renderer/src/lib/i18n';
 
 /**
  * Il registro delle sorgenti d'import e la procedura guidata.
@@ -22,10 +20,7 @@ import { LOCALES } from '../src/renderer/src/lib/i18n';
  * convinto, e la delusione arriva dopo che ha importato la libreria.
  */
 
-const wizard = readFileSync(
-  join(process.cwd(), 'src/renderer/src/pages/onboarding/WizardSteps.tsx'),
-  'utf-8'
-);
+const welcome = readFileSync(join(process.cwd(), 'src/renderer/src/screens/Welcome.tsx'), 'utf-8');
 
 describe('registro delle sorgenti d’import', () => {
   it('non ha identificatori duplicati', () => {
@@ -80,54 +75,24 @@ describe('registro delle sorgenti d’import', () => {
       expect(ids.has(atteso), `manca ${atteso}`).toBe(true);
     }
   });
-
-  it('ogni etichetta esiste in tutte le lingue', () => {
-    const chiavi = [
-      ...IMPORT_SOURCES.map((s) => s.labelKey),
-      ...IMPORT_SOURCES.filter((s) => s.unavailableKey).map((s) => s.unavailableKey as string),
-      ...DJ_APPS.map((a) => a.labelKey)
-    ];
-    for (const { id: locale } of LOCALES) {
-      for (const k of chiavi) {
-        const testo = pageText(locale, 'onboarding', k);
-        expect(testo, `${locale}/${k}`).toBeTruthy();
-        // `pageText` restituisce la chiave stessa quando non la trova.
-        expect(testo, `${locale}/${k}: chiave non tradotta`).not.toBe(k);
-      }
-    }
-  });
 });
 
-describe('vetrina delle funzioni', () => {
+describe('procedura di benvenuto', () => {
   it('⚠ non promette funzioni che il programma non ha', () => {
     /* Le voci elencate nel mandato come CANDIDATE ma non implementate. Se una
-       di queste compare nella vetrina, o è stata implementata — e allora
+       di queste compare nel benvenuto, o è stata implementata — e allora
        questo test va aggiornato apposta — oppure è una promessa falsa. */
     const nonImplementate = ['smartlist', 'storeLink', 'beatport', 'cueTemplate', 'genreRenamer'];
     for (const nome of nonImplementate) {
-      expect(
-        wizard.includes(`'${nome}'`),
-        `la vetrina cita ${nome}, che non è implementato`
-      ).toBe(false);
+      expect(welcome.includes(nome), `il benvenuto cita ${nome}, che non è implementato`).toBe(false);
     }
   });
 
-  it('elenca solo funzioni con una destinazione reale nel programma', () => {
-    // Ogni voce della vetrina deve corrispondere a qualcosa che esiste: i
-    // duplicati e la salute stanno in CleanupPage/HealthPage, il monitoraggio
-    // in ArrivalsPage, la sincronizzazione dei punti in ConvertPage.
-    for (const id of ['duplicates', 'watcher', 'health', 'sync']) {
-      expect(wizard.includes(`id: '${id}'`), `manca la voce ${id}`).toBe(true);
-    }
-  });
-
-  it('dichiara esplicitamente cosa non c’è ancora', () => {
-    // Dire cosa manca vale quanto dire cosa c'è: senza, l'assenza sembra una
-    // svista invece di una scelta.
-    for (const { id: locale } of LOCALES) {
-      const testo = pageText(locale, 'onboarding', 'featSoonBody');
-      expect(testo, `${locale}: manca l'avviso sulle funzioni assenti`).toBeTruthy();
-      expect(testo).not.toBe('featSoonBody');
+  it('sa importare ogni tipo di libreria che il rilevamento può trovare', () => {
+    // Un tipo rilevato senza un ramo d'import arriverebbe all'utente come
+    // «trovato» e poi fallirebbe: ogni `kind` deve avere il suo `case`.
+    for (const kind of ['masterdb', 'seratoDir', 'serato4db', 'nml', 'vdjxml', 'enginedb']) {
+      expect(welcome.includes(`case '${kind}':`), `manca l'import per ${kind}`).toBe(true);
     }
   });
 });

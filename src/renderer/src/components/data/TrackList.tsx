@@ -5,7 +5,7 @@ import { cn, formatDuration } from '@/lib/utils';
 import { useAppState } from '@/lib/appState';
 import { useLibrary } from '@/lib/library';
 import { useWorkspace } from '@/lib/workspace';
-import { t } from '@/lib/i18n';
+import { useT } from '@/lib/strings';
 import { Badge, Checkbox, FilterChip, Input, Segmented, Skeleton } from '@/components/ui/misc';
 
 /**
@@ -78,6 +78,7 @@ export function TrackList({
   emptyState?: React.ReactNode;
 }) {
   const { locale, density, setDensity } = useAppState();
+  const t = useT();
   /* Conteggi dei chip: già calcolati altrove (statistiche e diagnosi), qui si
      leggono soltanto — un chip non deve interrogare il database per sapere
      come chiamarsi. */
@@ -210,17 +211,17 @@ export function TrackList({
      indicatore di caricamento, mai il conteggio della scansione precedente. */
   /** Etichetta della restrizione: "Tonalità 8A" oppure "125–130 BPM". */
   const scopeLabel = scope?.camelot
-    ? `${t(locale, 'tracks.colKey')} ${scope.camelot}`
+    ? `${t('tracks.colKey')} ${scope.camelot}`
     : scope?.bpmMin !== undefined
-      ? `${scope.bpmMin}–${scope.bpmMax ?? ''} ${t(locale, 'tracks.colBpm')}`
+      ? `${scope.bpmMin}–${scope.bpmMax ?? ''} ${t('tracks.colBpm')}`
       : null;
 
   const filterChips: { id: TrackFilter; label: string; count?: number }[] = useMemo(
     () => [
-      { id: 'needsReview', label: t(locale, 'filter.needsReview'), count: stats?.needsReview },
-      { id: 'noKey', label: t(locale, 'filter.noKey'), count: health?.missingKey },
-      { id: 'noBpm', label: t(locale, 'filter.noBpm'), count: health?.missingBpm },
-      { id: 'noGenre', label: t(locale, 'filter.noGenre'), count: health?.missingGenre }
+      { id: 'needsReview', label: t('filter.needsReview'), count: stats?.needsReview },
+      { id: 'noKey', label: t('filter.noKey'), count: health?.missingKey },
+      { id: 'noBpm', label: t('filter.noBpm'), count: health?.missingBpm },
+      { id: 'noGenre', label: t('filter.noGenre'), count: health?.missingGenre }
     ],
     [locale, stats, health]
   );
@@ -235,7 +236,7 @@ export function TrackList({
             className="pl-8"
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
-            placeholder={t(locale, 'tracks.searchPh')}
+            placeholder={t('tracks.searchPh')}
           />
         </div>
         {/* Restrizione arrivata da un grafico. Sta PRIMA dei chip e porta una
@@ -272,8 +273,8 @@ export function TrackList({
           value={density}
           onChange={setDensity}
           options={[
-            { value: 'comfortable', label: t(locale, 'density.comfortable') },
-            { value: 'compact', label: t(locale, 'density.compact') }
+            { value: 'comfortable', label: t('density.comfortable') },
+            { value: 'compact', label: t('density.compact') }
           ]}
         />
       </div>
@@ -281,11 +282,11 @@ export function TrackList({
       {/* intestazione colonne */}
       <div className="flex items-center gap-3 border-b border-line-subtle bg-surface-3 px-3 py-1.5 font-mono text-[9.5px] uppercase tracking-[.12em] text-ink-lo">
         <span className="w-4 shrink-0" />
-        <span className="flex-1">{t(locale, 'tracks.colTrack')}</span>
-        <span className="w-14 shrink-0 text-right">{t(locale, 'tracks.colBpm')}</span>
-        <span className="w-10 shrink-0 text-right">{t(locale, 'tracks.colKey')}</span>
-        <span className="w-12 shrink-0 text-right">{t(locale, 'tracks.colLength')}</span>
-        <span className="w-40 shrink-0">{t(locale, 'tracks.colStatus')}</span>
+        <span className="flex-1">{t('tracks.colTrack')}</span>
+        <span className="w-14 shrink-0 text-right">{t('tracks.colBpm')}</span>
+        <span className="w-10 shrink-0 text-right">{t('tracks.colKey')}</span>
+        <span className="w-12 shrink-0 text-right">{t('tracks.colLength')}</span>
+        <span className="w-40 shrink-0">{t('tracks.colStatus')}</span>
       </div>
 
       {/* corpo virtualizzato */}
@@ -354,10 +355,10 @@ export function TrackList({
                       </span>
                       <span className="flex w-40 shrink-0 flex-wrap gap-1">
                         {tr.needs_review === 1 && (
-                          <Badge variant="warning">{t(locale, 'badge.review')}</Badge>
+                          <Badge variant="warning">{t('badge.review')}</Badge>
                         )}
-                        {!tr.camelot && <Badge variant="neutral">{t(locale, 'badge.noKey')}</Badge>}
-                        {!tr.genre && <Badge variant="neutral">{t(locale, 'badge.noGenre')}</Badge>}
+                        {!tr.camelot && <Badge variant="neutral">{t('badge.noKey')}</Badge>}
+                        {!tr.genre && <Badge variant="neutral">{t('badge.noGenre')}</Badge>}
                       </span>
                     </>
                   ) : (
@@ -374,15 +375,15 @@ export function TrackList({
       {selected.size > 0 && (
         <div className="flex flex-wrap items-center gap-3 border-t border-line bg-surface-3 px-3 py-2 animate-slide-up">
           <span className="font-mono text-data tabular-nums text-ink-hi">
-            {selected.size.toLocaleString(locale)} {t(locale, 'common.selected')}
+            {t('c.selected', { n: selected.size.toLocaleString(locale) })}
           </span>
-          <span className="text-caption text-ink-lo">{t(locale, 'tracks.selectionHint')}</span>
+          <span className="text-caption text-ink-lo">{t('tracks.selectionHint')}</span>
           <div className="ml-auto flex flex-wrap items-center gap-2">
             <button
               onClick={() => onSelectedChange(new Set())}
               className="text-caption text-ink-lo transition-colors duration-press hover:text-ink-hi"
             >
-              {t(locale, 'common.clear')}
+              {t('c.clear')}
             </button>
             {bulkActions}
           </div>

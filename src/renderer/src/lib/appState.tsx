@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import type { Locale } from './i18n';
+import type { Locale } from './strings';
 
 /**
  * Stato applicativo globale, persistito nelle settings dell'UDM via IPC.
@@ -19,7 +19,6 @@ export type Theme = 'light' | 'dark' | 'system';
 export type ThemeStyle = 'studio' | 'neutral' | 'oled';
 export type Density = 'comfortable' | 'compact';
 export type MotionPref = 'system' | 'reduce';
-export type UserMode = 'simple' | 'expert';
 
 interface AppState {
   theme: Theme;
@@ -32,8 +31,6 @@ interface AppState {
   setDensity: (d: Density) => void;
   motion: MotionPref;
   setMotion: (m: MotionPref) => void;
-  mode: UserMode;
-  setMode: (m: UserMode) => void;
   locale: Locale;
   setLocale: (l: Locale) => void;
   /** false finché il primo avvio non è stato completato o saltato */
@@ -50,7 +47,6 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const [themeStyle, setThemeStyleState] = useState<ThemeStyle>('studio');
   const [density, setDensityState] = useState<Density>('comfortable');
   const [motion, setMotionState] = useState<MotionPref>('system');
-  const [mode, setModeState] = useState<UserMode>('simple');
   const [locale, setLocaleState] = useState<Locale>('it');
   const [onboarded, setOnboardedState] = useState(true);
   const [ready, setReady] = useState(false);
@@ -61,12 +57,11 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     (async () => {
       const get = window.crateforge.settings.get;
-      const [t, style, d, mo, m, l, ob] = await Promise.all([
+      const [t, style, d, mo, l, ob] = await Promise.all([
         get('theme'),
         get('themeStyle'),
         get('density'),
         get('motion'),
-        get('userMode'),
         get('locale'),
         get('onboarded')
       ]);
@@ -74,7 +69,6 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       if (style === 'studio' || style === 'neutral' || style === 'oled') setThemeStyleState(style);
       if (d === 'comfortable' || d === 'compact') setDensityState(d);
       if (mo === 'system' || mo === 'reduce') setMotionState(mo);
-      if (m === 'simple' || m === 'expert') setModeState(m);
       if (l === 'it' || l === 'en' || l === 'fr' || l === 'de') setLocaleState(l);
       setOnboardedState(ob === '1');
       setReady(true);
@@ -161,11 +155,6 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         setMotionState(m);
         persist('motion', m);
       },
-      mode,
-      setMode: (m) => {
-        setModeState(m);
-        persist('userMode', m);
-      },
       locale,
       setLocale: (l) => {
         setLocaleState(l);
@@ -178,7 +167,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       },
       ready
     }),
-    [theme, themeStyle, isDark, density, motion, mode, locale, onboarded, ready, persist]
+    [theme, themeStyle, isDark, density, motion, locale, onboarded, ready, persist]
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

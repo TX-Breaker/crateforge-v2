@@ -38,7 +38,7 @@ const noop = () => () => {};
 const api = {
   settings: {
     get: async (k) =>
-      ({ theme: process.env.CF_THEME || 'dark', themeStyle: process.env.CF_STYLE || 'studio', density: 'comfortable', userMode: 'expert', locale: 'it', onboarded: process.env.CF_ONBOARDED || '1' })[k] ?? null,
+      ({ theme: process.env.CF_THEME || 'dark', themeStyle: process.env.CF_STYLE || 'studio', density: 'comfortable', locale: process.env.CF_LOCALE || 'it', onboarded: process.env.CF_ONBOARDED || '1', 'ui.quarantineDir': 'D:/Quarantena', 'ui.musicDir': 'D:/Music', 'ui.backupDir': 'E:/Backup' })[k] ?? null,
     set: async () => {}
   },
   security: { setGate: async () => ({ ok: true, enabled: false }) },
@@ -135,7 +135,12 @@ const api = {
     }),
     ingestXml: async () => ({ tracks: 0, playlists: 0, cues: 0 }),
     ingestMasterdb: async () => ({ ok: true }),
-    importForeign: async () => ({ ok: true, tracks: 0, playlists: 0, cues: 0, warnings: [] }),
+    /* CF_FAIL_IMPORT=traktor fa fallire quell'import: il test dei flussi
+       verifica che il benvenuto offra «Riprova» e «Salta» sulla riga. */
+    importForeign: async (kind) =>
+      process.env.CF_FAIL_IMPORT === kind
+        ? { ok: false, message: 'collection.nml non leggibile' }
+        : { ok: true, tracks: 1200, playlists: 10, cues: 0, warnings: [] },
     importSerato: async () => ({ ok: true, tracks: 0 })
   },
   health: {
@@ -147,7 +152,16 @@ const api = {
   },
   backup: { plan: async () => ({}), execute: async () => ({}) },
   orphans: { scan: async () => ({ orphans: [], scannedFiles: 0, knownTracks: 0, reclaimableBytes: 0, scanId: 'x' }), quarantine: async () => ({ moved: 0, failed: [], quarantineDir: '' }), remove: async () => ({ deleted: 0, freedBytes: 0, failed: [] }) },
-  quarantine: { list: async () => [], restore: async () => ({ restored: 0, skipped: [] }) },
+  quarantine: {
+    list: async () => [
+      {
+        dir: 'D:/Quarantena/2026-07-28',
+        entries: [
+          { from: 'D:/Music/Verglas - Hollow Season (1).aiff', to: 'D:/Quarantena/2026-07-28/Verglas - Hollow Season (1).aiff', at: '2026-07-28 14:30:00', present: true, originFree: true, size: 61234567 }
+        ]
+      }
+    ],
+    restore: async () => ({ restored: 0, skipped: [] }) },
   shell: { showFolder: async () => ({ ok: true }) },
   report: { generate: async () => ({ rows: 0, outPath: '' }), view: async () => ({ columns: [], rows: [], totalRows: 0, sheetName: '' }) },
   exporter: { limits: async () => ({}), rekordboxXml: async () => ({ tracks: 0, playlists: 0 }), traktorNml: async () => ({ tracks: 0 }), virtualdjXml: async () => ({ tracks: 0 }), beatshiftPreview: async () => ({ ok: true, tracks: 0, cues: 0, shiftedCues: 0, byCase: { A: 0, B: 0, C: 0, D: 0, unknown: 0, other: 0 }, shifts: [], sameApp: 0 }),
@@ -158,7 +172,7 @@ const api = {
     seratoDatabase: async () => ({ ok: true })
   },
   exportAll: async () => ({ outDir: '', results: [], skipped: [] }),
-  relocator: { findBroken: async () => [], matchAndWrite: async () => ({ broken: 0, matched: 0, ambiguous: 0, written: 0 }) },
+  relocator: { findBroken: async () => [{ trackId: 3, title: 'Hollow Season', artist: 'Verglas', oldPath: 'C:/Old/Music/Verglas - Hollow Season.aiff' }], matchAndWrite: async () => ({ broken: 0, matched: 0, ambiguous: 0, written: 0 }) },
   relocatorFp: { match: async () => ({ ok: true, broken: 0, matched: 0, scanned: 0 }), writeXml: async () => ({ written: 0 }) },
   oplog: {
     list: async () => [
@@ -169,9 +183,23 @@ const api = {
     ],
     exportTxt: async () => ({})
   },
-  dedup: { run: async () => ({ ok: true, groups: [], stats: {} }) },
+  dedup: {
+    run: async () => ({
+      ok: true,
+      groups: [
+        {
+          acousticId: 'fp-1',
+          tracks: [
+            { id: 3, title: 'Hollow Season', artist: 'Verglas', path: 'D:/Music/Verglas - Hollow Season.aiff', filesize: 61234567 },
+            { id: 33, title: 'Hollow Season', artist: 'Verglas', path: 'D:/Music/Verglas - Hollow Season.mp3', filesize: 9234567 }
+          ]
+        }
+      ],
+      stats: { fingerprinted: 2 }
+    })
+  },
   cues: { analyze: async () => ({ ok: true, cues: [] }), save: async () => ({}) },
-  tagger: { propose: async () => ({ ok: true, proposals: [], queried: 0, skipped: 0 }), apply: async () => ({ ok: true, applied: 0 }) },
+  tagger: { propose: async () => ({ ok: true, proposals: [{ trackId: 2, artist: 'Halva Ström', title: 'Pale Circuit (Extended)', field: 'genre', current: null, proposed: 'Techno', source: 'MusicBrainz' }], queried: 1, skipped: 0 }), apply: async () => ({ ok: true, applied: 0 }) },
   stems: { run: async () => ({ ok: true }) },
   watcher: { start: async () => ({ added: 0 }), stop: async () => ({}), status: async () => ({ running: true, folder: 'D:/Downloads/Promos' }), scan: async () => ({ added: 0 }), onNewItems: noop },
   inbox: { list: async () => [], setStatus: async () => ({}), prepareXml: async () => ({ written: 0, excludedForIssues: 0 }) },

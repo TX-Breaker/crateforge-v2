@@ -3,7 +3,7 @@ import { RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Notice, Skeleton } from '@/components/ui/misc';
 import { useAppState } from '@/lib/appState';
-import { pageText } from '@/lib/i18nPages';
+import { useT } from '@/lib/strings';
 import { shortenPath } from '@/lib/utils';
 
 interface ViewerData {
@@ -27,8 +27,7 @@ const WIDTHS_KEY = 'reportViewer.colWidths';
  */
 export function ExcelViewer({ filePath }: { filePath: string }) {
   const { locale } = useAppState();
-  const tp = (k: string, p?: Record<string, string | number>) => pageText(locale, 'report', k, p);
-  const tc = (k: string, p?: Record<string, string | number>) => pageText(locale, 'common', k, p);
+  const t = useT();
   const [data, setData] = useState<ViewerData | null>(null);
   const [page, setPage] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -92,7 +91,7 @@ export function ExcelViewer({ filePath }: { filePath: string }) {
   }, []);
 
   if (error) {
-    return <Notice variant="destructive">{tp('viewerErr', { msg: error })}</Notice>;
+    return <Notice variant="destructive">{t('xl.viewerErr', { msg: error })}</Notice>;
   }
   if (!data) {
     return (
@@ -116,7 +115,7 @@ export function ExcelViewer({ filePath }: { filePath: string }) {
           {data.sheetName} · {data.totalRows.toLocaleString(locale)}
         </span>
         <Button variant="ghost" size="sm" onClick={resetWidths}>
-          <RotateCcw /> {tp('resetCols')}
+          <RotateCcw /> {t('xl.resetCols')}
         </Button>
       </div>
 
@@ -137,7 +136,7 @@ export function ExcelViewer({ filePath }: { filePath: string }) {
                   <span
                     onMouseDown={(e) => onDragStart(c, e)}
                     className="absolute -right-1 top-0 z-20 h-full w-2 cursor-col-resize"
-                    title={tp('dragToResize')}
+                    title={t('xl.dragToResize')}
                   />
                 </th>
               ))}
@@ -168,16 +167,16 @@ export function ExcelViewer({ filePath }: { filePath: string }) {
       {totalPages > 1 && (
         <div className="flex items-center gap-2 text-caption text-ink-lo">
           <Button variant="ghost" size="sm" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>
-            {tc('prev')}
+            {t('c.prev')}
           </Button>
-          {tc('pageOf', { p: page + 1, tot: totalPages })}
+          {t('c.pageOf', { p: page + 1, tot: totalPages })}
           <Button
             variant="ghost"
             size="sm"
             disabled={page + 1 >= totalPages}
             onClick={() => setPage((p) => p + 1)}
           >
-            {tc('next')}
+            {t('c.next')}
           </Button>
         </div>
       )}

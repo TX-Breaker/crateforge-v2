@@ -2,14 +2,14 @@
  * Smoke test autonomo della UI costruita.
  *
  * Guida l'app reale (bundle di out/renderer) con un bridge IPC finto e, per ogni
- * destinazione e ogni tab, controlla:
+ * schermata, ogni scheda e ogni pannello laterale, controlla:
  *   - nessun errore in console e nessuna eccezione non gestita;
- *   - la pagina non è bianca (il contenuto ha testo);
- *   - nessuna chiave i18n grezza a video (es. "step1", "nav.tracks");
- *   - nessun testo "undefined"/"NaN"/"[object Object]" sfuggito;
+ *   - la schermata non è bianca (il contenuto ha testo);
+ *   - nessuna chiave di traduzione grezza a video (es. "fix.i.noBpm");
+ *   - nessun testo "undefined"/"NaN"/"[object Object]" o segnaposto "{n}";
  *   - i controlli interattivi hanno un nome accessibile.
  * Poi prova le interazioni globali: palette comandi, notifiche, scorciatoie,
- * cambio tema/stile/densità e il rientro da Esperto a Semplice.
+ * temi, densità, animazioni ridotte, e che i gate di scrittura partano spenti.
  *
  * Esce con codice 1 se trova qualcosa.
  */
@@ -24,34 +24,41 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const problems = [];
 const consoleErrors = [];
 
-/** rotte come compaiono nella sidebar (italiano), con le loro tab */
+/** schermate come compaiono nella barra laterale (italiano), con le loro schede */
 const ROUTES = [
-  ['Panoramica', []],
-  ['Salute', []],
-  ['Tracce', []],
+  ['Libreria', []],
+  ['Da sistemare', []],
+  ['Sincronizza', ['Converti', 'Tieni allineati']],
+  ['Set', ['Crea', 'Controlla']],
   ['Backup', []],
-  ['Pulizia', ['Orfani', 'Duplicati', 'Quarantena']],
-  ['Ritrova file', ['Per nome file', 'Per impronta']],
-  ['Arricchisci', ['Cue', 'Tag', 'Stems']],
-  ['Set', ['Costruisci', 'Analizza']],
-  ['Nuovi acquisti', []],
-  ['Converti', []],
-  ['Report', ['Excel', 'SIAE']],
-  ['Attività', []],
-  ['Impostazioni', ['Generale', 'Sicurezza', 'Motore', 'Informazioni']]
+  ['Report', ['Excel', 'SIAE', 'Cronologia']],
+  ['Impostazioni', ['Generale', 'Sicurezza', 'Versioni', 'Informazioni']]
 ];
 
-const INSPECT = `(() => {
-  const main = document.querySelector('main');
-  if (!main) return { ok: false, why: 'nessun <main>' };
-  const text = main.innerText || '';
-  // chiavi i18n grezze: o un identificatore camelCase noto, o un "namespace.chiave"
-  // di uno dei namespace dell'app (i nomi di operazione dell'oplog, tipo
-  // backup.execute, sono dati veri e non vanno segnalati)
-  const rawKey = /(^|\\n)\\s*(step1|step2|subtitle|warnTitle|warnBody|outDone|emptyTitle|emptyBody|(nav|common|tab|target|notif|job|phase|status|palette|action|shortcut|filter|badge|density|safety|danger|app|mode|theme|group)\\.[a-zA-Z]+)\\s*(\\n|$)/;
+/** pannelli laterali aperti dalla schermata Da sistemare: [pulsante, testo atteso] */
+const FIX_SHEETS = [
+  ['Rivedi', 'Doppioni'],
+  ['Aggiungi', 'Senza hot cue'],
+  ['Cerca online', 'Cerca online'],
+  ['File spostati', 'File spostati'],
+  ['File fuori libreria', 'File fuori libreria'],
+  ['Quarantena', 'Quarantena'],
+  ['Separa le tracce', 'Separa le tracce']
+];
+
+const NAMESPACES =
+  'nav|c|shell|lib|fix|rel|dup|q|orph|tag|cue|stem|sync|f|set|bak|rep|st|w|xl|slot|phase|job|notif|palette|action|shortcut|filter|badge|density|tracks|wheel|app';
+
+const inspect = (selector) => `(() => {
+  const all = [...document.querySelectorAll(${JSON.stringify(selector)})];
+  const root = all[all.length - 1];
+  if (!root) return { ok: false, why: 'nessun ' + ${JSON.stringify(selector)} };
+  const text = root.innerText || '';
+  const rawKey = new RegExp('(^|\\\\s)(${NAMESPACES})\\\\.[a-zA-Z][\\\\w.]*(\\\\s|$)');
   const suspicious = [];
   if (text.trim().length < 20) suspicious.push('contenuto quasi vuoto');
-  if (rawKey.test(text)) suspicious.push('chiave i18n grezza a video');
+  const raw = text.match(rawKey);
+  if (raw) suspicious.push('chiave grezza a video: ' + raw[0].trim());
   if (/\\bundefined\\b/.test(text)) suspicious.push('testo "undefined"');
   if (/\\bNaN\\b/.test(text)) suspicious.push('testo "NaN"');
   if (/\\[object Object\\]/.test(text)) suspicious.push('"[object Object]"');
@@ -66,20 +73,14 @@ const INSPECT = `(() => {
 async function unnamedControls(dbg) {
   const { nodes } = await dbg.sendCommand('Accessibility.getFullAXTree');
   const interactive = new Set(['button', 'checkbox', 'switch', 'tab', 'link', 'textbox', 'combobox', 'radio']);
-  const bad = nodes.filter(
-    (n) => interactive.has(n.role?.value) && !n.ignored && !(n.name?.value || '').trim()
-  );
+  const bad = nodes.filter((n) => interactive.has(n.role?.value) && !n.ignored && !(n.name?.value || '').trim());
   const byRole = {};
   for (const n of bad) byRole[n.role.value] = (byRole[n.role.value] || 0) + 1;
   return { count: bad.length, byRole };
 }
 
 /**
- * ⚠ Rete di sicurezza sull'intera esecuzione.
- *
- * Senza, qualunque sonda che lanci fa terminare la funzione principale senza
- * stampare il riepilogo e senza chiamare `app.exit`: il processo resta appeso e
- * chi lo guarda vede solo un rifiuto non gestito. Un test che muore in silenzio
+ * ⚠ Rete di sicurezza sull'intera esecuzione: un test che muore in silenzio
  * non dice che cosa e' rotto, e in piu' non dice nemmeno di essere rotto lui.
  */
 app.whenReady().then(async () => {
@@ -88,7 +89,9 @@ app.whenReady().then(async () => {
     width: 1440,
     height: 900,
     show: true,
-    webPreferences: { preload: join(__dirname, 'preload.cjs'), contextIsolation: true, sandbox: false }
+    /* Senza, una finestra coperta da altre smette di disegnare: le animazioni
+       d'uscita non finiscono mai e il test legge la schermata precedente. */
+    webPreferences: { preload: join(__dirname, 'preload.cjs'), contextIsolation: true, sandbox: false, backgroundThrottling: false }
   });
 
   win.webContents.on('console-message', (_e, level, msg, line, src) => {
@@ -108,14 +111,13 @@ app.whenReady().then(async () => {
   );
   await wait(2500);
 
-  /**
-   * Radix attiva tab e switch su pointerdown, non sul click sintetico: per
-   * pilotarli serve la sequenza completa di eventi puntatore.
-   */
-  const click = (sel, text) =>
+  /** Radix attiva alcuni controlli su pointerdown: serve la sequenza completa. */
+  const click = (sel, text, within = 'body') =>
     win.webContents.executeJavaScript(
       `(() => {
-         const el = [...document.querySelectorAll(${JSON.stringify(sel)})]
+         const scopes = [...document.querySelectorAll(${JSON.stringify(within)})];
+         const scope = scopes[scopes.length - 1] || document.body;
+         const el = [...scope.querySelectorAll(${JSON.stringify(sel)})]
            .find(e => (e.textContent||'').trim().toLowerCase().startsWith(${JSON.stringify(text.toLowerCase())}));
          if (!el) return false;
          for (const type of ['pointerdown', 'mousedown', 'mouseup', 'click']) {
@@ -127,130 +129,125 @@ app.whenReady().then(async () => {
        })()`
     );
 
-  /* ---- giro completo delle destinazioni ---- */
+  const check = async (label, selector) => {
+    const r = await win.webContents.executeJavaScript(inspect(selector));
+    const ax = await unnamedControls(dbg);
+    if (!r.ok) problems.push(`${label}: ${r.why}`);
+    else {
+      for (const s of r.suspicious) problems.push(`${label}: ${s}`);
+      if (ax.count > 0) problems.push(`${label}: ${ax.count} controlli senza nome accessibile ${JSON.stringify(ax.byRole)}`);
+      console.log(`OK  ${label.padEnd(28)} ${String(r.len).padStart(5)} char · ${r.head}`);
+    }
+  };
+
+  const shot = async (name) => {
+    const img = await win.webContents.capturePage();
+    writeFileSync(join(outDir, `${name}.png`), img.toPNG());
+  };
+
+  /* ---- giro completo delle schermate e delle schede ---- */
   for (const [route, tabs] of ROUTES) {
-    const found = await click('nav button', route);
-    if (!found) {
-      problems.push(`rotta non trovata nella sidebar: ${route}`);
+    if (!(await click('nav button', route))) {
+      problems.push(`schermata non trovata nella barra laterale: ${route}`);
       continue;
     }
     await wait(650);
-    const r = await win.webContents.executeJavaScript(INSPECT);
-    const ax = await unnamedControls(dbg);
-    if (!r.ok) problems.push(`${route}: ${r.why}`);
-    else {
-      for (const s of r.suspicious) problems.push(`${route}: ${s}`);
-      if (ax.count > 0)
-        problems.push(`${route}: ${ax.count} controlli senza nome accessibile ${JSON.stringify(ax.byRole)}`);
-      console.log(`OK  ${route.padEnd(16)} ${String(r.len).padStart(5)} char · ${r.head}`);
-    }
+    await check(route, 'main');
+    await shot(route.replace(/\s+/g, '-').toLowerCase());
 
     for (const tab of tabs) {
-      const t = await click('[role="tab"]', tab);
-      if (!t) {
-        problems.push(`${route}: tab non trovata "${tab}"`);
+      if (!(await click('[role="radio"]', tab, 'main'))) {
+        problems.push(`${route}: scheda non trovata "${tab}"`);
         continue;
       }
       await wait(500);
-      // la tab cliccata deve essere davvero quella attiva
       const active = await win.webContents.executeJavaScript(
         `(() => {
-           const a = [...document.querySelectorAll('[role="tab"]')].find(e => e.dataset.state === 'active');
-           return a ? a.textContent.trim() : '';
+           const a = [...document.querySelectorAll('main [role="radio"]')].find(e => e.getAttribute('aria-checked') === 'true' && (e.textContent||'').trim().toLowerCase().startsWith(${JSON.stringify(tab.toLowerCase())}));
+           return !!a;
          })()`
       );
-      if (!active.toLowerCase().startsWith(tab.toLowerCase()))
-        problems.push(`${route}: cliccata la tab "${tab}" ma attiva è "${active}"`);
-      const rt = await win.webContents.executeJavaScript(INSPECT);
-      const axt = await unnamedControls(dbg);
-      if (!rt.ok) problems.push(`${route} › ${tab}: ${rt.why}`);
-      else {
-        for (const s of rt.suspicious) problems.push(`${route} › ${tab}: ${s}`);
-        if (axt.count > 0)
-          problems.push(
-            `${route} › ${tab}: ${axt.count} controlli senza nome ${JSON.stringify(axt.byRole)}`
-          );
-        console.log(`OK  ${(route + ' › ' + tab).padEnd(16)} ${String(rt.len).padStart(5)} char · ${rt.head}`);
-      }
+      if (!active) problems.push(`${route}: cliccata la scheda "${tab}" ma non risulta attiva`);
+      await check(`${route} › ${tab}`, 'main');
     }
   }
 
+  /* ---- pannelli laterali di Da sistemare ---- */
+  await click('nav button', 'Da sistemare');
+  await wait(600);
+  for (const [button, title] of FIX_SHEETS) {
+    if (!(await click('button', button, 'main'))) {
+      problems.push(`Da sistemare: pulsante non trovato "${button}"`);
+      continue;
+    }
+    await wait(900);
+    const header = await win.webContents.executeJavaScript(
+      `(() => { const d = [...document.querySelectorAll('[role="dialog"][data-state="open"]')].pop(); return d ? (d.querySelector('h2')?.textContent || '') : ''; })()`
+    );
+    if (!header.toLowerCase().startsWith(title.toLowerCase()))
+      problems.push(`Da sistemare › ${button}: il pannello non si apre (titolo "${header}")`);
+    else await check(`Pannello › ${title}`, '[role="dialog"][data-state="open"]');
+    await shot(`sheet-${title.replace(/\s+/g, '-').toLowerCase()}`);
+    win.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
+    await wait(500);
+  }
+
   /* ---- interazioni globali ---- */
-  // palette comandi
   win.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'K', modifiers: ['control'] });
   await wait(600);
-  const paletteOpen = await win.webContents.executeJavaScript(
-    `!!document.querySelector('[cmdk-root]') || !!document.querySelector('[role="dialog"]')`
-  );
+  const paletteOpen = await win.webContents.executeJavaScript(`!!document.querySelector('[cmdk-root]')`);
   if (!paletteOpen) problems.push('palette comandi: non si apre con Ctrl+K');
   else {
     const guarded = await win.webContents.executeJavaScript(
       `(() => {
          const items = [...document.querySelectorAll('[cmdk-item]')].map(i => (i.textContent||'').trim());
-         return { total: items.length, guarded: items.filter(t => /apre la pagina/i.test(t)).length };
+         return { total: items.length, guarded: items.filter(t => /apre la schermata/i.test(t)).length };
        })()`
     );
     if (guarded.total === 0) problems.push('palette comandi: nessuna voce elencata');
-    if (guarded.guarded === 0) problems.push('palette comandi: le voci distruttive non sono marcate');
-    console.log(`OK  palette         ${guarded.total} voci · ${guarded.guarded} distruttive marcate`);
-    const img = await win.webContents.capturePage();
-    writeFileSync(join(outDir, 'palette.png'), img.toPNG());
+    if (guarded.guarded === 0) problems.push('palette comandi: le voci che modificano file non sono marcate');
+    console.log(`OK  palette                      ${guarded.total} voci · ${guarded.guarded} protette`);
+    await shot('palette');
   }
   win.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
   await wait(400);
 
-  // scorciatoie con "?" (evento vero: sendInputEvent 'char' non genera keydown)
-  await win.webContents.executeJavaScript(
-    `window.dispatchEvent(new KeyboardEvent('keydown', { key: '?', bubbles: true })), true`
-  );
+  await win.webContents.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: '?', bubbles: true })), true`);
   await wait(500);
   const shortcuts = await win.webContents.executeJavaScript(
     `(() => { const d = document.querySelector('[role="dialog"]'); return d ? (d.innerText||'').slice(0,40) : ''; })()`
   );
-  if (!shortcuts) problems.push('scorciatoie: "?" non apre la cheatsheet');
-  else console.log(`OK  scorciatoie     ${shortcuts.replace(/\n/g, ' ')}`);
+  if (!shortcuts) problems.push('scorciatoie: "?" non apre l’elenco');
+  else console.log(`OK  scorciatoie                  ${shortcuts.replace(/\n/g, ' ')}`);
   win.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
   await wait(400);
 
-  // centro notifiche
   const bell = await win.webContents.executeJavaScript(
-    `(() => { const b = document.querySelector('header button[aria-label]'); if (!b) return false; b.click(); return true; })()`
+    `(() => { const b = document.querySelector('button[aria-label="Notifiche"]'); if (!b) return false; b.click(); return true; })()`
   );
   await wait(600);
   const notif = await win.webContents.executeJavaScript(
     `(() => { const p = document.querySelector('[data-radix-popper-content-wrapper]'); return p ? (p.innerText||'').slice(0,60) : ''; })()`
   );
   if (!bell || !notif) problems.push('centro notifiche: non si apre dalla campanella');
-  else console.log(`OK  notifiche      ${notif.replace(/\n/g, ' ')}`);
+  else console.log(`OK  notifiche                    ${notif.replace(/\n/g, ' ')}`);
   win.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
   await wait(400);
 
-  // temi: le quattro palette devono cambiare davvero il canvas.
-  // La lettura va fatta DOPO il cross-fade di 240ms, altrimenti
-  // getComputedStyle restituisce il colore ancora in transizione.
+  // Le quattro palette devono cambiare davvero il canvas (lettura dopo il cross-fade).
   const palettes = [];
   for (const [style, dark] of [['studio', true], ['studio', false], ['neutral', true], ['neutral', false]]) {
     await win.webContents.executeJavaScript(
-      `(() => {
-         document.documentElement.dataset.style = '${style}';
-         document.documentElement.classList.toggle('dark', ${dark});
-         return true;
-       })()`
+      `(() => { document.documentElement.dataset.style = '${style}'; document.documentElement.classList.toggle('dark', ${dark}); return true; })()`
     );
     await wait(400);
-    const bg = await win.webContents.executeJavaScript(
-      `getComputedStyle(document.body).backgroundColor`
-    );
-    palettes.push(`${style}/${dark ? 'dark' : 'light'}=${bg}`);
+    palettes.push(`${style}/${dark ? 'dark' : 'light'}=${await win.webContents.executeJavaScript(`getComputedStyle(document.body).backgroundColor`)}`);
   }
   if (new Set(palettes.map((p) => p.split('=')[1])).size !== 4)
     problems.push(`le quattro palette non danno quattro canvas distinti: ${palettes.join(' ')}`);
-  else console.log(`OK  palette tema   ${palettes.join(' · ')}`);
-  await win.webContents.executeJavaScript(
-    `document.documentElement.dataset.style='studio'; document.documentElement.classList.add('dark'); true`
-  );
+  else console.log(`OK  palette tema               ${palettes.join(' · ')}`);
+  await win.webContents.executeJavaScript(`document.documentElement.dataset.style='studio'; document.documentElement.classList.add('dark'); true`);
 
-  // densità delle liste
   const dens = await win.webContents.executeJavaScript(
     `(() => {
        const read = () => getComputedStyle(document.documentElement).getPropertyValue('--row-h').trim();
@@ -262,66 +259,34 @@ app.whenReady().then(async () => {
      })()`
   );
   if (!/46px→30px/.test(dens)) problems.push(`densità liste non cambia: ${dens}`);
-  else console.log(`OK  densità        ${dens}`);
+  else console.log(`OK  densità                      ${dens}`);
 
-  // reduced motion
-  /* ⚠ La sonda restituisce un messaggio invece di lanciare quando l'elemento
-     non c'e'. Prima lanciava: `getComputedStyle(null)` diventava un
-     TypeError dentro la pagina, `executeJavaScript` rifiutava, e la funzione
-     principale moriva PRIMA di stampare il riepilogo. Il risultato era un test
-     che non diceva ne' quali controlli erano passati ne' quale era fallito —
-     solo un rifiuto non gestito e nessuna riga finale. Un test che muore in
-     silenzio e' peggio di un test che fallisce. */
   const rm = await win.webContents.executeJavaScript(
     `(() => {
        document.documentElement.dataset.motion = 'reduce';
        const el = document.querySelector('nav button');
-       if (!el) {
-         delete document.documentElement.dataset.motion;
-         return 'NESSUN ELEMENTO: nav button non trovato';
-       }
+       if (!el) { delete document.documentElement.dataset.motion; return 'NESSUN ELEMENTO: nav button non trovato'; }
        const d = getComputedStyle(el).transitionDuration;
        delete document.documentElement.dataset.motion;
        return d;
      })()`
   );
-  // 0.01ms viene serializzato come "1e-05s": è il valore atteso, non un errore
-  if (!/^(1e-05s|0\.00001s|0s)$/.test(rm.trim()))
-    problems.push(`reduced motion non azzera le transizioni: ${rm}`);
-  else console.log(`OK  reduced motion  transition=${rm}`);
+  if (!/^(1e-05s|0\.00001s|0s)$/.test(rm.trim())) problems.push(`reduced motion non azzera le transizioni: ${rm}`);
+  else console.log(`OK  reduced motion               transition=${rm}`);
 
-  /* ---- modalità Semplice: le destinazioni Esperto spariscono ---- */
-  const simple = await win.webContents.executeJavaScript(
-    `(() => {
-       const before = document.querySelectorAll('nav button').length;
-       return before;
-     })()`
-  );
+  /* ---- i gate di scrittura partono spenti ---- */
   await click('nav button', 'Impostazioni');
   await wait(600);
-  await click('[role="tab"]', 'Sicurezza');
-  await wait(500);
-  const flipped = await win.webContents.executeJavaScript(
-    `(() => {
-       const sw = document.querySelector('button[role="switch"][data-state="checked"]');
-       if (!sw) return false;
-       for (const type of ['pointerdown', 'mousedown', 'mouseup', 'click']) {
-         sw.dispatchEvent(type.startsWith('pointer')
-           ? new PointerEvent(type, { bubbles: true, cancelable: true })
-           : new MouseEvent(type, { bubbles: true, cancelable: true }));
-       }
-       return true;
-     })()`
+  await click('[role="radio"]', 'Sicurezza', 'main');
+  await wait(600);
+  const gates = await win.webContents.executeJavaScript(
+    `[...document.querySelectorAll('main button[role="switch"]')].map(s => s.getAttribute('data-state'))`
   );
-  if (!flipped) problems.push('modalità: nessuno switch attivo trovato in Impostazioni › Sicurezza');
-  await wait(900);
-  const after = await win.webContents.executeJavaScript(`document.querySelectorAll('nav button').length`);
-  if (!(after < simple)) problems.push(`modalità Semplice: le voci Esperto non spariscono (${simple} → ${after})`);
-  else console.log(`OK  modalità       Esperto ${simple} voci → Semplice ${after} voci`);
+  if (gates.length !== 2 || gates.some((g) => g !== 'unchecked'))
+    problems.push(`gate di scrittura: attesi due interruttori spenti, trovati ${JSON.stringify(gates)}`);
+  else console.log(`OK  gate di scrittura            2 interruttori, spenti`);
 
   /* ---- errori raccolti ---- */
-  /* ⚠ Anche questa lettura puo' fallire, e se fallisce non deve portarsi via
-     il riepilogo di tutto cio' che e' stato verificato prima. */
   try {
     const winErrors = await win.webContents.executeJavaScript(`window.__cfErr || []`);
     for (const e of winErrors) problems.push(`eccezione renderer: ${e}`);
@@ -331,18 +296,15 @@ app.whenReady().then(async () => {
   for (const e of consoleErrors) problems.push(`console: ${e}`);
 
   console.log('\n=========================================');
-  if (problems.length === 0) {
-    console.log('SMOKE TEST: nessun problema trovato.');
-  } else {
+  if (problems.length === 0) console.log('SMOKE TEST: nessun problema trovato.');
+  else {
     console.log(`SMOKE TEST: ${problems.length} problemi`);
     for (const p of problems) console.log(' - ' + p);
   }
   console.log('=========================================');
-
   app.exit(problems.length ? 1 : 0);
 }).catch((err) => {
-  console.log('');
-  console.log('=========================================');
+  console.log('\n=========================================');
   console.log('SMOKE TEST: interrotto da un errore');
   console.log(' - ' + (err && err.stack ? err.stack : String(err)));
   console.log('=========================================');

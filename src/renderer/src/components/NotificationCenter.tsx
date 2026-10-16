@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import { AlertTriangle, CheckCircle2, Info, XCircle } from 'lucide-react';
 import { cn, formatClock } from '@/lib/utils';
-import { useAppState } from '@/lib/appState';
-import { t } from '@/lib/i18n';
+import { useT } from '@/lib/strings';
 import {
   filterNotifications,
   useNotifications,
@@ -29,28 +28,28 @@ const TONE: Record<NotifyKind, string> = {
  * nella pagina Attività — questa lista è la memoria breve, non l'archivio.
  */
 export function NotificationCenter() {
-  const { locale } = useAppState();
+  const t = useT();
   const { items, markAllRead, unread } = useNotifications();
   const [filter, setFilter] = useState<NotifyFilter>('all');
   const shown = filterNotifications(items, filter);
 
   const filters: { id: NotifyFilter; label: string }[] = [
-    { id: 'all', label: t(locale, 'notif.all') },
-    { id: 'jobs', label: t(locale, 'notif.jobs') },
-    { id: 'warnings', label: t(locale, 'notif.warnings') },
-    { id: 'errors', label: t(locale, 'notif.errors') }
+    { id: 'all', label: t('notif.all') },
+    { id: 'jobs', label: t('notif.jobs') },
+    { id: 'warnings', label: t('notif.warnings') },
+    { id: 'errors', label: t('notif.errors') }
   ];
 
   return (
     <div className="flex max-h-[70vh] flex-col">
       <div className="flex items-center justify-between border-b border-line-subtle px-3.5 py-2.5">
-        <span className="text-section text-ink-hi">{t(locale, 'notif.title')}</span>
+        <span className="text-section text-ink-hi">{t('notif.title')}</span>
         <button
           onClick={markAllRead}
           disabled={unread === 0}
           className="text-caption text-ink-lo transition-colors duration-press hover:text-ink-hi disabled:opacity-40"
         >
-          {t(locale, 'notif.markAllRead')}
+          {t('notif.markAllRead')}
         </button>
       </div>
 
@@ -74,7 +73,7 @@ export function NotificationCenter() {
       <div className="min-h-0 flex-1 overflow-y-auto">
         {shown.length === 0 ? (
           <p className="px-3.5 py-8 text-center text-caption text-ink-lo">
-            {t(locale, 'notif.empty')}
+            {t('notif.empty')}
           </p>
         ) : (
           shown.map((n) => (
@@ -109,7 +108,7 @@ export function NotificationCenter() {
       </div>
 
       <div className="border-t border-line-subtle px-3.5 py-2 text-caption text-ink-lo">
-        {t(locale, 'notif.sessionOnly')}
+        {t('notif.sessionOnly')}
       </div>
     </div>
   );

@@ -1,18 +1,15 @@
 import React, { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
-import { ROUTE_BY_ID, visibleTabs, type RouteId } from '@/app/routes';
-import { useAppState } from './appState';
+import { ROUTE_BY_ID, type RouteId } from '@/app/routes';
 
 /**
- * Router interno tipizzato. Niente URL: l'app è una finestra sola, e un router
- * completo costerebbe più di quanto renda. Quello che serve davvero è qui:
- * rotta + tab attiva, memoria della posizione di scroll per rotta, e un piccolo
- * stack indietro/avanti per le scorciatoie.
+ * Navigazione interna: una destinazione, un'eventuale tab, e parametri per
+ * aprire una schermata già nel punto giusto (per esempio la Libreria filtrata
+ * su una tonalità, o Da sistemare con uno strumento già aperto).
  */
 
 export interface Location {
   route: RouteId;
   tab?: string;
-  /** contesto opzionale passato alla destinazione (es. una ricerca da ⌘K) */
   params?: Record<string, string>;
 }
 
@@ -21,7 +18,6 @@ interface RouterApi extends Location {
   setTab: (tab: string) => void;
   back: () => void;
   canGoBack: boolean;
-  /** scroll memorizzato per rotta, gestito dal contenitore della shell */
   scrollFor: (route: RouteId) => number;
   rememberScroll: (route: RouteId, top: number) => void;
 }
@@ -29,35 +25,21 @@ interface RouterApi extends Location {
 const Ctx = createContext<RouterApi | null>(null);
 
 export function RouterProvider({ children }: { children: React.ReactNode }) {
-  const { mode } = useAppState();
-  const [loc, setLoc] = useState<Location>({ route: 'overview' });
+  const [loc, setLoc] = useState<Location>({ route: 'library' });
   const [stack, setStack] = useState<Location[]>([]);
   const scrolls = useRef<Map<RouteId, number>>(new Map());
 
-  const expert = mode === 'expert';
-
-  // Se si torna in Semplice mentre si è su una destinazione Esperto, si rientra
-  // in Panoramica: stessa regola della V1, applicata anche alle tab.
-  const safeLoc = useMemo<Location>(() => {
-    const def = ROUTE_BY_ID[loc.route];
-    if (!def || (def.expertOnly && !expert)) return { route: 'overview' };
-    const tabs = visibleTabs(def, expert);
-    if (tabs.length === 0) return { route: loc.route, params: loc.params };
-    const tab = tabs.some((t) => t.id === loc.tab) ? loc.tab : tabs[0].id;
-    return { route: loc.route, tab, params: loc.params };
-  }, [loc, expert]);
-
-  const go = useCallback(
-    (route: RouteId, tab?: string, params?: Record<string, string>) => {
-      setStack((s) => [...s, safeLoc].slice(-20));
-      setLoc({ route, tab, params });
-    },
-    [safeLoc]
-  );
+  const go = useCallback((route: RouteId, tab?: string, params?: Record<string, string>) => {
+    if (!ROUTE_BY_ID[route]) return;
+    setLoc((cur) => {
+      setStack((s) => [...s.slice(-19), cur]);
+      return { route, tab, params };
+    });
+  }, []);
 
   const value = useMemo<RouterApi>(
     () => ({
-      ...safeLoc,
+      ...loc,
       go,
       setTab: (tab: string) => setLoc((l) => ({ ...l, tab })),
       back: () =>
@@ -70,7 +52,7 @@ export function RouterProvider({ children }: { children: React.ReactNode }) {
       scrollFor: (route) => scrolls.current.get(route) ?? 0,
       rememberScroll: (route, top) => scrolls.current.set(route, top)
     }),
-    [safeLoc, go, stack.length]
+    [loc, go, stack.length]
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

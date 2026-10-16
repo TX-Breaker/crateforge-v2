@@ -1,8 +1,8 @@
+import { useCallback, useEffect, useState } from 'react';
 import { FolderOpen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input, Label } from '@/components/ui/misc';
-import { useAppState } from '@/lib/appState';
-import { t } from '@/lib/i18n';
+import { useT } from '@/lib/strings';
 import { cn } from '@/lib/utils';
 
 /**
@@ -24,14 +24,14 @@ export function PathField({
   invalid?: boolean;
   className?: string;
 }) {
-  const { locale } = useAppState();
+  const t = useT();
   return (
     <div className={cn('space-y-1.5', className)}>
       <Label>{label}</Label>
       <div className="flex gap-2">
         <Input value={value} readOnly placeholder="—" mono={!!value} invalid={invalid} />
         <Button variant="secondary" onClick={onBrowse} className="shrink-0">
-          <FolderOpen /> {t(locale, 'common.browse')}
+          <FolderOpen /> {t('c.browse')}
         </Button>
       </div>
       {hint && <p className="text-caption text-ink-lo">{hint}</p>}
@@ -39,7 +39,22 @@ export function PathField({
   );
 }
 
-/** Riga introduttiva della pagina, sotto il titolo della topbar. */
-export function PageIntro({ children }: { children: React.ReactNode }) {
-  return <p className="max-w-3xl text-body text-ink-mid">{children}</p>;
+/**
+ * Cartella ricordata fra una sessione e l'altra: la cartella della musica o
+ * quella della quarantena si scelgono una volta, non a ogni uso.
+ */
+export function useRememberedDir(key: string): [string, () => Promise<string | null>] {
+  const [dir, setDir] = useState('');
+  useEffect(() => {
+    void window.crateforge.settings.get(`ui.${key}`).then((v) => setDir(v ?? ''));
+  }, [key]);
+  const pick = useCallback(async () => {
+    const d = (await window.crateforge.dialog.openDirectory()) as string | null;
+    if (d) {
+      setDir(d);
+      void window.crateforge.settings.set(`ui.${key}`, d);
+    }
+    return d;
+  }, [key]);
+  return [dir, pick];
 }

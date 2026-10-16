@@ -1,7 +1,6 @@
 import { useLibrary } from '@/lib/library';
-import { useAppState } from '@/lib/appState';
 import { isMac } from '@/lib/platform';
-import { t } from '@/lib/i18n';
+import { useT } from '@/lib/strings';
 import { cn, shortenPath } from '@/lib/utils';
 import { CrateTile } from '@/components/Brand';
 
@@ -15,7 +14,7 @@ import { CrateTile } from '@/components/Brand';
  *            striscia da 34px. Nessun bottone finto, nessun IPC per chiudere.
  */
 export function TitleBar() {
-  const { locale } = useAppState();
+  const t = useT();
   const { rbPaths, stats } = useLibrary();
 
   return (
@@ -36,7 +35,7 @@ export function TitleBar() {
         {stats && rbPaths?.dir ? (
           <span className="text-ink-lo"> — {shortenPath(rbPaths.dir, 40)}</span>
         ) : (
-          <span className="text-ink-lo"> — {t(locale, 'app.tagline')}</span>
+          <span className="text-ink-lo"> — {t('app.tagline')}</span>
         )}
       </span>
     </div>

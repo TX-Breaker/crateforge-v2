@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { compatibleKeys, isCompatible, parseCamelot } from '@core/harmony';
 import { cn } from '@/lib/utils';
 import { useAppState } from '@/lib/appState';
-import { t } from '@/lib/i18n';
+import { useT } from '@/lib/strings';
 import { aaSafe, ensureReadable, mix, readableInk } from '@/lib/colors';
 import { tokenHex } from '@/lib/themeTokens';
 import { CAMELOT_HUES as CAM, CAMELOT_KEYNAMES as KEYNAME } from '@/lib/camelotHues';
@@ -37,7 +37,8 @@ export function CamelotWheel({
   className?: string;
 }) {
   const [hover, setHover] = useState<string | null>(null);
-  const { locale, themeStyle, isDark } = useAppState();
+  const { themeStyle, isDark } = useAppState();
+  const t = useT();
   const sel = parseCamelot(value) ?? { num: 8, letter: 'A' as const };
 
   /* Inchiostri presi dal tema ATTIVO, così la ruota resta AA in tutte le
@@ -171,7 +172,7 @@ export function CamelotWheel({
           fill={inks.muted}
           style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8.5, letterSpacing: '.14em' }}
         >
-          {(hover ? t(locale, 'wheel.hover') : t(locale, 'wheel.selected')).toUpperCase()}
+          {(hover ? t('wheel.hover') : t('wheel.selected')).toUpperCase()}
         </text>
         {/* La tonalità al centro è scritta nella SUA tinta, ma portata sopra
             4.5:1 contro il pannello: sulle palette chiare un ciano acceso su

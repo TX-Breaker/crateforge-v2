@@ -10,8 +10,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Checkbox, Input, Label } from '@/components/ui/misc';
-import { useAppState } from '@/lib/appState';
-import { t } from '@/lib/i18n';
+import { useT } from '@/lib/strings';
 import { cn } from '@/lib/utils';
 
 export interface DangerFact {
@@ -49,7 +48,8 @@ export function DangerConfirmDialog({
   confirmLabel: string;
   onConfirm: () => void;
 }) {
-  const { locale } = useAppState();
+  const t = useT();
+  const [pre, post] = t('c.typeToConfirm', { word: '\u0000' }).split('\u0000');
   const [typed, setTyped] = useState('');
   const [checked, setChecked] = useState(false);
   const armed = typed.trim() === confirmWord && checked;
@@ -98,8 +98,9 @@ export function DangerConfirmDialog({
         <div className="space-y-3">
           <div className="space-y-1.5">
             <Label htmlFor="confirm-word">
-              {t(locale, 'danger.typeToConfirm')}{' '}
+              {pre}
               <span className="font-mono font-bold text-destructive">{confirmWord}</span>
+              {post}
             </Label>
             <Input
               id="confirm-word"
@@ -117,13 +118,13 @@ export function DangerConfirmDialog({
               checked={checked}
               onCheckedChange={(v) => setChecked(v === true)}
             />
-            {t(locale, 'danger.understood')}
+            {t('c.understood')}
           </label>
         </div>
 
         <DialogFooter>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
-            {t(locale, 'common.cancel')}
+            {t('c.cancel')}
           </Button>
           <Button
             variant={armed ? 'destructive' : 'secondary'}

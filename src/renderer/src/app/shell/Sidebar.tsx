@@ -1,22 +1,25 @@
-import { ChevronsLeft, Search, ShieldCheck } from 'lucide-react';
+import { useState } from 'react';
+import * as Popover from '@radix-ui/react-popover';
+import { AlertTriangle, Bell, ChevronsLeft, Moon, Search, ShieldCheck, Sun } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAppState } from '@/lib/appState';
 import { useRouter } from '@/lib/router';
 import { useLibrary } from '@/lib/library';
-import { t } from '@/lib/i18n';
+import { useNotifications } from '@/lib/notifications';
+import { openIssueCount } from '@/lib/issues';
+import { useT } from '@/lib/strings';
 import { shortcut } from '@/lib/platform';
 import { Tooltip } from '@/components/ui/misc';
 import { CrateTile } from '@/components/Brand';
-import { GROUPS, visibleRoutes, type RouteDef } from '@/app/routes';
+import { NotificationCenter } from '@/components/NotificationCenter';
+import { ROUTES, type RouteDef } from '@/app/routes';
 
 /**
- * Sidebar (§3): sei gruppi semantici, contatori vivi sul bordo destro,
- * collasso a 68px con le icone sempre visibili.
+ * Colonna di navigazione: sette voci, nessun gruppo.
  *
- * Segnale della modalità Esperto (§3.2, proposta B): l'intera colonna passa a
- * un tono più caldo e più scuro e prende un chip in testata; ogni destinazione
- * sperimentale porta un punto. Persistente e inequivocabile, non costa spazio
- * di layout e non compete con un avviso vero.
+ * In fondo vivono le tre cose che prima occupavano una barra in alto e una in
+ * basso: notifiche, tema, e lo stato del modulo di analisi — mostrato solo
+ * quando qualcosa non va. Uno stato sano non ha bisogno di dirlo in continuazione.
  */
 export function Sidebar({
   collapsed,
@@ -27,173 +30,179 @@ export function Sidebar({
   onToggleCollapse: () => void;
   onOpenPalette: () => void;
 }) {
-  const { mode, locale } = useAppState();
+  const t = useT();
+  const { locale, isDark, setTheme } = useAppState();
   const { route, go } = useRouter();
-  const { stats, health, arrivals } = useLibrary();
-  const expert = mode === 'expert';
-  const routes = visibleRoutes(expert);
+  const { stats, health, preflight, sidecar } = useLibrary();
+  const { unread } = useNotifications();
+  const [bellOpen, setBellOpen] = useState(false);
+  const engineDown = preflight !== null && sidecar !== null && !(preflight.ok && sidecar.available);
 
-  /**
-   * Contatore della destinazione. Lo zero SI MOSTRA, spento (§8.2): un numero
-   * che sparisce quando vale zero costringe a chiedersi se il dato manchi o
-   * sia davvero zero, e sono due risposte diverse. Qui `null` significa una
-   * cosa sola — non lo sappiamo ancora — e allora non si scrive niente,
-   * mai un segnaposto o il conteggio della scansione precedente.
-   */
-  const counterFor = (r: RouteDef): string | null => {
-    if (!r.counter) return null;
-    if (r.counter === 'health') return health ? String(health.score) : null;
-    if (r.counter === 'tracks') return stats ? stats.tracks.toLocaleString(locale) : null;
-    if (r.counter === 'review') return stats ? stats.needsReview.toLocaleString(locale) : null;
-    if (r.counter === 'arrivals') return arrivals.toLocaleString(locale);
+  /* Lo zero si mostra spento invece di sparire: un contatore che scompare
+     costringe a chiedersi se il dato manchi o valga zero. `null` = non ancora
+     noto, e allora non si scrive niente. */
+  const counter = (r: RouteDef): { text: string; zero: boolean; warn: boolean } | null => {
+    if (r.counter === 'tracks' && stats) {
+      return { text: stats.tracks.toLocaleString(locale), zero: stats.tracks === 0, warn: false };
+    }
+    if (r.counter === 'issues') {
+      const n = openIssueCount(health);
+      return n === null ? null : { text: String(n), zero: n === 0, warn: n > 0 };
+    }
     return null;
   };
 
-  const counterIsZero = (r: RouteDef): boolean =>
-    (r.counter === 'review' && stats?.needsReview === 0) ||
-    (r.counter === 'arrivals' && arrivals === 0);
+  const item = (r: RouteDef) => {
+    const active = route === r.id;
+    const c = counter(r);
+    const btn = (
+      <button
+        key={r.id}
+        onClick={() => go(r.id)}
+        aria-current={active ? 'page' : undefined}
+        className={cn(
+          'flex w-full items-center gap-3 rounded-control px-3 py-2 text-left',
+          'transition-colors duration-press [&_svg]:size-[18px] [&_svg]:shrink-0',
+          collapsed && 'justify-center px-0',
+          active ? 'bg-accent/15 text-ink-hi' : 'text-ink-mid hover:bg-surface-hover hover:text-ink-hi'
+        )}
+      >
+        <span className={active ? 'text-accent' : 'text-ink-lo'}>{r.icon}</span>
+        {!collapsed && (
+          <>
+            <span className="flex-1 truncate text-[14px]">{t(r.labelKey)}</span>
+            {c && (
+              <span
+                className={cn(
+                  'shrink-0 font-mono text-[11px] tabular-nums',
+                  c.warn
+                    ? 'rounded-full bg-warning/20 px-1.5 text-warning'
+                    : c.zero
+                      ? 'text-ink-disabled'
+                      : 'text-ink-lo'
+                )}
+              >
+                {c.text}
+              </span>
+            )}
+          </>
+        )}
+      </button>
+    );
+    return collapsed ? (
+      <Tooltip key={r.id} side="right" content={t(r.labelKey)}>
+        {btn}
+      </Tooltip>
+    ) : (
+      btn
+    );
+  };
+
+  const iconBtn =
+    'relative grid size-8 place-items-center rounded-control text-ink-lo transition-colors duration-press hover:bg-surface-hover hover:text-ink-hi [&_svg]:size-4';
 
   return (
     <aside
       className={cn(
-        'flex shrink-0 flex-col border-r border-line-subtle transition-[width,background-color] duration-swap ease-swift',
-        collapsed ? 'w-sidebar-collapsed' : 'w-sidebar',
-        expert ? 'bg-surface-expert' : 'bg-surface-1'
+        'flex shrink-0 flex-col border-r border-line-subtle bg-surface-1 transition-[width] duration-swap ease-swift',
+        collapsed ? 'w-sidebar-collapsed' : 'w-[224px]'
       )}
     >
-      {/* marchio + versione */}
-      <div className={cn('flex items-center gap-2.5 px-4 pb-3 pt-4', collapsed && 'justify-center px-0')}>
-        {/* Disegno C a 22px (specifica logo §03 e §05): è la stessa piastrella
-            che, con la colonna collassata a 68px, resta da sola al centro — per
-            questo il marchio doveva funzionare a 22px senza la parola. */}
-        <CrateTile size={22} radius={5} />
-        {!collapsed && (
-          <>
-            <span className="text-body font-semibold tracking-tight text-ink-hi">CrateForge</span>
-            <span className="ml-auto font-mono text-[9.5px] tracking-[.08em] text-ink-lo">
-              V2.0.0
-            </span>
-          </>
-        )}
+      <div className={cn('flex items-center gap-2.5 px-4 pb-4 pt-4', collapsed && 'justify-center px-0')}>
+        <CrateTile size={24} radius={6} />
+        {!collapsed && <span className="text-[15px] font-semibold tracking-tight text-ink-hi">CrateForge</span>}
       </div>
 
-      {/* chip modalità Esperto */}
-      {expert && !collapsed && (
-        <div className="mx-3 mb-2 flex items-center gap-1.5 rounded-chip bg-warning/15 px-2 py-1">
-          <span className="size-1.5 rounded-full bg-warning" />
-          <span className="font-mono text-[9.5px] font-bold uppercase tracking-[.12em] text-warning">
-            {t(locale, 'mode.expert')}
-          </span>
-        </div>
-      )}
-
-      {/* apertura palette comandi */}
       <button
         onClick={onOpenPalette}
         className={cn(
-          'mx-3 mb-3 flex h-8 items-center gap-2 rounded-control border border-line bg-surface-3 px-2.5',
+          'mx-3 mb-4 flex h-9 items-center gap-2 rounded-control border border-line bg-surface-2 px-3',
           'text-caption text-ink-lo transition-colors duration-press hover:border-line-strong hover:text-ink-mid',
           collapsed && 'mx-2 justify-center px-0'
         )}
       >
-        <Search className="size-3.5 shrink-0" />
+        <Search className="size-4 shrink-0" />
         {!collapsed && (
           <>
-            <span className="truncate">{t(locale, 'common.search')}</span>
-            <kbd className="ml-auto rounded-[3px] border border-line px-1 font-mono text-[9.5px] text-ink-lo">
-              {shortcut('K')}
-            </kbd>
+            <span className="truncate text-body">{t('shell.search')}</span>
+            <kbd className="ml-auto font-mono text-[10px] text-ink-lo">{shortcut('K')}</kbd>
           </>
         )}
       </button>
 
-      <nav className="flex-1 overflow-y-auto px-2 pb-2">
-        {GROUPS.map((g) => {
-          const items = routes.filter((r) => r.group === g.id);
-          if (items.length === 0) return null;
-          return (
-            <div key={g.id} className="mb-3">
-              {!collapsed && (
-                <div className="px-2 pb-1.5 pt-1 font-mono text-[9.5px] uppercase tracking-[.14em] text-ink-lo">
-                  {t(locale, g.labelKey)}
-                </div>
-              )}
-              <div className="space-y-0.5">
-                {items.map((r) => {
-                  const active = route === r.id;
-                  const counter = counterFor(r);
-                  const item = (
-                    <button
-                      key={r.id}
-                      onClick={() => go(r.id)}
-                      aria-current={active ? 'page' : undefined}
-                      className={cn(
-                        'group flex w-full items-center gap-2.5 rounded-control px-2.5 py-[7px] text-left',
-                        'transition-colors duration-press [&_svg]:size-4 [&_svg]:shrink-0',
-                        collapsed && 'justify-center px-0',
-                        active
-                          ? 'bg-accent/15 text-ink-hi'
-                          : 'text-ink-mid hover:bg-surface-hover hover:text-ink-hi'
-                      )}
-                    >
-                      <span className={cn(active ? 'text-accent' : 'text-ink-lo')}>{r.icon}</span>
-                      {!collapsed && (
-                        <>
-                          <span className="flex-1 truncate text-body">{t(locale, r.labelKey)}</span>
-                          {r.expertOnly && (
-                            <span
-                              className="size-1.5 shrink-0 rounded-full bg-warning"
-                              aria-label={t(locale, 'mode.expert')}
-                            />
-                          )}
-                          {counter && (
-                            <span
-                              className={cn(
-                                'shrink-0 font-mono text-[10.5px] tabular-nums',
-                                counterIsZero(r) ? 'text-ink-disabled' : 'text-ink-lo'
-                              )}
-                            >
-                              {counter}
-                            </span>
-                          )}
-                        </>
-                      )}
-                    </button>
-                  );
-                  return collapsed ? (
-                    <Tooltip key={r.id} side="right" content={t(locale, r.labelKey)}>
-                      {item}
-                    </Tooltip>
-                  ) : (
-                    item
-                  );
-                })}
-              </div>
-            </div>
-          );
-        })}
+      <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-2">
+        {ROUTES.filter((r) => !r.bottom).map(item)}
+        <div className="mt-auto pt-2">{ROUTES.filter((r) => r.bottom).map(item)}</div>
       </nav>
 
-      <div className="border-t border-line-subtle p-2">
-        {!collapsed && (
-          <div className="mb-2 flex gap-2 px-1.5 py-1 text-[10.5px] leading-[14px] text-ink-lo">
-            <ShieldCheck className="mt-px size-3.5 shrink-0 text-success" />
-            <span>{t(locale, 'safety.readonly')}</span>
-          </div>
+      <div
+        className={cn(
+          'flex items-center gap-1 border-t border-line-subtle px-3 py-2.5',
+          collapsed && 'flex-col px-0'
         )}
-        <button
-          onClick={onToggleCollapse}
-          className={cn(
-            'flex h-7 w-full items-center gap-2 rounded-control px-2 text-caption text-ink-lo',
-            'transition-colors duration-press hover:bg-surface-hover hover:text-ink-mid',
-            collapsed && 'justify-center px-0'
-          )}
-        >
-          <ChevronsLeft
-            className={cn('size-3.5 transition-transform duration-swap', collapsed && 'rotate-180')}
-          />
-          {!collapsed && t(locale, 'common.collapse')}
-        </button>
+      >
+        <Popover.Root open={bellOpen} onOpenChange={setBellOpen}>
+          <Tooltip content={t('shell.notifications')}>
+            <Popover.Trigger asChild>
+              <button className={iconBtn} aria-label={t('shell.notifications')}>
+                <Bell />
+                {unread > 0 && (
+                  <span className="absolute right-1 top-1 grid min-w-[14px] place-items-center rounded-full bg-accent px-1 font-mono text-[8.5px] font-bold leading-[14px] text-accent-ink">
+                    {unread > 99 ? '99' : unread}
+                  </span>
+                )}
+              </button>
+            </Popover.Trigger>
+          </Tooltip>
+          <Popover.Portal>
+            <Popover.Content
+              side="right"
+              align="end"
+              sideOffset={10}
+              className="z-50 w-[380px] overflow-hidden rounded-card border border-line bg-surface-2 shadow-e3 animate-scale-in"
+            >
+              <NotificationCenter />
+            </Popover.Content>
+          </Popover.Portal>
+        </Popover.Root>
+
+        <Tooltip content={t('shell.theme')}>
+          <button
+            className={iconBtn}
+            aria-label={t('shell.theme')}
+            onClick={() => setTheme(isDark ? 'light' : 'dark')}
+          >
+            {isDark ? <Sun /> : <Moon />}
+          </button>
+        </Tooltip>
+
+        {engineDown ? (
+          <Tooltip content={t('shell.engineDownTip')}>
+            <button
+              className={cn(iconBtn, 'text-warning hover:text-warning')}
+              aria-label={t('shell.engineDown')}
+              onClick={() => go('settings', 'about')}
+            >
+              <AlertTriangle />
+            </button>
+          </Tooltip>
+        ) : (
+          <Tooltip content={t('shell.safe')}>
+            <span className={cn(iconBtn, 'cursor-default text-success hover:bg-transparent hover:text-success')}>
+              <ShieldCheck />
+            </span>
+          </Tooltip>
+        )}
+
+        <Tooltip content={t(collapsed ? 'shell.expand' : 'shell.collapse')}>
+          <button
+            className={cn(iconBtn, !collapsed && 'ml-auto')}
+            onClick={onToggleCollapse}
+            aria-label={t(collapsed ? 'shell.expand' : 'shell.collapse')}
+          >
+            <ChevronsLeft className={cn('transition-transform duration-swap', collapsed && 'rotate-180')} />
+          </button>
+        </Tooltip>
       </div>
     </aside>
   );

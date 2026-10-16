@@ -1,13 +1,15 @@
 /**
- * Test dei due sistemi nuovi della V2:
- *  1. primo avvio — cinque passi, card di rilevamento nei tre stati, import;
- *  2. barra job + toast + centro notifiche — un job finto che emette progresso.
+ * Test dei flussi che attraversano più schermate:
+ *  1. primo avvio — tre passi, programmi trovati già spuntati, un import che
+ *     fallisce e si salta sulla sua riga, ingresso nell'app;
+ *  2. barra lavori + toast + centro notifiche — un import finto che emette
+ *     progresso, lanciato dal menu «Importa» della Libreria.
  *
- * Il bridge finto qui è più "vivo" di quello degli screenshot: il dialog
- * restituisce un percorso e l'import dura, così la barra job ha qualcosa da
+ * Il bridge finto qui è più "vivo" di quello dello smoke test: il dialog
+ * restituisce un percorso e l'import dura, così la barra ha qualcosa da
  * mostrare e l'esito genera davvero un toast.
  */
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow } = require('electron');
 const { join } = require('path');
 const { writeFileSync, mkdirSync } = require('fs');
 
@@ -23,141 +25,137 @@ const press = (el) =>
        : new MouseEvent(type, { bubbles: true, cancelable: true }));
    }`;
 
+/** Clic sul primo elemento il cui testo COMINCIA con `text` (gli elementi disabilitati non contano). */
 const clickText = (sel, text) =>
   `(() => {
      const el = [...document.querySelectorAll(${JSON.stringify(sel)})]
-       .find(e => (e.textContent||'').trim().toLowerCase().includes(${JSON.stringify(text.toLowerCase())}));
+       .find(e => !e.disabled && (e.textContent||'').trim().toLowerCase().startsWith(${JSON.stringify(text.toLowerCase())}));
      if (!el) return false;
      ${press('el')}
      return true;
    })()`;
+
+const isEnabled = (text) =>
+  `(() => {
+     const el = [...document.querySelectorAll('button')].find(e => (e.textContent||'').trim().startsWith(${JSON.stringify(text)}));
+     return el ? !el.disabled : null;
+   })()`;
+
+const webPreferences = (preload) => ({
+  preload: join(__dirname, preload),
+  contextIsolation: true,
+  sandbox: false,
+  backgroundThrottling: false
+});
 
 app.whenReady().then(async () => {
   mkdirSync(outDir, { recursive: true });
 
   /* ---------------- 1. PRIMO AVVIO ---------------- */
   process.env.CF_ONBOARDED = '0';
-  let win = new BrowserWindow({
-    width: 1440, height: 900, show: true,
-    webPreferences: { preload: join(__dirname, 'preload.cjs'), contextIsolation: true, sandbox: false }
-  });
+  process.env.CF_FAIL_IMPORT = 'traktor';
+  let win = new BrowserWindow({ width: 1440, height: 900, show: true, webPreferences: webPreferences('preload.cjs') });
   await win.loadFile(join(APP, 'out/renderer/index.html'));
   await wait(2200);
 
-  const steps = await win.webContents.executeJavaScript(
-    `[...document.querySelectorAll('header span')].map(s => s.textContent.trim()).filter(Boolean).slice(0,6)`
-  );
-  if (steps.length < 5) problems.push(`primo avvio: attesi 5 passi, trovati ${steps.length}`);
-  else console.log('OK  passi          ' + steps.join(' · '));
+  const steps = await win.webContents.executeJavaScript(`[...document.querySelectorAll('ol li')].map(l => l.textContent.trim())`);
+  if (steps.length !== 3) problems.push(`primo avvio: attesi 3 passi, trovati ${steps.length}`);
+  else console.log('OK  passi            ' + steps.join(' · '));
 
-  // passo 2: rilevamento
-  await win.webContents.executeJavaScript(clickText('footer button', 'Avanti'));
-  await wait(1400);
-  const detect = await win.webContents.executeJavaScript(
-    `(() => {
-       const text = document.querySelector('main, div')?.innerText || document.body.innerText;
-       const cards = ['Rekordbox','Traktor','Serato','VirtualDJ','Engine DJ'].filter(n => text.includes(n));
-       return {
-         cards,
-         ready: (text.match(/pronto/g) || []).length,
-         readOnly: text.includes('sola lettura'),
-         notFound: (text.match(/non trovato/g) || []).length,
-         browse: (text.match(/Indica il file/g) || []).length,
-         explains: text.includes('Come funziona il rilevamento')
-       };
-     })()`
+  const tiles = await win.webContents.executeJavaScript(
+    `[...document.querySelectorAll('button[role="checkbox"]')].map(b => ({ text: b.innerText.replace(/\\n/g, ' '), on: b.getAttribute('aria-checked') === 'true' }))`
   );
-  const wantCards = ['Rekordbox', 'Traktor', 'Serato', 'VirtualDJ', 'Engine DJ'];
-  for (const c of wantCards) if (!detect.cards.includes(c)) problems.push(`primo avvio: manca la card ${c}`);
-  if (detect.ready < 2) problems.push('primo avvio: nessuna card "pronto"');
-  if (!detect.readOnly) problems.push('primo avvio: Serato non dichiara il limite di sola lettura');
-  if (detect.notFound < 2) problems.push('primo avvio: gli stati "non trovato" non compaiono');
-  if (detect.browse < 2) problems.push('primo avvio: manca il fallback manuale sulle card non trovate');
-  if (!detect.explains) problems.push('primo avvio: manca la spiegazione del rilevamento');
-  console.log(
-    `OK  rilevamento    ${detect.cards.length}/5 card · ${detect.ready} pronte · ${detect.notFound} non trovate · fallback ${detect.browse}`
-  );
-  writeFileSync(join(outDir, 'onboarding-detect.png'), (await win.webContents.capturePage()).toPNG());
+  const on = tiles.filter((x) => x.on).length;
+  const notFound = tiles.filter((x) => /non trovato/.test(x.text)).length;
+  if (tiles.length !== 5) problems.push(`primo avvio: attesi 5 programmi, trovati ${tiles.length}`);
+  if (on !== 3) problems.push(`primo avvio: i 3 programmi trovati devono essere già spuntati (spuntati: ${on})`);
+  if (notFound !== 2) problems.push(`primo avvio: i programmi non trovati devono dirlo (${notFound})`);
+  console.log(`OK  programmi        ${tiles.length} · ${on} spuntati · ${notFound} non trovati`);
+  writeFileSync(join(outDir, 'welcome-pick.png'), (await win.webContents.capturePage()).toPNG());
 
-  // passi 3→5
-  await win.webContents.executeJavaScript(clickText('footer button', 'Avanti'));
-  await wait(700);
-  const importStep = await win.webContents.executeJavaScript(`document.body.innerText.includes('Importa le librerie')`);
-  if (!importStep) problems.push('primo avvio: passo 3 (import) non raggiunto');
-  const runImport = await win.webContents.executeJavaScript(clickText('button', 'Importa le librerie selezionate'));
-  if (!runImport) problems.push('primo avvio: bottone di import non trovato');
+  if (!(await win.webContents.executeJavaScript(clickText('button', 'Importa (3)'))))
+    problems.push('primo avvio: pulsante «Importa (3)» non trovato');
   await wait(2500);
-  const diag = await win.webContents.executeJavaScript(`document.body.innerText.includes('Prima diagnosi')`);
-  if (!diag) problems.push('primo avvio: dopo l\'import non si arriva alla diagnosi');
-  else console.log('OK  import+diagnosi passo 3 → 4 automatico dopo l\'import');
-  await win.webContents.executeJavaScript(clickText('footer button', 'Avanti'));
-  await wait(700);
-  const prefs = await win.webContents.executeJavaScript(`document.body.innerText.includes('Come vuoi lavorare')`);
-  if (!prefs) problems.push('primo avvio: passo 5 (preferenze) non raggiunto');
-  const finish = await win.webContents.executeJavaScript(clickText('footer button', 'Inizia a usare'));
+
+  const rows = await win.webContents.executeJavaScript(`document.body.innerText`);
+  if (!/collection\.nml non leggibile/.test(rows)) problems.push('primo avvio: l’errore di import non compare sulla riga');
+  if (!/Riprova/.test(rows) || !/Salta/.test(rows)) problems.push('primo avvio: mancano «Riprova» e «Salta» sulla riga fallita');
+  if ((await win.webContents.executeJavaScript(isEnabled('Continua'))) !== false)
+    problems.push('primo avvio: «Continua» deve restare fermo finché un import fallito non è deciso');
+  writeFileSync(join(outDir, 'welcome-import.png'), (await win.webContents.capturePage()).toPNG());
+
+  await win.webContents.executeJavaScript(clickText('li button', 'Salta'));
+  await wait(500);
+  if ((await win.webContents.executeJavaScript(isEnabled('Continua'))) !== true)
+    problems.push('primo avvio: dopo «Salta» si deve poter continuare');
+  else console.log('OK  import           errore sulla riga · Riprova/Salta · si prosegue dopo la scelta');
+
+  await win.webContents.executeJavaScript(clickText('button', 'Continua'));
+  await wait(800);
+  if (!(await win.webContents.executeJavaScript(`document.body.innerText.includes('Tutto pronto')`)))
+    problems.push('primo avvio: passo «Pronto» non raggiunto');
+  writeFileSync(join(outDir, 'welcome-ready.png'), (await win.webContents.capturePage()).toPNG());
+
+  const finish = await win.webContents.executeJavaScript(clickText('button', 'Guarda la libreria'));
   await wait(1500);
   const inApp = await win.webContents.executeJavaScript(`!!document.querySelector('nav button')`);
-  if (!finish || !inApp) problems.push('primo avvio: "Inizia a usare CrateForge" non porta nell\'app');
-  else console.log('OK  fine wizard    si entra nella shell');
+  if (!finish || !inApp) problems.push('primo avvio: «Guarda la libreria» non porta nell’app');
+  else console.log('OK  fine             si entra nella Libreria');
 
-  /* ---------------- 2. BARRA JOB / TOAST / NOTIFICHE ---------------- */
-  // La finestra nuova va creata e caricata PRIMA di chiudere la vecchia:
-  // distruggerla mentre l'altra carica aborta il load (ERR_FAILED -2).
+  /* ---------------- 2. BARRA LAVORI / TOAST / NOTIFICHE ---------------- */
+  // La finestra nuova va caricata PRIMA di chiudere la vecchia: distruggerla
+  // mentre l'altra carica aborta il load (ERR_FAILED -2).
   process.env.CF_ONBOARDED = '1';
+  delete process.env.CF_FAIL_IMPORT;
   const first = win;
-  win = new BrowserWindow({
-    width: 1440, height: 900, show: true,
-    webPreferences: { preload: join(__dirname, 'preload-job.cjs'), contextIsolation: true, sandbox: false }
-  });
+  win = new BrowserWindow({ width: 1440, height: 900, show: true, webPreferences: webPreferences('preload-job.cjs') });
   await win.loadFile(join(APP, 'out/renderer/index.html'));
   await wait(2200);
   first.destroy();
   await wait(300);
 
-  const started = await win.webContents.executeJavaScript(clickText('button', 'Importa collection XML'));
-  if (!started) problems.push('barra job: bottone di import non trovato in Panoramica');
+  await win.webContents.executeJavaScript(clickText('main button', 'Importa'));
+  await wait(500);
+  const started = await win.webContents.executeJavaScript(clickText('[data-radix-popper-content-wrapper] button', 'Rekordbox (file XML)'));
+  if (!started) problems.push('barra lavori: voce «Rekordbox (file XML)» non trovata nel menu Importa');
   await wait(1200);
 
   const bar = await win.webContents.executeJavaScript(
     `(() => {
        const t = document.body.innerText;
        return {
-         visible: /Importa collection XML/.test(t) && /Scansione file|Importazione libreria/.test(t),
+         visible: /Rekordbox \\(file XML\\)/.test(t) && /Importazione libreria/.test(t),
          eta: /ETA/.test(t),
          cancel: /Annulla/.test(t),
          progressbar: !!document.querySelector('[role="progressbar"]')
        };
      })()`
   );
-  if (!bar.visible) problems.push('barra job: non compare con fase durante il job');
-  if (!bar.progressbar) problems.push('barra job: nessuna progressbar');
-  if (!bar.cancel) problems.push('barra job: manca il bottone Annulla');
-  console.log(`OK  barra job      fase visibile · ETA=${bar.eta} · annulla=${bar.cancel}`);
+  if (!bar.visible) problems.push('barra lavori: non compare con la fase durante il lavoro');
+  if (!bar.progressbar) problems.push('barra lavori: nessuna progressbar');
+  if (!bar.cancel) problems.push('barra lavori: manca «Annulla»');
+  console.log(`OK  barra lavori     fase visibile · ETA=${bar.eta} · annulla=${bar.cancel}`);
   writeFileSync(join(outDir, 'jobbar.png'), (await win.webContents.capturePage()).toPNG());
 
   await wait(3500);
   const done = await win.webContents.executeJavaScript(
     `(() => {
        const t = document.body.innerText;
-       return { toast: /brani|playlist|cue/.test(t) && !!document.querySelector('[data-sonner-toast]'), barGone: !/ETA/.test(t) };
+       return { toast: /brani importati/.test(t) && !!document.querySelector('[data-sonner-toast]'), barGone: !/ETA/.test(t) };
      })()`
   );
-  if (!done.toast) problems.push('toast: nessun toast di esito dopo il job');
-  else console.log('OK  toast          esito mostrato a fine job');
-  if (!done.barGone) problems.push('barra job: resta visibile dopo la fine del job');
+  if (!done.toast) problems.push('toast: nessun toast di esito dopo il lavoro');
+  else console.log('OK  toast            esito mostrato a fine lavoro');
+  if (!done.barGone) problems.push('barra lavori: resta visibile dopo la fine');
   writeFileSync(join(outDir, 'toast.png'), (await win.webContents.capturePage()).toPNG());
 
-  // il centro notifiche deve aver registrato l'esito
-  await win.webContents.executeJavaScript(
-    `(() => { const b = document.querySelector('header button[aria-label]'); ${press('b')} return true; })()`
-  );
+  await win.webContents.executeJavaScript(`(() => { const b = document.querySelector('button[aria-label="Notifiche"]'); ${press('b')} return true; })()`);
   await wait(700);
   const center = await win.webContents.executeJavaScript(
     `(() => { const p = document.querySelector('[data-radix-popper-content-wrapper]'); return p ? p.innerText : ''; })()`
   );
-  if (!/Importa collection XML/.test(center))
-    problems.push('centro notifiche: l\'esito del job non è stato registrato');
-  else console.log('OK  notifiche      esito registrato nello storico');
+  if (!/Rekordbox \(file XML\)/.test(center)) problems.push('centro notifiche: l’esito del lavoro non è stato registrato');
+  else console.log('OK  notifiche        esito registrato nello storico');
 
   console.log('\n=========================================');
   if (problems.length === 0) console.log('FLOW TEST: nessun problema trovato.');
@@ -167,6 +165,9 @@ app.whenReady().then(async () => {
   }
   console.log('=========================================');
   app.exit(problems.length ? 1 : 0);
+}).catch((err) => {
+  console.log('\nFLOW TEST: interrotto da un errore\n - ' + (err && err.stack ? err.stack : String(err)));
+  app.exit(1);
 });
 
 app.on('window-all-closed', () => app.quit());

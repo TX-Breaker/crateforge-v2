@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { cn, formatDuration } from '@/lib/utils';
 import { bandStyleOf, cueColor, slotFromLabel } from '@/lib/cuePalette';
 import { useAppState } from '@/lib/appState';
-import { t, type MsgKey } from '@/lib/i18n';
+import { useT, type StrKey } from '@/lib/strings';
 
 /**
  * Waveform (§5.1) — l'elemento identitario del prodotto.
@@ -74,6 +74,7 @@ export function Waveform({
      ridimensionamento. Non è un dettaglio — al passaggio a una palette chiara
      l'onda resterebbe chiara su fondo chiaro. */
   const { locale, themeStyle, isDark } = useAppState();
+  const t = useT();
 
   const draw = useCallback(() => {
     const el = canvas.current;
@@ -131,7 +132,7 @@ export function Waveform({
       ctx.textBaseline = 'top';
       /* L'etichetta arriva dall'analizzatore in inglese: qui si scrive quella
          della lingua attiva, come nella legenda. Il dato resta il suo. */
-      const text = t(locale, `cue.${slot.id}` as MsgKey).toUpperCase();
+      const text = t(`slot.${slot.id}` as StrKey).toUpperCase();
       if (ctx.measureText(text).width + 10 <= bw) {
         ctx.fillStyle = style.label === 'accent' ? rgb('--accent') : rgb('--text-lo');
         ctx.fillText(text, x0 + 5, 4);

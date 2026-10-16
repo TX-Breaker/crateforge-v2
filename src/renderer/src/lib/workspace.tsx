@@ -116,10 +116,10 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       if (isScope(lastScope)) setScope(lastScope);
       if (isTarget(lastTarget)) setTarget(lastTarget);
       await refreshCounts();
-      /* La domanda si fa a OGNI avvio, non solo al primo: è la scelta che
-         determina cosa vedrai per tutta la sessione, e darla per scontata
-         significa far lavorare qualcuno sulla libreria sbagliata. */
-      setAsking(true);
+      /* Nessuna domanda all'avvio: prima si apriva una finestra a OGNI avvio per
+         chiedere su quale libreria lavorare, prima ancora di poter vedere
+         qualcosa. Ora si riparte dall'ultima scelta, e la si cambia dal filtro
+         nella schermata Libreria quando serve. */
     })();
   }, [refreshCounts]);
 

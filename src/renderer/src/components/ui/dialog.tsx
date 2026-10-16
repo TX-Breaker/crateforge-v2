@@ -2,8 +2,7 @@ import * as React from 'react';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { X } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useAppState } from '@/lib/appState';
-import { t } from '@/lib/i18n';
+import { useT } from '@/lib/strings';
 
 /**
  * Dialog (elevazione e3). Ingresso 280ms con scala leggera, overlay scuro:
@@ -37,7 +36,7 @@ const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & { hideClose?: boolean }
 >(({ className, children, hideClose, ...props }, ref) => {
-  const { locale } = useAppState();
+  const t = useT();
   return (
   <DialogPortal>
     <DialogOverlay />
@@ -55,7 +54,7 @@ const DialogContent = React.forwardRef<
       {children}
       {!hideClose && (
         <DialogPrimitive.Close
-          aria-label={t(locale, 'common.close')}
+          aria-label={t('c.close')}
           className="absolute right-4 top-4 grid size-7 place-items-center rounded-chip text-ink-lo transition-colors duration-press hover:bg-surface-hover hover:text-ink-hi"
         >
           <X className="size-4" />

@@ -4,7 +4,7 @@ import { CheckCircle2, ChevronUp, Loader2, XCircle, XOctagon } from 'lucide-reac
 import { cn, formatElapsed } from '@/lib/utils';
 import { useAppState } from '@/lib/appState';
 import { useJobs } from '@/lib/jobs';
-import { t, type MsgKey } from '@/lib/i18n';
+import { useT, type StrKey } from '@/lib/strings';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/misc';
 
@@ -13,7 +13,7 @@ import { Progress } from '@/components/ui/misc';
  * si smonta al cambio rotta: fase, progresso determinato o indeterminato,
  * done/total, ETA, annulla, coda espandibile.
  */
-const PHASE_KEYS: Record<string, MsgKey> = {
+const PHASE_KEYS: Record<string, StrKey> = {
   scan: 'phase.scan',
   copy: 'phase.copy',
   'ingest-xml': 'phase.ingestXml',
@@ -31,6 +31,7 @@ const PHASE_KEYS: Record<string, MsgKey> = {
 
 export function JobBar() {
   const { locale } = useAppState();
+  const t = useT();
   const { running, queue, history, percent, etaS, cancel } = useJobs();
   const [expanded, setExpanded] = useState(false);
 
@@ -58,7 +59,7 @@ export function JobBar() {
                   <span className="truncate text-caption text-ink-lo">
                     ·{' '}
                     {PHASE_KEYS[running.progress.phase]
-                      ? t(locale, PHASE_KEYS[running.progress.phase])
+                      ? t(PHASE_KEYS[running.progress.phase])
                       : running.progress.phase}
                   </span>
                 )}
@@ -78,14 +79,14 @@ export function JobBar() {
               )}
               {etaS !== null && (
                 <span className="text-ink-lo">
-                  {t(locale, 'job.eta')} {formatElapsed(etaS)}
+                  {t('job.eta')} {formatElapsed(etaS)}
                 </span>
               )}
             </div>
 
             {running?.cancellable && (
               <Button size="sm" variant="ghost" onClick={cancel}>
-                <XOctagon /> {t(locale, 'common.cancel')}
+                <XOctagon /> {t('c.cancel')}
               </Button>
             )}
 
@@ -95,7 +96,7 @@ export function JobBar() {
             >
               {queue.length > 0 && (
                 <span className="font-mono tabular-nums">
-                  +{queue.length} {t(locale, 'job.queued')}
+                  +{queue.length} {t('job.queued')}
                 </span>
               )}
               <ChevronUp
@@ -121,7 +122,7 @@ export function JobBar() {
                     >
                       <span className="size-1.5 rounded-full bg-ink-lo" />
                       {j.label}
-                      <span className="ml-auto text-ink-lo">{t(locale, 'job.waiting')}</span>
+                      <span className="ml-auto text-ink-lo">{t('job.waiting')}</span>
                     </div>
                   ))}
                   {history.slice(0, 6).map((h) => (
