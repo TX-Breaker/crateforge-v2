@@ -5,6 +5,7 @@ import { openUdm } from '@core/udm';
 import { isWriteJobRunning, registerIpc } from './ipc';
 import { runPreflight } from './preflight';
 import { mt } from './mainText';
+import { interceptClose, startedHidden } from './background';
 /* L'icona del marchio, copiata da electron-vite accanto al bundle del main.
    L'eseguibile impacchettato ha già la sua (electron-builder la incide nel
    .exe e nel .app), ma la FINESTRA non la eredita ovunque: in sviluppo, su
@@ -89,9 +90,17 @@ function createWindow(): void {
      viva nel gestore attività. Dopo 5 secondi la mostriamo lo stesso: meglio
      una finestra vuota con un messaggio che nessuna finestra. */
   let shown = false;
+  /* Avviato dal sistema in background: la finestra resta nascosta finché
+     l'utente non la apre dall'icona nell'area di notifica. */
+  const hidden = startedHidden();
+  interceptClose(mainWindow);
   const reveal = (why: string) => {
     if (shown || !mainWindow) return;
     shown = true;
+    if (hidden) {
+      logMain('avvio in background: finestra nascosta');
+      return;
+    }
     mainWindow.show();
     if (why !== 'ready-to-show') logMain(`finestra mostrata per ripiego (${why})`);
   };
@@ -209,7 +218,10 @@ if (!app.requestSingleInstanceLock()) {
       });
 
     app.on('activate', () => {
-      if (BrowserWindow.getAllWindows().length === 0) createWindow();
+      const w = BrowserWindow.getAllWindows()[0];
+      // In background la finestra c'è ma è nascosta: il Dock la riporta davanti.
+      if (w) w.show();
+      else createWindow();
     });
 
     /* Chiudere la finestra mentre il sidecar sta scrivendo dentro un file

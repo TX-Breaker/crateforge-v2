@@ -67,6 +67,10 @@ function General() {
   const { push } = useNotifications();
   const [folder, setFolder] = useState(watcher.folder ?? '');
   const [running, setRunning] = useState(watcher.running);
+  const [background, setBackground] = useState(false);
+  useEffect(() => {
+    void window.crateforge.app.background().then((r) => setBackground(r.enabled));
+  }, []);
 
   useEffect(() => {
     setFolder(watcher.folder ?? '');
@@ -147,6 +151,13 @@ function General() {
             </Button>
           )}
           <Switch checked={running} disabled={!folder} onCheckedChange={(v) => void toggleWatch(v)} aria-label={t('st.watchOn')} />
+        </Row>
+        <Row label={t('st.background')} tip={t('st.backgroundTip')} hint={t('st.backgroundHint')}>
+          <Switch
+            aria-label={t('st.background')}
+            checked={background}
+            onCheckedChange={(v) => void window.crateforge.app.setBackground(v).then((r) => setBackground(r.enabled))}
+          />
         </Row>
         <Row label={t('st.shortcuts')}>
           <Button size="sm" variant="secondary" onClick={() => window.dispatchEvent(new Event('crateforge:shortcuts'))}>

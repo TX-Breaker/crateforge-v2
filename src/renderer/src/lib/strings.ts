@@ -570,6 +570,9 @@ const it = {
   'keep.resetDone': 'Storico degli allineamenti azzerato',
   'pl.s4Title': 'Creare la crate nel database di Serato 4?',
   'pl.s4Body': 'Chiudi Serato prima di continuare. Il database della tua libreria viene modificato; prima ne viene fatta una copia.',
+  'st.background': 'Resta attivo in background',
+  'st.backgroundHint': 'Parte con il sistema, icona vicino all’orologio: la sincronizzazione automatica funziona anche a finestra chiusa.',
+  'st.backgroundTip': 'Chiudere la finestra la nasconde invece di uscire. Per uscire davvero: icona vicino all’orologio › Esci. Le notifiche di sistema dicono quando le librerie sono state allineate.',
 };
 
 export type StrKey = keyof typeof it;
@@ -1116,6 +1119,9 @@ const en: Dict = {
   'keep.resetDone': 'Sync history cleared',
   'pl.s4Title': 'Create the crate in the Serato 4 database?',
   'pl.s4Body': 'Close Serato before continuing. Your library database is changed; a copy is made first.',
+  'st.background': 'Keep running in the background',
+  'st.backgroundHint': 'Starts with the system, icon near the clock: automatic sync keeps working with the window closed.',
+  'st.backgroundTip': 'Closing the window hides it instead of quitting. To really quit: icon near the clock › Quit. System notifications tell you when libraries were synced.',
 };
 
 const fr: Dict = {
@@ -1659,6 +1665,9 @@ const fr: Dict = {
   'keep.resetDone': 'Historique des synchronisations effacé',
   'pl.s4Title': 'Créer la crate dans la base Serato 4 ?',
   'pl.s4Body': 'Fermez Serato avant de continuer. La base de votre bibliothèque est modifiée ; une copie est faite avant.',
+  'st.background': 'Rester actif en arrière-plan',
+  'st.backgroundHint': 'Démarre avec le système, icône près de l’horloge : la synchronisation automatique fonctionne même fenêtre fermée.',
+  'st.backgroundTip': 'Fermer la fenêtre la masque au lieu de quitter. Pour quitter vraiment : icône près de l’horloge › Quitter. Les notifications système indiquent quand les bibliothèques ont été synchronisées.',
 };
 
 const de: Dict = {
@@ -2202,6 +2211,9 @@ const de: Dict = {
   'keep.resetDone': 'Synchronisierungsverlauf gelöscht',
   'pl.s4Title': 'Crate in der Serato-4-Datenbank anlegen?',
   'pl.s4Body': 'Schließe Serato vorher. Deine Bibliotheksdatenbank wird geändert; vorher wird eine Kopie angelegt.',
+  'st.background': 'Im Hintergrund aktiv bleiben',
+  'st.backgroundHint': 'Startet mit dem System, Symbol neben der Uhr: Die automatische Synchronisierung läuft auch bei geschlossenem Fenster.',
+  'st.backgroundTip': 'Das Schließen des Fensters blendet es aus, statt zu beenden. Zum Beenden: Symbol neben der Uhr › Beenden. Systembenachrichtigungen melden, wenn Bibliotheken synchronisiert wurden.',
 };
 
 export const STRINGS: Record<Locale, Dict> = { it, en, fr, de };

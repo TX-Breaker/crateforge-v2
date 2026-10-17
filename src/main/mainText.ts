@@ -197,6 +197,41 @@ const T = {
     fr: 'Faites d’abord « Synchroniser » avec cette configuration : voyez l’aperçu, puis confirmez. Ensuite seulement le mode automatique peut être activé.',
     de: 'Führe zuerst „Jetzt synchronisieren“ mit dieser Einstellung aus: Vorschau ansehen, dann bestätigen. Erst danach lässt sich der Automatikmodus einschalten.'
   },
+  'tray.open': { it: 'Apri CrateForge', en: 'Open CrateForge', fr: 'Ouvrir CrateForge', de: 'CrateForge öffnen' },
+  'tray.autoOn': {
+    it: 'Sincronizzazione automatica: attiva',
+    en: 'Automatic sync: on',
+    fr: 'Synchronisation automatique : active',
+    de: 'Automatische Synchronisierung: an'
+  },
+  'tray.autoPaused': {
+    it: 'Sincronizzazione automatica: in pausa',
+    en: 'Automatic sync: paused',
+    fr: 'Synchronisation automatique : en pause',
+    de: 'Automatische Synchronisierung: pausiert'
+  },
+  'tray.autoOff': {
+    it: 'Sincronizzazione automatica: spenta',
+    en: 'Automatic sync: off',
+    fr: 'Synchronisation automatique : désactivée',
+    de: 'Automatische Synchronisierung: aus'
+  },
+  'tray.pause': { it: 'Metti in pausa', en: 'Pause', fr: 'Mettre en pause', de: 'Pausieren' },
+  'tray.resume': { it: 'Riprendi', en: 'Resume', fr: 'Reprendre', de: 'Fortsetzen' },
+  'tray.quit': { it: 'Esci da CrateForge', en: 'Quit CrateForge', fr: 'Quitter CrateForge', de: 'CrateForge beenden' },
+  'notify.syncTitle': {
+    it: 'Librerie sincronizzate',
+    en: 'Libraries synced',
+    fr: 'Bibliothèques synchronisées',
+    de: 'Bibliotheken synchronisiert'
+  },
+  'notify.syncLine': { it: '{name}: {n} brani', en: '{name}: {n} tracks', fr: '{name} : {n} morceaux', de: '{name}: {n} Titel' },
+  'notify.failTitle': {
+    it: 'Sincronizzazione non riuscita',
+    en: 'Sync failed',
+    fr: 'Synchronisation échouée',
+    de: 'Synchronisierung fehlgeschlagen'
+  },
   'run.closeFirst': { it: 'Chiudi prima: {list}.', en: 'Close first: {list}.', fr: 'Fermez d’abord : {list}.', de: 'Zuerst schließen: {list}.' }
 } satisfies Record<string, Entry>;
 

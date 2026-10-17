@@ -240,6 +240,7 @@ const api = {
       { id: 'engine', found: false, path: null, checked: [], modifiedAt: null, limit: 'external', kind: 'enginedb' }
     ]
   },
+  app: { background: async () => ({ enabled: false }), setBackground: async (v) => ({ enabled: !!v }) },
   window: { setOverlayTheme: async () => {} },
   rekordbox: {
     defaultPaths: async () => ({

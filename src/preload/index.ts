@@ -636,6 +636,12 @@ const api = {
   // Chrome della finestra: su Windows i pulsanti di sistema sono disegnati
   // dall'OS (Window Controls Overlay), quindi al cambio tema va aggiornato solo
   // il colore della striscia.
+  app: {
+    /** CrateForge in background: icona nell'area di notifica e avvio con il sistema. */
+    background: () => ipcRenderer.invoke('app:backgroundGet') as Promise<{ enabled: boolean }>,
+    setBackground: (enabled: boolean) =>
+      ipcRenderer.invoke('app:backgroundSet', enabled) as Promise<{ enabled: boolean }>
+  },
   window: {
     setOverlayTheme: (color: string, symbolColor: string) =>
       ipcRenderer.invoke('window:setOverlayTheme', color, symbolColor) as Promise<void>

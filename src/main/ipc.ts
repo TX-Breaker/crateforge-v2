@@ -103,6 +103,8 @@ import { probeRekordboxApp, probeVersion } from './versionProbe';
 import { assertNotRunning } from './processGuard';
 import { isLiveLibraryTarget, liveLibraryMessage } from './liveLibraryGuard';
 import { AutoSyncWatcher, readRunningSoftware } from './autoSyncWatcher';
+import { initBackground, isBackgroundEnabled, notifyIfHidden, refreshMenu, setBackgroundEnabled } from './background';
+import brandIcon from '../../build/icon.png?asset';
 import { runLibrarySync, type LiveRow, type RunReport, type WriteReport } from './autoSyncRunner';
 import { isDjSoftwareRunning } from './processGuard';
 import { patchTraktorNml } from '@adapters/traktor/nmlPatch';
@@ -2090,6 +2092,10 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
   const runFullSync = (source: GuardedSoftware, destinations: GuardedSoftware[], dryRun = false) =>
     withJobLock(async () => {
       const cfg = leggiAutoConfig();
+      /* Un giro vero scrive nelle librerie dei programmi: conta come scrittura
+         in corso, così chiudere l'app a metà viene rimandato. Prima contavano
+         solo le scritture del sidecar, non quelle sul posto fatte da qui. */
+      if (!dryRun) writeJobsInFlight++;
       try {
         const report = await runLibrarySync(
           { db, reimport: reimportProgram, canWrite: canWriteProgram, write: writeProgram },
@@ -2100,6 +2106,17 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
         );
         if (dryRun) return report;
         lastRunReport = report;
+        /* Fuori dalla finestra (background, o finestra dietro) l'esito arriva
+           come notifica di sistema: chi sta suonando non apre CrateForge per
+           sapere se le librerie sono allineate. */
+        const lines = report.written
+          .filter((w) => w.tracks > 0)
+          .map((w) => mt('notify.syncLine', { name: w.software, n: w.tracks }));
+        if (report.failed.length) {
+          notifyIfHidden(mt('notify.failTitle'), report.failed.map((f) => `${f.software}: ${f.message}`).join('\n'));
+        } else if (lines.length) {
+          notifyIfHidden(mt('notify.syncTitle'), lines.join('\n'));
+        }
         /* Un giro scritto a mano, dopo averne visto l'anteprima, è ciò che
            autorizza l'automatico per QUESTA configurazione. */
         setSetting(db, CONFIRMED_KEY, configSignature(cfg));
@@ -2107,7 +2124,10 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
         return report;
       } catch (err) {
         logOperation(db, 'sync.auto', `${source} → ${destinations.join(', ')}`, 'error', String(err));
+        if (!dryRun) notifyIfHidden(mt('notify.failTitle'), String((err as Error).message ?? err));
         throw err;
+      } finally {
+        if (!dryRun) writeJobsInFlight--;
       }
     });
 
@@ -2133,6 +2153,28 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
     log: (evento, dettaglio) => logOperation(db, evento, dettaglio, 'ok', '')
   });
   autoWatcher.start();
+
+  /* Background: icona nell'area di notifica e avvio con il sistema, se
+     l'utente l'ha acceso. Il menu mostra e comanda lo stato dell'automatico. */
+  initBackground({
+    getSetting: (k) => getSetting(db, k),
+    setSetting: (k, v) => setSetting(db, k, v),
+    icon: brandIcon,
+    autoState: () => {
+      const c = leggiAutoConfig();
+      return !c.enabled ? 'off' : c.paused ? 'paused' : 'on';
+    },
+    togglePause: () => {
+      const c = leggiAutoConfig();
+      setSetting(db, AUTO_SYNC_SETTING_KEY, serializeAutoSyncConfig({ ...c, paused: !c.paused }));
+    }
+  });
+  ipcMain.handle('app:backgroundGet', () => ({ enabled: isBackgroundEnabled() }));
+  ipcMain.handle('app:backgroundSet', (_e, enabled: boolean) => {
+    const r = setBackgroundEnabled(enabled === true);
+    logOperation(db, 'app.background', null, 'ok', r.enabled ? 'attivo' : 'spento');
+    return r;
+  });
 
   /**
    * «Allinea ora»: lo stesso giro dell'automatico, avviato a mano.
@@ -2242,6 +2284,7 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
       if (r.response !== 1) return { config: attuale, status: { ...autoWatcher.status(), lastReport: lastRunReport } };
     }
     setSetting(db, AUTO_SYNC_SETTING_KEY, serializeAutoSyncConfig(nuova));
+    refreshMenu();
     logOperation(
       db,
       'sync.auto.config',
