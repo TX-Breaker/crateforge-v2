@@ -1,6 +1,7 @@
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import type { GuardedSoftware } from '@core/djVersions';
+import { mt } from './mainText';
 export type { GuardedSoftware };
 
 const exec = promisify(execFile);
@@ -248,18 +249,9 @@ export async function isDjSoftwareRunning(software: GuardedSoftware): Promise<Ru
 export async function assertNotRunning(software: GuardedSoftware, label: string): Promise<void> {
   const v = await isDjSoftwareRunning(software);
   if (v.unknown) {
-    throw new Error(
-      `Non è stato possibile verificare se ${label} è in esecuzione, e senza quella ` +
-        'verifica la scrittura non parte: se il programma fosse aperto, le modifiche ' +
-        'verrebbero sovrascritte o il file danneggiato. Chiudi ' +
-        `${label} e riprova.`
-    );
+    throw new Error(mt('running.unknown', { app: label }));
   }
   if (v.running) {
-    throw new Error(
-      `${label} è in esecuzione. Chiudilo prima di continuare: scrivere adesso ` +
-        'significa perdere le modifiche quando il programma si chiude, o danneggiare ' +
-        'la libreria.'
-    );
+    throw new Error(mt('running.open', { app: label }));
   }
 }

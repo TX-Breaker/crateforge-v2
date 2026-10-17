@@ -159,7 +159,7 @@ export async function proposeTags(
   const limiter = new RateLimiter(1100);
   const provider = opts.provider ?? 'musicbrainz';
   if (provider === 'discogs' && !opts.discogsToken) {
-    throw new Error('Provider Discogs selezionato ma manca il token (Impostazioni → Esperto).');
+    throw new Error('Provider Discogs selezionato ma manca il token (Impostazioni › Sicurezza).');
   }
   const proposals: TagProposal[] = [];
   let queried = 0;

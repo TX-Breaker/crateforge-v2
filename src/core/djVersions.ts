@@ -182,7 +182,85 @@ export interface EvaluateOptions {
   acknowledged?: string | null;
   /** 'standard': blocca solo le scritture. 'strict': blocca anche le letture. */
   gate?: 'standard' | 'strict';
+  /** Lingua del messaggio. Il verdetto è lo stesso in ogni lingua. */
+  locale?: VerdictLocale;
 }
+
+export type VerdictLocale = 'it' | 'en' | 'fr' | 'de';
+
+/**
+ * I messaggi dei verdetti, in quattro lingue: sono quelli che l'utente legge
+ * quando una scrittura viene fermata, ed è il momento in cui deve capire.
+ */
+const VERDICT_TEXT = {
+  unreadable: {
+    it: 'Non è stato possibile leggere la versione di {app} ({marker}). CrateForge ha collaudato fino alla {tested}: senza quel dato non può garantire che la scrittura sia sicura, quindi si ferma prima di toccare i tuoi file.',
+    en: 'Could not read the {app} version ({marker}). CrateForge has tested up to {tested}: without that information it cannot guarantee a safe write, so it stops before touching your files.',
+    fr: 'Impossible de lire la version de {app} ({marker}). CrateForge a testé jusqu’à la {tested} : sans cette donnée, il ne peut pas garantir une écriture sûre et s’arrête avant de toucher vos fichiers.',
+    de: 'Die Version von {app} ({marker}) ließ sich nicht lesen. CrateForge ist bis {tested} getestet: Ohne diese Angabe ist ein sicheres Schreiben nicht garantiert, daher stoppt es, bevor deine Dateien berührt werden.'
+  },
+  ok: {
+    it: '{app}: versione {detected}, collaudata.',
+    en: '{app}: version {detected}, tested.',
+    fr: '{app} : version {detected}, testée.',
+    de: '{app}: Version {detected}, getestet.'
+  },
+  acknowledged: {
+    it: '{app} {detected} è più recente dell’ultima versione collaudata ({tested}), ma è stata sbloccata a mano: procedi sapendo che questo formato non è stato verificato dall’autore.',
+    en: '{app} {detected} is newer than the last tested version ({tested}), but it was unlocked by hand: proceed knowing this format has not been verified by the author.',
+    fr: '{app} {detected} est plus récente que la dernière version testée ({tested}), mais elle a été débloquée à la main : sachez que ce format n’a pas été vérifié par l’auteur.',
+    de: '{app} {detected} ist neuer als die zuletzt getestete Version ({tested}), wurde aber manuell freigegeben: Dieses Format wurde vom Autor nicht geprüft.'
+  },
+  newer: {
+    it: '{app} {detected} è più recente dell’ultima versione collaudata ({tested}, provata il {testedOn} con {testedWith}). I formati di libreria non sono documentati: quello che CrateForge sa scrivere è stato ricavato guardando i byte di quella versione. Su una più recente la scrittura non fallirebbe con un errore, danneggerebbe la libreria in silenzio. La lettura resta possibile; la scrittura no, finché l’autore non avrà collaudato questa versione.',
+    en: '{app} {detected} is newer than the last tested version ({tested}, tested on {testedOn} with {testedWith}). Library formats are undocumented: what CrateForge can write was worked out from the bytes of that version. On a newer one, writing would not fail with an error, it would silently damage the library. Reading still works; writing does not, until the author has tested this version.',
+    fr: '{app} {detected} est plus récente que la dernière version testée ({tested}, testée le {testedOn} avec {testedWith}). Les formats de bibliothèque ne sont pas documentés : ce que CrateForge sait écrire vient de l’étude des octets de cette version. Sur une plus récente, l’écriture n’échouerait pas avec une erreur, elle abîmerait la bibliothèque sans rien dire. La lecture reste possible ; l’écriture non, tant que l’auteur n’a pas testé cette version.',
+    de: '{app} {detected} ist neuer als die zuletzt getestete Version ({tested}, getestet am {testedOn} mit {testedWith}). Bibliotheksformate sind nicht dokumentiert: Was CrateForge schreiben kann, wurde aus den Bytes dieser Version abgeleitet. Bei einer neueren würde das Schreiben nicht mit einem Fehler abbrechen, sondern die Bibliothek still beschädigen. Lesen bleibt möglich; Schreiben nicht, bis der Autor diese Version getestet hat.'
+  },
+  refFile: { it: 'un file di riferimento', en: 'a reference file', fr: 'un fichier de référence', de: 'einer Referenzdatei' },
+  appNone: {
+    it: 'Nessuna versione di {app} è stata collaudata per la scrittura diretta.',
+    en: 'No version of {app} has been tested for direct writing.',
+    fr: 'Aucune version de {app} n’a été testée pour l’écriture directe.',
+    de: 'Keine Version von {app} wurde für direktes Schreiben getestet.'
+  },
+  appUnknown: {
+    it: 'Non è stato possibile determinare quale versione di {app} è installata. La scrittura diretta nel suo database è permessa solo fino alla {tested}, che è quella collaudata: senza sapere cosa c’è davanti, CrateForge non scrive.',
+    en: 'Could not determine which version of {app} is installed. Direct writing into its database is allowed only up to {tested}, the tested one: without knowing what is there, CrateForge does not write.',
+    fr: 'Impossible de déterminer quelle version de {app} est installée. L’écriture directe dans sa base n’est permise que jusqu’à la {tested}, celle testée : sans savoir ce qu’il y a, CrateForge n’écrit pas.',
+    de: 'Es ließ sich nicht feststellen, welche Version von {app} installiert ist. Direktes Schreiben in die Datenbank ist nur bis {tested} erlaubt, der getesteten: Ohne zu wissen, was vorliegt, schreibt CrateForge nicht.'
+  },
+  appOk: {
+    it: '{app} {detected}: collaudato per la scrittura diretta.',
+    en: '{app} {detected}: tested for direct writing.',
+    fr: '{app} {detected} : testé pour l’écriture directe.',
+    de: '{app} {detected}: für direktes Schreiben getestet.'
+  },
+  appAcknowledged: {
+    it: '{app} {detected}: sbloccato a mano, formato non verificato dall’autore.',
+    en: '{app} {detected}: unlocked by hand, format not verified by the author.',
+    fr: '{app} {detected} : débloqué à la main, format non vérifié par l’auteur.',
+    de: '{app} {detected}: manuell freigegeben, Format vom Autor nicht geprüft.'
+  },
+  appNewer: {
+    it: '{app} {detected} è più recente della versione collaudata ({tested}). Il database di {app} è cifrato e il suo schema cambia tra le versioni: scriverci dentro senza aver verificato il formato è il modo più diretto per perdere una libreria. L’operazione è stata annullata; la lettura continua a funzionare.',
+    en: '{app} {detected} is newer than the tested version ({tested}). The {app} database is encrypted and its schema changes between versions: writing into it without checking the format is the quickest way to lose a library. The operation was cancelled; reading still works.',
+    fr: '{app} {detected} est plus récente que la version testée ({tested}). La base de {app} est chiffrée et son schéma change entre les versions : y écrire sans avoir vérifié le format est le moyen le plus sûr de perdre une bibliothèque. L’opération a été annulée ; la lecture fonctionne toujours.',
+    de: '{app} {detected} ist neuer als die getestete Version ({tested}). Die Datenbank von {app} ist verschlüsselt und ihr Schema ändert sich zwischen Versionen: Ohne geprüftes Format hineinzuschreiben ist der schnellste Weg, eine Bibliothek zu verlieren. Der Vorgang wurde abgebrochen; Lesen funktioniert weiterhin.'
+  }
+} satisfies Record<string, Record<VerdictLocale, string>>;
+
+/** Il messaggio di un verdetto nella lingua chiesta, con i segnaposto sostituiti. */
+export function verdictText(
+  key: keyof typeof VERDICT_TEXT,
+  locale: VerdictLocale | undefined,
+  params: Record<string, string> = {}
+): string {
+  return VERDICT_TEXT[key][locale ?? 'it'].replace(/\{(\w+)\}/g, (m, k: string) => params[k] ?? m);
+}
+
+/** Tutte le voci, per il test di parità. */
+export const VERDICT_TEXTS: Record<string, Record<VerdictLocale, string>> = VERDICT_TEXT;
 
 /**
  * Regola di ammissione. Il criterio non è "funzionerà?" ma "l'ho verificato?":
@@ -202,10 +280,11 @@ export function evaluateVersion(
     return {
       ...base,
       status: 'unknown',
-      message:
-        `Non è stato possibile leggere la versione di ${entry.label} (${entry.marker}). ` +
-        `CrateForge ha collaudato fino alla ${entry.maxTested}: senza quel dato non può ` +
-        `garantire che la scrittura sia sicura, quindi si ferma prima di toccare i tuoi file.`,
+      message: verdictText('unreadable', opts.locale, {
+        app: entry.label,
+        marker: entry.marker,
+        tested: entry.maxTested
+      }),
       blocksWrite: true,
       blocksRead: gate === 'strict'
     };
@@ -215,7 +294,7 @@ export function evaluateVersion(
     return {
       ...base,
       status: 'ok',
-      message: `${entry.label}: versione ${detected}, collaudata.`,
+      message: verdictText('ok', opts.locale, { app: entry.label, detected }),
       blocksWrite: false,
       blocksRead: false
     };
@@ -225,10 +304,7 @@ export function evaluateVersion(
     return {
       ...base,
       status: 'acknowledged',
-      message:
-        `${entry.label} ${detected} è più recente dell'ultima versione collaudata ` +
-        `(${entry.maxTested}), ma è stata sbloccata a mano: procedi sapendo che questo ` +
-        `formato non è stato verificato dall'autore.`,
+      message: verdictText('acknowledged', opts.locale, { app: entry.label, detected, tested: entry.maxTested }),
       blocksWrite: false,
       blocksRead: false
     };
@@ -237,13 +313,13 @@ export function evaluateVersion(
   return {
     ...base,
     status: 'newer',
-    message:
-      `${entry.label} ${detected} è più recente dell'ultima versione collaudata ` +
-      `(${entry.maxTested}, provata il ${entry.testedOn} con ${entry.testedWithApp ?? 'un file di riferimento'}). ` +
-      `I formati di libreria non sono documentati: quello che CrateForge sa scrivere è stato ` +
-      `ricavato guardando i byte di quella versione. Su una più recente la scrittura non ` +
-      `fallirebbe con un errore, danneggerebbe la libreria in silenzio. La lettura resta ` +
-      `possibile; la scrittura no, finché l'autore non avrà collaudato questa versione.`,
+    message: verdictText('newer', opts.locale, {
+      app: entry.label,
+      detected,
+      tested: entry.maxTested,
+      testedOn: entry.testedOn,
+      testedWith: entry.testedWithApp ?? verdictText('refFile', opts.locale)
+    }),
     blocksWrite: true,
     blocksRead: gate === 'strict'
   };
@@ -282,7 +358,7 @@ export function evaluateAppVersion(
     return {
       ...base,
       status: 'unknown',
-      message: `Nessuna versione di ${entry.label} è stata collaudata per la scrittura diretta.`,
+      message: verdictText('appNone', opts.locale, { app: entry.label }),
       blocksWrite: true,
       blocksRead: false
     };
@@ -291,10 +367,7 @@ export function evaluateAppVersion(
     return {
       ...base,
       status: 'unknown',
-      message:
-        `Non è stato possibile determinare quale versione di ${entry.label} è installata. ` +
-        `La scrittura diretta nel suo database è permessa solo fino alla ${tested}, ` +
-        `che è quella collaudata: senza sapere cosa c'è davanti, CrateForge non scrive.`,
+      message: verdictText('appUnknown', opts.locale, { app: entry.label, tested }),
       blocksWrite: true,
       blocksRead: false
     };
@@ -303,7 +376,7 @@ export function evaluateAppVersion(
     return {
       ...base,
       status: 'ok',
-      message: `${entry.label} ${detected}: collaudato per la scrittura diretta.`,
+      message: verdictText('appOk', opts.locale, { app: entry.label, detected }),
       blocksWrite: false,
       blocksRead: false
     };
@@ -312,7 +385,7 @@ export function evaluateAppVersion(
     return {
       ...base,
       status: 'acknowledged',
-      message: `${entry.label} ${detected}: sbloccato a mano, formato non verificato dall'autore.`,
+      message: verdictText('appAcknowledged', opts.locale, { app: entry.label, detected }),
       blocksWrite: false,
       blocksRead: false
     };
@@ -320,11 +393,7 @@ export function evaluateAppVersion(
   return {
     ...base,
     status: 'newer',
-    message:
-      `${entry.label} ${detected} è più recente della versione collaudata (${tested}). ` +
-      `Il database di ${entry.label} è cifrato e il suo schema cambia tra le versioni: ` +
-      `scriverci dentro senza aver verificato il formato è il modo più diretto per ` +
-      `perdere una libreria. L'operazione è stata annullata; la lettura continua a funzionare.`,
+    message: verdictText('appNewer', opts.locale, { app: entry.label, detected, tested }),
     blocksWrite: true,
     blocksRead: false
   };

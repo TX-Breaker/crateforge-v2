@@ -520,6 +520,16 @@ const it = {
   'keep.r.notPropagated': 'Restano solo in CrateForge: {list}',
   'keep.auto': 'Ogni volta che chiudi un programma',
   'keep.autoTip': 'CrateForge aspetta che i programmi scelti siano chiusi, rilegge le librerie e aggiorna le altre, con una copia di sicurezza prima di ogni scrittura.',
+  'sync.reason.paused': 'In pausa.',
+  'sync.reason.source-still-open': 'Il programma è di nuovo aperto: si aspetta la prossima chiusura.',
+  'sync.reason.quiet-period': 'Pochi secondi di attesa dopo la chiusura, nel caso lo riapri.',
+  'sync.reason.destination-open': 'Un altro programma scelto è ancora aperto: scriverci ora vorrebbe dire farsi sovrascrivere alla sua chiusura.',
+  'sync.reason.processes-unknown': 'Non si riesce a sapere quali programmi sono aperti: per sicurezza non parte.',
+  'sync.reason.job-running': 'Aspetta che finisca un altro lavoro.',
+  'sync.reason.user-active': 'Aspetta che tu abbia finito di lavorare sulla libreria.',
+  'sync.reason.too-soon': 'Troppo vicino al giro precedente: riprova tra poco.',
+  'sync.reason.nothing-to-do': 'Nessun altro programma da aggiornare.',
+  'sync.reason.slave-closed': 'Hai chiuso uno slave: le sue modifiche non si propagano. Si sincronizza quando chiudi il master.',
 };
 
 export type StrKey = keyof typeof it;
@@ -1016,6 +1026,16 @@ const en: Dict = {
   'keep.r.notPropagated': 'Stay in CrateForge only: {list}',
   'keep.auto': 'Every time you close a program',
   'keep.autoTip': 'CrateForge waits until the chosen programs are closed, re-reads the libraries and updates the others, with a safety copy before every write.',
+  'sync.reason.paused': 'Paused.',
+  'sync.reason.source-still-open': 'The program is open again: waiting for the next close.',
+  'sync.reason.quiet-period': 'A few seconds’ wait after closing, in case you reopen it.',
+  'sync.reason.destination-open': 'Another chosen program is still open: writing to it now would be overwritten when it closes.',
+  'sync.reason.processes-unknown': 'Cannot tell which programs are open: for safety it does not start.',
+  'sync.reason.job-running': 'Waiting for another task to finish.',
+  'sync.reason.user-active': 'Waiting until you finish working on the library.',
+  'sync.reason.too-soon': 'Too close to the previous run: it will retry shortly.',
+  'sync.reason.nothing-to-do': 'No other program to update.',
+  'sync.reason.slave-closed': 'You closed a slave: its changes do not propagate. Sync happens when you close the master.',
 };
 
 const fr: Dict = {
@@ -1509,6 +1529,16 @@ const fr: Dict = {
   'keep.r.notPropagated': 'Restent seulement dans CrateForge : {list}',
   'keep.auto': 'À chaque fermeture d’un logiciel',
   'keep.autoTip': 'CrateForge attend que les logiciels choisis soient fermés, relit les bibliothèques et met à jour les autres, avec une copie de sécurité avant chaque écriture.',
+  'sync.reason.paused': 'En pause.',
+  'sync.reason.source-still-open': 'Le logiciel est de nouveau ouvert : on attend la prochaine fermeture.',
+  'sync.reason.quiet-period': 'Quelques secondes d’attente après la fermeture, au cas où vous le rouvririez.',
+  'sync.reason.destination-open': 'Un autre logiciel choisi est encore ouvert : y écrire maintenant serait écrasé à sa fermeture.',
+  'sync.reason.processes-unknown': 'Impossible de savoir quels logiciels sont ouverts : par sécurité, rien ne démarre.',
+  'sync.reason.job-running': 'Attend la fin d’une autre tâche.',
+  'sync.reason.user-active': 'Attend que vous ayez fini de travailler sur la bibliothèque.',
+  'sync.reason.too-soon': 'Trop proche du tour précédent : nouvel essai sous peu.',
+  'sync.reason.nothing-to-do': 'Aucun autre logiciel à mettre à jour.',
+  'sync.reason.slave-closed': 'Vous avez fermé un esclave : ses modifications ne se propagent pas. La synchro a lieu à la fermeture du maître.',
 };
 
 const de: Dict = {
@@ -2002,6 +2032,16 @@ const de: Dict = {
   'keep.r.notPropagated': 'Bleiben nur in CrateForge: {list}',
   'keep.auto': 'Jedes Mal, wenn du ein Programm schließt',
   'keep.autoTip': 'CrateForge wartet, bis die gewählten Programme geschlossen sind, liest die Bibliotheken neu und aktualisiert die anderen, mit einer Sicherung vor jedem Schreiben.',
+  'sync.reason.paused': 'Pausiert.',
+  'sync.reason.source-still-open': 'Das Programm ist wieder offen: Es wird auf das nächste Schließen gewartet.',
+  'sync.reason.quiet-period': 'Ein paar Sekunden Wartezeit nach dem Schließen, falls du es wieder öffnest.',
+  'sync.reason.destination-open': 'Ein anderes gewähltes Programm ist noch offen: Jetzt hineinzuschreiben würde beim Schließen überschrieben.',
+  'sync.reason.processes-unknown': 'Unklar, welche Programme offen sind: Aus Sicherheitsgründen startet nichts.',
+  'sync.reason.job-running': 'Wartet auf das Ende einer anderen Aufgabe.',
+  'sync.reason.user-active': 'Wartet, bis du mit der Bibliothek fertig bist.',
+  'sync.reason.too-soon': 'Zu kurz nach dem letzten Lauf: Es versucht es gleich wieder.',
+  'sync.reason.nothing-to-do': 'Kein anderes Programm zu aktualisieren.',
+  'sync.reason.slave-closed': 'Du hast einen Slave geschlossen: Seine Änderungen werden nicht übernommen. Synchronisiert wird beim Schließen des Masters.',
 };
 
 export const STRINGS: Record<Locale, Dict> = { it, en, fr, de };

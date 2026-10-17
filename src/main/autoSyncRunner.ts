@@ -5,6 +5,7 @@ import { applySync, planLibrarySync, type SyncOptions } from '@core/syncEngine';
 import type { SyncField } from '@core/syncDiff';
 import { toCamelot } from '@core/camelot';
 import type { LiveValues } from '@adapters/livePatch';
+import { mt } from './mainText';
 
 /**
  * Un giro di sincronizzazione fra le librerie dei programmi, dall'inizio alla fine:
@@ -96,7 +97,7 @@ export async function runLibrarySync(
   /* 1. Rilettura. Senza l'origine non c'è giro: l'errore risale, e il guardiano
      tiene la chiusura in coda per riprovare. */
   const src = await deps.reimport(source);
-  if (!src.ok) throw new Error(`Rilettura di ${source} non riuscita: ${src.message ?? ''}`);
+  if (!src.ok) throw new Error(mt('run.sourceReread', { app: source, msg: src.message ?? '' }));
   report.reread.push(source);
 
   const writable = new Map<GuardedSoftware, boolean>();
@@ -106,7 +107,7 @@ export async function runLibrarySync(
     if (!r.ok) {
       report.excluded.push({
         software: d,
-        reason: `rilettura non riuscita: ${r.message ?? ''}`
+        reason: mt('ex.reread', { msg: r.message ?? '' })
       });
       continue;
     }

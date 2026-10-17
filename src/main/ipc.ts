@@ -115,6 +115,7 @@ import { checkSidecar, runSidecar, SidecarEvent } from './sidecar';
 import { rekordboxDefaultPaths } from './rekordboxPaths';
 import { detectDjSoftware } from './djSoftwarePaths';
 import { getLastPreflight, runPreflight } from './preflight';
+import { mainLocale, mt, setMainLocaleSource } from './mainText';
 
 /** Destinazioni per cui la correzione dello scarto MP3 ha senso. */
 const BEATSHIFT_TARGETS = new Set(['rekordbox', 'traktor', 'serato', 'virtualdj', 'engine']);
@@ -149,6 +150,9 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
   // Coda job unica: TUTTO ciò che scrive l'UDM o spawna il sidecar viene
   // serializzato. Node (better-sqlite3) e Python non scrivono mai l'UDM in
   // concorrenza, e con un solo job attivo alla volta currentCancel non ha race.
+  // I testi del processo principale seguono la lingua scelta nell'interfaccia.
+  setMainLocaleSource(() => getSetting(db, 'locale'));
+
   let anyJobRunning = false;
   /**
    * Fine dell'ultimo lavoro sulla libreria.
@@ -254,14 +258,11 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
       const parent = BrowserWindow.fromWebContents(e.sender) ?? win();
       const opts = {
         type: 'warning' as const,
-        buttons: ['Annulla', 'Attiva'],
+        buttons: [mt('btn.cancel'), mt('btn.enable')],
         defaultId: 0,
         cancelId: 0,
-        title: 'Conferma attivazione',
-        message:
-          key === 'masterDbWrites'
-            ? 'Attivare la scrittura DIRETTA nel database di Rekordbox? Chiudi Rekordbox prima di usarla.'
-            : 'Attivare le scritture dirette sui file originali (eliminazione orfani, tag ID3)?'
+        title: mt('gate.title'),
+        message: key === 'masterDbWrites' ? mt('gate.masterdb') : mt('gate.direct')
       };
       const r = parent
         ? await dialog.showMessageBox(parent, opts)
@@ -306,12 +307,14 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
     if (isEncryptedRekordboxDb(software, path)) {
       return evaluateAppVersion('rekordbox', probeRekordboxApp(), {
         acknowledged: getSetting(db, appAcknowledgeKey('rekordbox')),
-        gate: versionGate()
+        gate: versionGate(),
+        locale: mainLocale()
       });
     }
     return evaluateVersion(software, probeVersion(software, path), {
       acknowledged: getSetting(db, acknowledgeKey(software)),
-      gate: versionGate()
+      gate: versionGate(),
+      locale: mainLocale()
     });
   };
 
@@ -354,7 +357,8 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
         ...(v ??
           evaluateVersion(software, null, {
             acknowledged: getSetting(db, acknowledgeKey(software)),
-            gate: versionGate()
+            gate: versionGate(),
+            locale: mainLocale()
           })),
         label: TESTED[software].label,
         /* Il marcatore dichiarato NON è sempre quello effettivamente letto:
@@ -388,16 +392,15 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
     const parent = BrowserWindow.fromWebContents(e.sender) ?? win();
     const opts = {
       type: 'warning' as const,
-      buttons: ['Annulla', 'Sblocca'],
+      buttons: [mt('btn.cancel'), mt('btn.unlock')],
       defaultId: 0,
       cancelId: 0,
-      title: 'Versione non collaudata',
-      message:
-        `Sbloccare la scrittura verso ${TESTED[software].label} ${version}?\n\n` +
-        `L'ultima versione collaudata è la ${TESTED[software].maxTested}. Il formato di ` +
-        `questa versione non è stato verificato: se è cambiato, la scrittura può ` +
-        `danneggiare la libreria senza segnalare nulla. Sbloccalo solo se hai provato ` +
-        `tu stesso che i dati tornano indietro identici.`
+      title: mt('version.title'),
+      message: mt('version.message', {
+        app: TESTED[software].label,
+        version,
+        tested: TESTED[software].maxTested
+      })
     };
     const r = parent ? await dialog.showMessageBox(parent, opts) : await dialog.showMessageBox(opts);
     if (r.response !== 1) return { ok: false };
@@ -616,7 +619,7 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
     // Il collection XML dichiara la versione del proprio formato: se non e'
     // quella collaudata l'import prosegue, ma l'utente lo viene a sapere.
     const versioneXml = checkReadable('rekordbox', xmlPath);
-    if (anyJobRunning) throw new Error('Un altro lavoro è già in corso.');
+    if (anyJobRunning) throw new Error(mt('busy'));
     return withJobLock(async () => {
       const progress = new ThrottledProgress(wc());
       const jobId = randomUUID();
@@ -688,7 +691,7 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
     if (kind !== 'traktor' && kind !== 'virtualdj' && kind !== 'engine') {
       throw new Error(`Formato d'import non gestito: ${String(kind)}`);
     }
-    if (anyJobRunning) throw new Error('Un altro lavoro è già in corso.');
+    if (anyJobRunning) throw new Error(mt('busy'));
     return withJobLock(() => importForeignCore(kind, path));
   });
 
@@ -746,7 +749,7 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
     };
 
   ipcMain.handle('library:importSerato4', async (_e, masterPath?: string) => {
-    if (anyJobRunning) throw new Error('Un altro lavoro è già in corso.');
+    if (anyJobRunning) throw new Error(mt('busy'));
     return withJobLock(() => importSerato4Core(masterPath));
   });
 
@@ -770,8 +773,7 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
     async (_e, masterPath?: string, sel?: { playlistIds?: number[] }) => {
       if (getSetting(db, 'directWrites') !== '1') {
         throw new Error(
-          'Creare crate in Serato 4 scrive nel database della tua libreria: ' +
-            'serve attivare le scritture dirette in Impostazioni → Esperto.'
+          mt('needDirect', { what: mt('what.serato4') })
         );
       }
       const path = masterPath ?? serato4DatabasePath();
@@ -890,7 +892,7 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
     };
 
   ipcMain.handle('library:importDjay', async (_e, dbPath?: string) => {
-    if (anyJobRunning) throw new Error('Un altro lavoro è già in corso.');
+    if (anyJobRunning) throw new Error(mt('busy'));
     return withJobLock(() => importDjayCore(dbPath));
   });
 
@@ -906,7 +908,7 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
    * di analisi, la catena staging → copia → verifica — non è implementata.
    */
   ipcMain.handle('library:importUsbLibrary', async (_e, usbRoot: string) => {
-    if (anyJobRunning) throw new Error('Un altro lavoro è già in corso.');
+    if (anyJobRunning) throw new Error(mt('busy'));
     return withJobLock(async () => {
       const check = checkSidecar();
       if (!check.available) {
@@ -970,8 +972,7 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
             message:
               (lastError ?? 'Lettura del database non riuscita.') +
               (netWarn ? `\n\n${netWarn}` : '') +
-              ' Puoi usare la modalità solo-XML (esporta la collection da Rekordbox e importala qui)' +
-              ' oppure, in modalità Esperto: Impostazioni → "Scarica chiave di lettura" e riprova.'
+              mt('masterdbReadHint')
           };
         }
         logOperation(db, 'ingest.masterdb', masterDbPath, 'ok');
@@ -985,7 +986,7 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
   ipcMain.handle(
     'library:ingestMasterdb',
     async (_e, masterDbPath: string, optionsJsonPath?: string) => {
-      if (anyJobRunning) throw new Error('Un altro lavoro è già in corso.');
+      if (anyJobRunning) throw new Error(mt('busy'));
       const check = checkSidecar();
       if (!check.available) {
         return {
@@ -1132,9 +1133,7 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
   // (fase intermedia). Il gate è anche qui nel main, non solo in UI.
   ipcMain.handle('orphans:delete', (_e, scanId: string, files: string[], dryRun: boolean) => {
     if (getSetting(db, 'directWrites') !== '1') {
-      throw new Error(
-        'Le scritture dirette sono disattivate. Attivale in Impostazioni → Esperto.'
-      );
+      throw new Error(mt('needDirect', { what: mt('what.delete') }));
     }
     const scanned = orphanScans.get(scanId);
     if (!scanned) {
@@ -1354,7 +1353,7 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
     ) => {
     if (getSetting(db, 'directWrites') !== '1') {
       throw new Error(
-        'Serato salva i cue dentro i file audio: serve attivare le scritture dirette in Impostazioni → Esperto.'
+        mt('needDirect', { what: mt('what.seratoCues') })
       );
     }
     const check = checkSidecar();
@@ -1597,8 +1596,7 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
     async (_e, seratoDir: string, sel?: { playlistIds?: number[]; source?: string }) => {
       if (getSetting(db, 'directWrites') !== '1') {
         throw new Error(
-          'Aggiornare il database di Serato tocca un file della tua libreria: ' +
-            'serve attivare le scritture dirette in Impostazioni → Esperto.'
+          mt('needDirect', { what: mt('what.seratoDb') })
         );
       }
       const check = checkSidecar();
@@ -1724,7 +1722,7 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
    *  cambiata, e scrivere su un piano stantio è il modo di sovrascrivere una
    *  modifica che l'utente ha appena fatto. */
   ipcMain.handle('sync:applyLibrary', (_e, opts: SyncOptions) => {
-    if (anyJobRunning) throw new Error('Un altro lavoro è già in corso.');
+    if (anyJobRunning) throw new Error(mt('busy'));
     try {
       const piano = planLibrarySync(db, opts);
       const r = applySync(db, piano, opts);
@@ -1871,10 +1869,10 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
 
   const reimportProgram = async (software: GuardedSoftware): Promise<{ ok: boolean; message?: string }> => {
     const lib = libraryPathOf(software);
-    if (!lib) return { ok: false, message: 'libreria non trovata su questa macchina' };
+    if (!lib) return { ok: false, message: mt('ex.notFound') };
     switch (software) {
       case 'rekordbox':
-        if (!checkSidecar().available) return { ok: false, message: 'modulo di lettura non disponibile' };
+        if (!checkSidecar().available) return { ok: false, message: mt('ex.noEngine') };
         return ingestMasterdbCore(lib.path, lib.companion ?? undefined);
       case 'traktor':
       case 'virtualdj':
@@ -1895,22 +1893,22 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
 
   const canWriteProgram = async (software: GuardedSoftware): Promise<string | null> => {
     if (!LIVE_WRITABLE.has(software)) {
-      return 'sola lettura: CrateForge non sa ancora aggiornare questa libreria sul posto';
+      return mt('ex.readOnly');
     }
     if (getSetting(db, 'directWrites') !== '1') {
-      return 'scritture dirette spente (Impostazioni › Sicurezza)';
+      return mt('ex.gateOff');
     }
     const lib = libraryPathOf(software);
-    if (!lib) return 'libreria non trovata su questa macchina';
-    if (software === 'serato' && !checkSidecar().available) return 'modulo di scrittura non disponibile';
+    if (!lib) return mt('ex.notFound');
+    if (software === 'serato' && !checkSidecar().available) return mt('ex.noEngine');
     try {
       assertWritable(software as DjSoftware, lib.path);
     } catch (err) {
       return String((err as Error).message ?? err);
     }
     const run = await isDjSoftwareRunning(software);
-    if (run.unknown) return 'impossibile verificare se il programma è chiuso';
-    if (run.running) return 'il programma è aperto';
+    if (run.unknown) return mt('ex.unknownRunning');
+    if (run.running) return mt('ex.open');
     return null;
   };
 
@@ -2038,15 +2036,15 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
    */
   ipcMain.handle('sync:autoRunNow', async () => {
     const cfg = leggiAutoConfig();
-    if (cfg.softwares.length < 2) return { ok: false, message: 'Scegli almeno due programmi.' };
-    if (cfg.mode === 'masterSlave' && !cfg.master) return { ok: false, message: 'Scegli il programma master.' };
-    if (anyJobRunning) return { ok: false, message: 'Un altro lavoro è già in corso.' };
+    if (cfg.softwares.length < 2) return { ok: false, message: mt('run.pickTwo') };
+    if (cfg.mode === 'masterSlave' && !cfg.master) return { ok: false, message: mt('run.pickMaster') };
+    if (anyJobRunning) return { ok: false, message: mt('busy') };
     const running = await readRunningSoftware();
     if (running === 'unknown') {
-      return { ok: false, message: 'Non è stato possibile verificare quali programmi sono aperti.' };
+      return { ok: false, message: mt('run.unknown') };
     }
     const aperti = cfg.softwares.filter((s) => running.has(s));
-    if (aperti.length) return { ok: false, message: `Chiudi prima: ${aperti.join(', ')}.` };
+    if (aperti.length) return { ok: false, message: mt('run.closeFirst', { list: aperti.join(', ') }) };
     const source = cfg.mode === 'masterSlave' ? cfg.master! : cfg.softwares[0];
     try {
       const report = await runFullSync(source, cfg.softwares.filter((s) => s !== source));
@@ -2081,15 +2079,11 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
       const parent = BrowserWindow.fromWebContents(e.sender) ?? win();
       const opts = {
         type: 'warning' as const,
-        buttons: ['Annulla', 'Attiva'],
+        buttons: [mt('btn.cancel'), mt('btn.enable')],
         defaultId: 0,
         cancelId: 0,
-        title: 'Sincronizzazione automatica',
-        message:
-          `Attivare la sincronizzazione automatica fra ${nuova.softwares.join(', ')}?\n\n` +
-          'Quando chiudi un programma, CrateForge rilegge le librerie e aggiorna le altre sul ' +
-          'posto, con una copia di sicurezza prima di ogni scrittura. Servono le scritture ' +
-          'dirette attive; i programmi di sola lettura non ricevono modifiche.'
+        title: mt('autosync.title'),
+        message: mt('autosync.message', { list: nuova.softwares.join(', ') })
       };
       const r = parent ? await dialog.showMessageBox(parent, opts) : await dialog.showMessageBox(opts);
       if (r.response !== 1) return { config: attuale, status: { ...autoWatcher.status(), lastReport: lastRunReport } };
@@ -2389,9 +2383,7 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
       if (target === 'udm') return { ...applyProposals(db, proposals), target: 'udm' };
 
       if (getSetting(db, 'directWrites') !== '1') {
-        throw new Error(
-          'Le scritture dirette sono disattivate. Attivale in Impostazioni → Esperto.'
-        );
+        throw new Error(mt('needDirect', { what: mt('what.tags') }));
       }
       const check = checkSidecar();
       if (!check.available) {
@@ -2539,8 +2531,7 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
     ) => {
       if (getSetting(db, 'masterDbWrites') !== '1') {
         throw new Error(
-          'La scrittura diretta nel database di Rekordbox è disattivata. ' +
-            'Attivala in Impostazioni → Esperto (con tutti gli avvisi del caso).'
+          mt('needMasterDb')
         );
       }
       const check = checkSidecar();

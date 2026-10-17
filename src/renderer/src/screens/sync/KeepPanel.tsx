@@ -276,7 +276,7 @@ export function KeepPanel() {
               </span>
             )}
             {cfg.enabled && auto.status.lastDecision && !auto.status.lastDecision.run && (
-              <span className="text-caption text-ink-lo">{auto.status.lastDecision.message}</span>
+              <span className="text-caption text-ink-lo">{t(`sync.reason.${auto.status.lastDecision.reason}` as StrKey)}</span>
             )}
           </div>
         </div>

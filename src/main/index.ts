@@ -4,6 +4,7 @@ import { join } from 'path';
 import { openUdm } from '@core/udm';
 import { isWriteJobRunning, registerIpc } from './ipc';
 import { runPreflight } from './preflight';
+import { mt } from './mainText';
 
 /**
  * Registro di avvio su FILE.
@@ -200,14 +201,10 @@ if (!app.requestSingleInstanceLock()) {
         const win = BrowserWindow.getAllWindows()[0];
         const opts = {
           type: 'warning' as const,
-          buttons: ['Aspetta'],
+          buttons: [mt('btn.wait')],
           defaultId: 0,
-          title: 'Scrittura in corso',
-          message:
-            'CrateForge sta scrivendo dentro i tuoi file e non può essere chiuso adesso: ' +
-            "interrompere a metà lascerebbe un file scritto solo in parte, e il ripristino " +
-            'automatico non farebbe in tempo a partire. La chiusura avverrà appena la ' +
-            'scrittura è finita.'
+          title: mt('quit.title'),
+          message: mt('quit.message')
         };
         void (win ? dialog.showMessageBox(win, opts) : dialog.showMessageBox(opts));
         // Riprova appena il job finisce: nessun intervento richiesto all'utente.

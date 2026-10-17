@@ -1,5 +1,6 @@
 import { existsSync } from 'fs';
 import { basename, resolve } from 'path';
+import { mt } from './mainText';
 
 /**
  * Un export non deve mai finire SOPRA la libreria viva di un software DJ.
@@ -54,8 +55,5 @@ export function isLiveLibraryTarget(
 }
 
 export function liveLibraryMessage(label: string): string {
-  return (
-    `Questo è il file della libreria di ${label}: l'export non lo sovrascrive. ` +
-    `CrateForge scrive un file nuovo, che importi da ${label}. Scegli un altro nome.`
-  );
+  return mt('live.message', { app: label });
 }
