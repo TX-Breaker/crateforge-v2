@@ -5,6 +5,18 @@ import { openUdm } from '@core/udm';
 import { isWriteJobRunning, registerIpc } from './ipc';
 import { runPreflight } from './preflight';
 import { mt } from './mainText';
+/* L'icona del marchio, copiata da electron-vite accanto al bundle del main.
+   L'eseguibile impacchettato ha già la sua (electron-builder la incide nel
+   .exe e nel .app), ma la FINESTRA non la eredita ovunque: in sviluppo, su
+   Linux e nella barra delle applicazioni di Windows senza ID applicazione
+   compariva l'atomo di Electron. */
+import appIcon from '../../build/icon.png?asset';
+
+/* Stesso `appId` di electron-builder.yml. Senza, Windows raggruppa la finestra
+   sotto un ID generico e la barra delle applicazioni mostra l'icona di
+   Electron (o quella di un collegamento vecchio) invece di quella del
+   collegamento installato. Va impostato prima che compaia una finestra. */
+if (process.platform === 'win32') app.setAppUserModelId('com.txbreaker.crateforge');
 
 /**
  * Registro di avvio su FILE.
@@ -51,6 +63,7 @@ function createWindow(): void {
         }
       : {}),
     backgroundColor: '#0A0B0D',
+    icon: appIcon,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -153,6 +166,8 @@ if (!app.requestSingleInstanceLock()) {
 
   app.whenReady().then(() => {
     logMain(`avvio — versione ${app.getVersion()}, impacchettata=${app.isPackaged}`);
+    // macOS in sviluppo: il Dock mostrerebbe Electron. Impacchettata usa l'icona del .app.
+    if (process.platform === 'darwin' && !app.isPackaged) app.dock?.setIcon(appIcon);
     const udmPath = join(app.getPath('userData'), 'udm.sqlite');
     let db;
     try {
