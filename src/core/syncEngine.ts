@@ -1,4 +1,5 @@
 import type BetterSqlite3 from 'better-sqlite3';
+import { toCamelot } from './camelot';
 import {
   compareSignals,
   nativeSignalFrom,
@@ -157,6 +158,19 @@ export const TEMPORAL_CANDIDATES: SyncField[] = ['genre', 'rating', 'track_color
  * Calcola il piano. NON scrive niente: è la prova a vuoto che l'utente vede
  * prima di confermare, e la stessa struttura che `applySync` poi esegue.
  */
+/**
+ * Chiave dello stato di riferimento: la sorgente E il lato con cui si allinea.
+ *
+ * ⚠ Lo stato «ultimo allineamento» descrive una COPPIA, non un programma. Era
+ * salvato per programma: con un master e due slave, dopo la prima coppia il
+ * master risultava «già allineato» e il secondo slave non riceveva niente;
+ * in modalità simmetrica una modifica arrivata da B non proseguiva verso C.
+ * Con la chiave per coppia ogni partner ha la sua base.
+ */
+export function stateKey(source: string, partnerSources: string[]): string {
+  return `${source}|${[...partnerSources].sort().join(',')}`;
+}
+
 export function planLibrarySync(
   db: BetterSqlite3.Database,
   opts: SyncOptions
@@ -207,10 +221,10 @@ export function planLibrarySync(
     const aSignal = signalOf(a, aState);
     const bSignal = signalOf(b, bState);
 
-    const aSaved = getState.get(canonicalId, a.source) as
+    const aSaved = getState.get(canonicalId, stateKey(a.source, opts.bSources)) as
       | { last_signal: string | null; last_synced_digest: string | null }
       | undefined;
-    const bSaved = getState.get(canonicalId, b.source) as
+    const bSaved = getState.get(canonicalId, stateKey(b.source, opts.aSources)) as
       | { last_signal: string | null; last_synced_digest: string | null }
       | undefined;
 
@@ -387,8 +401,8 @@ export function applySync(
       const esito = plan.conflicts.length > 0 ? 'conflict' : 'ok';
 
       for (const [id, software] of [
-        [pair.aId, pair.aSoftware],
-        [pair.bId, pair.bSoftware]
+        [pair.aId, stateKey(pair.aSoftware, opts.bSources)],
+        [pair.bId, stateKey(pair.bSoftware, opts.aSources)]
       ] as [number, string][]) {
         const row = db
           .prepare(
@@ -417,8 +431,16 @@ export function applySync(
 function applyFields(db: BetterSqlite3.Database, trackId: number, values: TrackState): void {
   const entries = Object.entries(values) as [SyncField, unknown][];
   if (entries.length === 0) return;
-  const set = entries.map(([f]) => `${COLUMN_OF[f]} = ?`).join(', ');
-  db.prepare(`UPDATE tracks SET ${set} WHERE id = ?`).run(...entries.map(([, v]) => v), trackId);
+  const cols = entries.map(([f]) => `${COLUMN_OF[f]} = ?`);
+  const vals: unknown[] = entries.map(([, v]) => v);
+  /* ⚠ La notazione Camelot è DERIVATA dalla tonalità: grafici, ruota e filtri
+     leggono quella. Aggiornare la tonalità lasciandola com'era mostrava il
+     brano nella casella vecchia dopo ogni sincronizzazione. */
+  if ('musical_key' in values) {
+    cols.push('camelot = ?');
+    vals.push(toCamelot((values.musical_key as string | null) ?? null));
+  }
+  db.prepare(`UPDATE tracks SET ${cols.join(', ')} WHERE id = ?`).run(...vals, trackId);
 }
 
 /**

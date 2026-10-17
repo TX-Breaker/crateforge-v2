@@ -30,7 +30,21 @@ export interface AutoSyncView {
     lastDecisionAt: number | null;
     lastRunAt: number | null;
     pendingClosures: { software: string; closedAt: number }[];
+    /** Resoconto dell'ultimo giro completo, se ce n'è stato uno in questa sessione. */
+    lastReport?: AutoSyncRunReport | null;
   };
+}
+
+/** Che cosa ha fatto un giro completo: riletto, escluso, allineato, scritto. */
+export interface AutoSyncRunReport {
+  source: string;
+  mode: 'symmetric' | 'masterSlave';
+  reread: string[];
+  excluded: { software: string; reason: string }[];
+  aligned: number;
+  conflicts: number;
+  written: { software: string; tracks: number; missing: number; backup?: string | null }[];
+  notPropagated: string[];
 }
 
 const api = {
@@ -260,6 +274,13 @@ const api = {
       ipcRenderer.invoke('sync:autoConfig') as Promise<AutoSyncView>,
     autoSetConfig: (patch: Partial<AutoSyncConfigView>) =>
       ipcRenderer.invoke('sync:autoSetConfig', patch) as Promise<AutoSyncView>,
+    /** Il giro completo, subito: rilegge, allinea e scrive nei programmi scrivibili. */
+    autoRunNow: () =>
+      ipcRenderer.invoke('sync:autoRunNow') as Promise<{
+        ok: boolean;
+        message?: string;
+        report?: AutoSyncRunReport;
+      }>,
     plan: (opts: {
       originSources: string[];
       destinationSources: string[];

@@ -172,6 +172,27 @@ app.whenReady().then(async () => {
     }
   }
 
+  /* ---- Tieni allineati: «Allinea ora» e il suo resoconto ---- */
+  await click('nav button', 'Sincronizza');
+  await wait(600);
+  await click('[role="radio"]', 'Tieni allineati', 'main');
+  await wait(800);
+  if (!(await click('button', 'Allinea ora', 'main'))) problems.push('Tieni allineati: «Allinea ora» non trovato');
+  else {
+    await wait(900);
+    const rep = await win.webContents.executeJavaScript(
+      `(() => { const m = [...document.querySelectorAll('main')].pop(); return m ? m.innerText : ''; })()`
+    );
+    if (!/Traktor: 12 brani aggiornati/.test(rep)) problems.push('Tieni allineati: il resoconto del giro non compare');
+    else console.log('OK  Tieni allineati › Allinea ora  resoconto mostrato');
+    await check('Tieni allineati › resoconto', 'main');
+    await shot('keep-report');
+  }
+  const autoOff = await win.webContents.executeJavaScript(
+    `(() => { const s = [...document.querySelectorAll('main button[role="switch"]')]; return s.length ? s.every(x => x.getAttribute('data-state') === 'unchecked') : null; })()`
+  );
+  if (autoOff !== true) problems.push('Tieni allineati: l’automatico deve partire spento');
+
   /* ---- pannelli laterali di Da sistemare ---- */
   await click('nav button', 'Da sistemare');
   await wait(600);

@@ -35,6 +35,12 @@ const rows = (n, offset = 0) =>
 
 const noop = () => () => {};
 
+/* Sincronizzazione automatica SPENTA, come nell'applicazione vera: il test deve
+   vedere lo stato di chi installa. I partecipanti sono già scelti solo perché
+   «Allinea ora» abbia qualcosa da fare. */
+let autoCfg = { enabled: false, paused: false, softwares: ['rekordbox', 'traktor'], fields: ['bpm', 'musical_key'], mode: 'masterSlave', master: 'rekordbox' };
+const autoStatus = { lastDecision: null, lastDecisionAt: null, lastRunAt: null, pendingClosures: [], lastReport: null };
+
 const api = {
   settings: {
     get: async (k) =>
@@ -99,14 +105,15 @@ const api = {
     plan: async () => ({ ok: true, tracks: 0, cues: 0 }),
     /* Spenta, come nell'applicazione vera: il test deve vedere lo stato in cui
        si trova chi installa il programma, non uno che nessuno ha mai scelto. */
-    autoConfig: async () => ({
-      config: { enabled: false, paused: false, softwares: [], fields: [], mode: 'symmetric' },
-      status: { lastDecision: null, lastDecisionAt: null, lastRunAt: null, pendingClosures: [] }
+    autoConfig: async () => ({ config: autoCfg, status: autoStatus }),
+    autoRunNow: async () => ({
+      ok: true,
+      report: { source: 'rekordbox', mode: 'masterSlave', reread: ['rekordbox', 'traktor'], excluded: [], aligned: 12, conflicts: 0, written: [{ software: 'traktor', tracks: 12, missing: 0 }], notPropagated: [] }
     }),
-    autoSetConfig: async () => ({
-      config: { enabled: false, paused: false, softwares: [], fields: [], mode: 'symmetric' },
-      status: { lastDecision: null, lastDecisionAt: null, lastRunAt: null, pendingClosures: [] }
-    })
+    autoSetConfig: async (patch) => {
+      autoCfg = { ...autoCfg, ...patch };
+      return { config: autoCfg, status: autoStatus };
+    }
   },
   sidecar: { check: async () => ({ available: true, binaryPath: 'resources/crateforge-sidecar.exe' }), downloadKey: async () => ({ ok: true }) },
   library: {

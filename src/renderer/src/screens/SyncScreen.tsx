@@ -33,15 +33,13 @@ export function SyncScreen() {
 
   const tracksOf = (s: SoftwareId) => counts?.bySoftware[s]?.tracks ?? 0;
   const withData = SOFTWARE.filter((s) => tracksOf(s) > 0);
-  const fromOptions: From[] = mode === 'once' ? ['all', ...withData] : withData;
-  const toOptions = SOFTWARE.filter((s) => s !== from && (mode === 'once' || tracksOf(s) > 0));
+  const fromOptions: From[] = ['all', ...withData];
+  const toOptions = SOFTWARE.filter((s) => s !== from);
 
-  /* Una scelta che la modalità nuova non ammette si scioglie da sola, invece
-     di restare evidenziata e inerte. */
+  // Una destinazione uguale all'origine appena scelta si scioglie da sola.
   useEffect(() => {
-    if (!fromOptions.includes(from)) setFrom(fromOptions[0] ?? 'all');
-    if (to && !toOptions.includes(to)) setTo(null);
-  }, [mode, from, to, fromOptions.join(), toOptions.join()]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (to && to === from) setTo(null);
+  }, [from, to]);
 
   const hint = (s: SoftwareId) =>
     tracksOf(s) > 0 ? `${tracksOf(s).toLocaleString(locale)} ${t('c.tracks')}` : undefined;
@@ -59,41 +57,43 @@ export function SyncScreen() {
         />
       </PageHeader>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Section title={t('sync.from')}>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {fromOptions.map((s) => (
-              <ChoiceTile
-                key={s}
-                selected={from === s}
-                onClick={() => setFrom(s)}
-                icon={s === 'all' ? <Library /> : <Disc3 />}
-                title={s === 'all' ? t('sync.everything') : SOFTWARE_LABEL[s]}
-                hint={s === 'all' ? undefined : hint(s)}
-              />
-            ))}
-          </div>
-        </Section>
-        <Section title={t('sync.to')}>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {toOptions.map((s) => (
-              <ChoiceTile
-                key={s}
-                selected={to === s}
-                onClick={() => setTo(s)}
-                icon={<Disc3 />}
-                title={SOFTWARE_LABEL[s]}
-                hint={hint(s)}
-              />
-            ))}
-          </div>
-        </Section>
-      </div>
-
-      {mode === 'once' ? (
-        <ConvertPanel from={from} to={to} counts={counts} />
+      {mode === 'keep' ? (
+        <KeepPanel />
       ) : (
-        <KeepPanel a={from === 'all' ? null : from} b={to} />
+        <>
+          <div className="grid gap-6 lg:grid-cols-2">
+            <Section title={t('sync.from')}>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {fromOptions.map((s) => (
+                  <ChoiceTile
+                    key={s}
+                    selected={from === s}
+                    onClick={() => setFrom(s)}
+                    icon={s === 'all' ? <Library /> : <Disc3 />}
+                    title={s === 'all' ? t('sync.everything') : SOFTWARE_LABEL[s]}
+                    hint={s === 'all' ? undefined : hint(s)}
+                  />
+                ))}
+              </div>
+            </Section>
+            <Section title={t('sync.to')}>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {toOptions.map((s) => (
+                  <ChoiceTile
+                    key={s}
+                    selected={to === s}
+                    onClick={() => setTo(s)}
+                    icon={<Disc3 />}
+                    title={SOFTWARE_LABEL[s]}
+                    hint={hint(s)}
+                  />
+                ))}
+              </div>
+            </Section>
+          </div>
+
+          <ConvertPanel from={from} to={to} counts={counts} />
+        </>
       )}
     </div>
   );

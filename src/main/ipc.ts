@@ -87,6 +87,7 @@ import {
   evaluateAppVersion,
   evaluateVersion,
   TESTED,
+  type GuardedSoftware,
   type DjSoftware,
   type VersionVerdict
 } from '@core/djVersions';
@@ -94,6 +95,15 @@ import { probeRekordboxApp, probeVersion } from './versionProbe';
 import { assertNotRunning } from './processGuard';
 import { isLiveLibraryTarget, liveLibraryMessage } from './liveLibraryGuard';
 import { AutoSyncWatcher, readRunningSoftware } from './autoSyncWatcher';
+import { runLibrarySync, type LiveRow, type RunReport, type WriteReport } from './autoSyncRunner';
+import { isDjSoftwareRunning } from './processGuard';
+import { patchTraktorNml } from '@adapters/traktor/nmlPatch';
+import { patchVirtualDjXml } from '@adapters/virtualdj/vdjPatch';
+import { patchEngineTracks } from '@adapters/engine/enginePatch';
+import type { LiveValues } from '@adapters/livePatch';
+import { safeWriteBuffer } from '@services/safeWrite';
+import Database from 'better-sqlite3';
+import { readFileSync } from 'fs';
 import {
   AUTO_SYNC_SETTING_KEY,
   SOURCES_OF_SOFTWARE,
@@ -629,18 +639,9 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
   });
 
   // ---- import da altri software DJ (pure-Node, sola lettura sul sorgente) ----
-  ipcMain.handle('library:importForeign', async (_e, kind: 'traktor' | 'virtualdj' | 'engine', path: string) => {
-    /* ⚠ Il tipo del parametro è una dichiarazione, non un controllo: all'IPC
-       arriva quello che il renderer manda. Prima, qualunque valore diverso da
-       'traktor' ed 'engine' veniva letto come VirtualDJ, e un tipo imprevisto
-       produceva un errore di parsing XML che parlava del software sbagliato —
-       lo stesso schema per cui il master.sqlite di Serato 4 finiva nel lettore
-       di Engine. Un tipo sconosciuto si ferma qui, dicendo quale. */
-    if (kind !== 'traktor' && kind !== 'virtualdj' && kind !== 'engine') {
-      throw new Error(`Formato d'import non gestito: ${String(kind)}`);
-    }
-    if (anyJobRunning) throw new Error('Un altro lavoro è già in corso.');
-    return withJobLock(async () => {
+  /** Nucleo dell'import, senza la coda dei lavori: lo richiama anche il giro automatico,
+      che è già dentro la coda e si bloccherebbe da solo passando dall'handler. */
+  const importForeignCore = async (kind: 'traktor' | 'virtualdj' | 'engine', path: string) => {
       const progress = new ThrottledProgress(wc());
       const jobId = randomUUID();
       try {
@@ -675,7 +676,20 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
         const netWarn = networkPathWarning(path);
         return { ok: false, message: netWarn ? `${String(err)}\n\n${netWarn}` : String(err) };
       }
-    });
+    };
+
+  ipcMain.handle('library:importForeign', async (_e, kind: 'traktor' | 'virtualdj' | 'engine', path: string) => {
+    /* ⚠ Il tipo del parametro è una dichiarazione, non un controllo: all'IPC
+       arriva quello che il renderer manda. Prima, qualunque valore diverso da
+       'traktor' ed 'engine' veniva letto come VirtualDJ, e un tipo imprevisto
+       produceva un errore di parsing XML che parlava del software sbagliato —
+       lo stesso schema per cui il master.sqlite di Serato 4 finiva nel lettore
+       di Engine. Un tipo sconosciuto si ferma qui, dicendo quale. */
+    if (kind !== 'traktor' && kind !== 'virtualdj' && kind !== 'engine') {
+      throw new Error(`Formato d'import non gestito: ${String(kind)}`);
+    }
+    if (anyJobRunning) throw new Error('Un altro lavoro è già in corso.');
+    return withJobLock(() => importForeignCore(kind, path));
   });
 
   /**
@@ -690,9 +704,9 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
    * collaudate, e senza quella non c'è modo di rifiutare la scrittura verso una
    * versione mai provata. Vedi `docs/formats/GAP-ANALYSIS.md` §6.
    */
-  ipcMain.handle('library:importSerato4', async (_e, masterPath?: string) => {
-    if (anyJobRunning) throw new Error('Un altro lavoro è già in corso.');
-    return withJobLock(async () => {
+  /** Nucleo dell'import, senza la coda dei lavori: lo richiama anche il giro automatico,
+      che è già dentro la coda e si bloccherebbe da solo passando dall'handler. */
+  const importSerato4Core = async (masterPath?: string) => {
       const progress = new ThrottledProgress(wc());
       const jobId = randomUUID();
       const path = masterPath ?? serato4DatabasePath();
@@ -729,7 +743,11 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
         logOperation(db, 'import.serato4', path, 'error', String(err));
         return { ok: false, message: String(err) };
       }
-    });
+    };
+
+  ipcMain.handle('library:importSerato4', async (_e, masterPath?: string) => {
+    if (anyJobRunning) throw new Error('Un altro lavoro è già in corso.');
+    return withJobLock(() => importSerato4Core(masterPath));
   });
 
   /**
@@ -834,9 +852,9 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
    * ma importa dati falsi nella nostra, che è poi ciò da cui l'utente
    * sincronizza tutto il resto.
    */
-  ipcMain.handle('library:importDjay', async (_e, dbPath?: string) => {
-    if (anyJobRunning) throw new Error('Un altro lavoro è già in corso.');
-    return withJobLock(async () => {
+  /** Nucleo dell'import, senza la coda dei lavori: lo richiama anche il giro automatico,
+      che è già dentro la coda e si bloccherebbe da solo passando dall'handler. */
+  const importDjayCore = async (dbPath?: string) => {
       const progress = new ThrottledProgress(wc());
       const jobId = randomUUID();
       const path = dbPath ?? djayDatabasePath();
@@ -869,7 +887,11 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
         logOperation(db, 'import.djay', path, 'error', String(err));
         return { ok: false, message: String(err) };
       }
-    });
+    };
+
+  ipcMain.handle('library:importDjay', async (_e, dbPath?: string) => {
+    if (anyJobRunning) throw new Error('Un altro lavoro è già in corso.');
+    return withJobLock(() => importDjayCore(dbPath));
   });
 
   /**
@@ -907,22 +929,9 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
   });
 
   // ---- ingestion master.db (sidecar Python; sola lettura sul sorgente) ----
-  ipcMain.handle(
-    'library:ingestMasterdb',
-    async (_e, masterDbPath: string, optionsJsonPath?: string) => {
-      if (anyJobRunning) throw new Error('Un altro lavoro è già in corso.');
-      const check = checkSidecar();
-      if (!check.available) {
-        return {
-          ok: false,
-          fallbackXml: true,
-          message:
-            'Il modulo di lettura diretta non è disponibile. Puoi comunque usare la modalità ' +
-            'solo-XML: esporta la collection da Rekordbox (File → Export Collection in xml format) ' +
-            'e importala da qui.'
-        };
-      }
-      return withJobLock(async () => {
+  /** Nucleo dell'import, senza la coda dei lavori: lo richiama anche il giro automatico,
+      che è già dentro la coda e si bloccherebbe da solo passando dall'handler. */
+  const ingestMasterdbCore = async (masterDbPath: string, optionsJsonPath?: string) => {
       const progress = new ThrottledProgress(wc());
       const jobId = randomUUID();
       const args = ['--master-db', masterDbPath];
@@ -971,19 +980,36 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
       } finally {
         currentCancel = null;
       }
-      });
+      };
+
+  ipcMain.handle(
+    'library:ingestMasterdb',
+    async (_e, masterDbPath: string, optionsJsonPath?: string) => {
+      if (anyJobRunning) throw new Error('Un altro lavoro è già in corso.');
+      const check = checkSidecar();
+      if (!check.available) {
+        return {
+          ok: false,
+          fallbackXml: true,
+          message:
+            'Il modulo di lettura diretta non è disponibile. Puoi comunque usare la modalità ' +
+            'solo-XML: esporta la collection da Rekordbox (File → Export Collection in xml format) ' +
+            'e importala da qui.'
+        };
+      }
+      return withJobLock(() => ingestMasterdbCore(masterDbPath, optionsJsonPath));
     }
   );
 
   // ---- import Serato (sidecar Python; database V2 + crate + cue GEOB) ----
   // Sperimentale, sola lettura. Riceve la cartella "_Serato_" e vi legge dentro.
-  ipcMain.handle('library:importSerato', async (_e, seratoDir: string) => {
+  const importSeratoCore = async (seratoDir: string, run = runSidecarJob) => {
     const check = checkSidecar();
     if (!check.available) {
       return { ok: false, message: 'Il modulo di lettura non è disponibile su questo computer.' };
     }
     const versioneSerato = checkReadable('serato', seratoDir);
-    const r = await runSidecarJob('read-serato', 'read-serato', ['--serato-dir', seratoDir]);
+    const r = await run('read-serato', 'read-serato', ['--serato-dir', seratoDir]);
     logOperation(db, 'import.serato', seratoDir, r.ok ? 'ok' : 'error', r.ok ? JSON.stringify(r.data) : r.message);
     if (r.ok) relinkIdentity('import.serato');
     const netWarn = networkPathWarning(seratoDir);
@@ -996,7 +1022,8 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
           ok: false,
           message: avvisi.length ? [r.message, ...avvisi].join('\n\n') : r.message
         };
-  });
+  };
+  ipcMain.handle('library:importSerato', (_e, seratoDir: string) => importSeratoCore(seratoDir));
 
   ipcMain.handle('job:cancel', () => {
     currentCancel?.();
@@ -1799,10 +1826,12 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
   ipcMain.handle('sync:libraryState', () => {
     return db
       .prepare(
-        `SELECT software, COUNT(*) AS tracks,
+        `SELECT CASE WHEN instr(software, '|') > 0 THEN substr(software, 1, instr(software, '|') - 1)
+                     ELSE software END AS software,
+                COUNT(DISTINCT canonical_id) AS tracks,
                 MAX(last_synced_at) AS lastSyncedAt,
                 SUM(CASE WHEN outcome = 'conflict' THEN 1 ELSE 0 END) AS conflicts
-           FROM sync_state GROUP BY software ORDER BY software`
+           FROM sync_state GROUP BY 1 ORDER BY 1`
       )
       .all();
   });
@@ -1820,6 +1849,163 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
    * al prossimo riavvio. Per la stessa ragione l'elenco delle destinazioni e i
    * campi si rileggono ogni volta.
    */
+  /* ---------------------------------------------------------------------
+   * Giro completo: rileggi → riconcilia → scrivi sul posto.
+   *
+   * ⚠ Scrivere nella libreria viva di un altro programma passa dalle stesse
+   * guardie di ogni altra scrittura: gate delle scritture dirette, versione
+   * collaudata, programma chiuso (verificato di nuovo un attimo prima di
+   * scrivere), copia di sicurezza verificata, sostituzione atomica e controllo
+   * che il file scritto si rilegga con lo stesso numero di brani.
+   * ------------------------------------------------------------------- */
+
+  /** Dove sta la libreria di un programma su questa macchina. */
+  const libraryPathOf = (software: GuardedSoftware): { path: string; companion?: string | null } | null => {
+    if (software === 'djay') {
+      const p = djayDatabasePath();
+      return p ? { path: p } : null;
+    }
+    const d = detectDjSoftware().find((x) => x.id === software);
+    return d?.found && d.path ? { path: d.path, companion: d.companionPath ?? null } : null;
+  };
+
+  const reimportProgram = async (software: GuardedSoftware): Promise<{ ok: boolean; message?: string }> => {
+    const lib = libraryPathOf(software);
+    if (!lib) return { ok: false, message: 'libreria non trovata su questa macchina' };
+    switch (software) {
+      case 'rekordbox':
+        if (!checkSidecar().available) return { ok: false, message: 'modulo di lettura non disponibile' };
+        return ingestMasterdbCore(lib.path, lib.companion ?? undefined);
+      case 'traktor':
+      case 'virtualdj':
+      case 'engine':
+        return importForeignCore(software, lib.path);
+      case 'serato':
+        return importSeratoCore(lib.path, runSidecarRaw);
+      case 'serato4':
+        return importSerato4Core(lib.path);
+      case 'djay':
+        return importDjayCore(lib.path);
+    }
+    return { ok: false, message: `programma non gestito: ${String(software)}` };
+  };
+
+  /** Programmi che CrateForge sa aggiornare sul posto. */
+  const LIVE_WRITABLE = new Set<GuardedSoftware>(['traktor', 'virtualdj', 'engine', 'serato']);
+
+  const canWriteProgram = async (software: GuardedSoftware): Promise<string | null> => {
+    if (!LIVE_WRITABLE.has(software)) {
+      return 'sola lettura: CrateForge non sa ancora aggiornare questa libreria sul posto';
+    }
+    if (getSetting(db, 'directWrites') !== '1') {
+      return 'scritture dirette spente (Impostazioni › Sicurezza)';
+    }
+    const lib = libraryPathOf(software);
+    if (!lib) return 'libreria non trovata su questa macchina';
+    if (software === 'serato' && !checkSidecar().available) return 'modulo di scrittura non disponibile';
+    try {
+      assertWritable(software as DjSoftware, lib.path);
+    } catch (err) {
+      return String((err as Error).message ?? err);
+    }
+    const run = await isDjSoftwareRunning(software);
+    if (run.unknown) return 'impossibile verificare se il programma è chiuso';
+    if (run.running) return 'il programma è aperto';
+    return null;
+  };
+
+  const autoBackupDir = (software: string) =>
+    join(app.getPath('userData'), 'backups', `autosync-${software}-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}`);
+
+  const byKey = (rows: LiveRow[]) => new Map<string, LiveValues>(rows.map((r) => [r.sourceId, r.values]));
+
+  const writeProgram = async (software: GuardedSoftware, rows: LiveRow[]): Promise<WriteReport> => {
+    const lib = libraryPathOf(software);
+    if (!lib) throw new Error(`${software}: libreria non trovata`);
+    // Ultimo controllo, a ridosso della scrittura: il programma potrebbe essere stato riaperto.
+    await assertNotRunning(software, software);
+    const backupDir = autoBackupDir(software);
+
+    if (software === 'traktor' || software === 'virtualdj') {
+      const read = software === 'traktor' ? readTraktorNml : readVirtualDjXml;
+      const before = read(lib.path).tracks.length;
+      const original = readFileSync(lib.path, 'utf-8');
+      const r = software === 'traktor' ? patchTraktorNml(original, byKey(rows)) : patchVirtualDjXml(original, byKey(rows));
+      if (r.patched === 0) return { written: 0, missing: r.missing.length, backup: null };
+      const w = await safeWriteBuffer(lib.path, backupDir, r.text, async (staging) => {
+        const after = read(staging).tracks.length;
+        return after === before ? null : `il file scritto contiene ${after} brani invece di ${before}`;
+      });
+      if (!w.ok) throw new Error(`${software}: scrittura non riuscita, originale ripristinato`);
+      return { written: r.patched, missing: r.missing.length, backup: w.backupPath };
+    }
+
+    if (software === 'engine') {
+      mkdirSync(backupDir, { recursive: true });
+      for (const suffix of ['', '-wal', '-shm']) {
+        if (existsSync(lib.path + suffix)) copyFileSync(lib.path + suffix, join(backupDir, basename(lib.path) + suffix));
+      }
+      const edb = new Database(lib.path);
+      try {
+        const r = patchEngineTracks(edb, byKey(rows));
+        return { written: r.patched, missing: r.missing.length, backup: backupDir };
+      } finally {
+        edb.close();
+      }
+    }
+
+    if (software === 'serato') {
+      /* Lo scrittore di Serato sostituisce solo i campi passati, e un campo
+         vuoto non lo cancella: Serato non ha un modo sicuro di «togliere» un
+         valore dal suo database. */
+      const jobs = rows
+        .filter((r) => r.path)
+        .map((r) => ({
+          path: r.path,
+          title: r.values.title ?? null,
+          artist: r.values.artist ?? null,
+          album: r.values.album ?? null,
+          genre: r.values.genre ?? null,
+          key: r.values.musicalKey ?? null,
+          bpm: r.values.bpm != null ? r.values.bpm.toFixed(2) : null
+        }));
+      const tracksFile = writeTempJson('autosync-serato', jobs);
+      try {
+        const r = await runSidecarRaw('write-serato-database', 'write-serato-database', [
+          '--serato-dir', lib.path, '--tracks-file', tracksFile, '--backup-dir', backupDir
+        ]);
+        if (!r.ok) throw new Error(`serato: ${r.message ?? 'scrittura non riuscita'}`);
+        const d = r.data as { updated?: number; notInDatabase?: number };
+        return { written: d.updated ?? 0, missing: d.notInDatabase ?? 0, backup: backupDir };
+      } finally {
+        rmSync(tracksFile, { force: true });
+      }
+    }
+    throw new Error(`${software}: nessuno scrittore sul posto`);
+  };
+
+  let lastRunReport: RunReport | null = null;
+
+  /** Il giro, dentro la coda dei lavori: lo usano l'automatico e «Allinea ora». */
+  const runFullSync = (source: GuardedSoftware, destinations: GuardedSoftware[]) =>
+    withJobLock(async () => {
+      const cfg = leggiAutoConfig();
+      try {
+        const report = await runLibrarySync(
+          { db, reimport: reimportProgram, canWrite: canWriteProgram, write: writeProgram },
+          { mode: cfg.mode, fields: cfg.fields },
+          source,
+          destinations
+        );
+        lastRunReport = report;
+        logOperation(db, 'sync.auto', `${source} → ${destinations.join(', ')}`, 'ok', JSON.stringify(report));
+        return report;
+      } catch (err) {
+        logOperation(db, 'sync.auto', `${source} → ${destinations.join(', ')}`, 'error', String(err));
+        throw err;
+      }
+    });
+
   const autoWatcher = new AutoSyncWatcher({
     now: () => Date.now(),
     readRunning: async () => {
@@ -1837,40 +2023,43 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
     isJobRunning: () => anyJobRunning,
     lastUserActivityAt: () => lastUserActivityAt,
     runSync: async (source, destinations) => {
-      const cfg = leggiAutoConfig();
-      /* ⚠ Passa dalla stessa coda dei lavori manuali. Non e' pignoleria: la
-         coda e' l'unica cosa che impedisce a due scritture di toccare l'UDM
-         insieme, e un giro automatico che la scavalcasse sarebbe proprio quello
-         che nessuno sta guardando. */
-      await withJobLock(async () => {
-        /* Il guardiano parla di programmi, il motore di sorgenti dell'archivio:
-           passare il nome del programma come sorgente lasciava fuori Rekordbox,
-           le cui righe stanno sotto `masterdb` e `xml`. */
-        const opts: SyncOptions = {
-          aSources: SOURCES_OF_SOFTWARE[source],
-          bSources: [...new Set(destinations.flatMap((d) => SOURCES_OF_SOFTWARE[d]))],
-          mode: cfg.mode,
-          fields: cfg.fields as SyncField[]
-        };
-        const piano = planLibrarySync(db, opts);
-        const r = applySync(db, piano, opts);
-        logOperation(
-          db,
-          'sync.auto',
-          `${source} → ${destinations.join(', ')}`,
-          'ok',
-          JSON.stringify({ mode: cfg.mode, ...r })
-        );
-      });
+      await runFullSync(source, destinations);
     },
     log: (evento, dettaglio) => logOperation(db, evento, dettaglio, 'ok', '')
   });
   autoWatcher.start();
 
+  /**
+   * «Allinea ora»: lo stesso giro dell'automatico, avviato a mano.
+   *
+   * L'origine è il master in modalità master → slave; in simmetrica il primo
+   * partecipante (le due passate portano comunque le modifiche di ognuno a
+   * tutti). Tutti i partecipanti devono essere chiusi, come per l'automatico.
+   */
+  ipcMain.handle('sync:autoRunNow', async () => {
+    const cfg = leggiAutoConfig();
+    if (cfg.softwares.length < 2) return { ok: false, message: 'Scegli almeno due programmi.' };
+    if (cfg.mode === 'masterSlave' && !cfg.master) return { ok: false, message: 'Scegli il programma master.' };
+    if (anyJobRunning) return { ok: false, message: 'Un altro lavoro è già in corso.' };
+    const running = await readRunningSoftware();
+    if (running === 'unknown') {
+      return { ok: false, message: 'Non è stato possibile verificare quali programmi sono aperti.' };
+    }
+    const aperti = cfg.softwares.filter((s) => running.has(s));
+    if (aperti.length) return { ok: false, message: `Chiudi prima: ${aperti.join(', ')}.` };
+    const source = cfg.mode === 'masterSlave' ? cfg.master! : cfg.softwares[0];
+    try {
+      const report = await runFullSync(source, cfg.softwares.filter((s) => s !== source));
+      return { ok: true, report };
+    } catch (err) {
+      return { ok: false, message: String((err as Error).message ?? err) };
+    }
+  });
+
   /** Configurazione e stato dell'automatico, in una lettura sola. */
   ipcMain.handle('sync:autoConfig', () => ({
     config: leggiAutoConfig(),
-    status: autoWatcher.status()
+    status: { ...autoWatcher.status(), lastReport: lastRunReport }
   }));
 
   /**
@@ -1880,11 +2069,31 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
    * dal renderer non e' piu' affidabile di quello che c'e' nel database, e la
    * validazione deve stare da una parte sola.
    */
-  ipcMain.handle('sync:autoSetConfig', (_e, patch: Partial<AutoSyncConfig>) => {
+  ipcMain.handle('sync:autoSetConfig', async (e, patch: Partial<AutoSyncConfig>) => {
     const attuale = leggiAutoConfig();
     const nuova = parseAutoSyncConfig(
       JSON.stringify({ ...attuale, ...patch })
     );
+    /* Accendere l'automatico significa autorizzare scritture future nelle
+       librerie degli altri programmi, senza nessuno a guardare: la conferma è
+       NATIVA, nel processo principale, come per i gate. */
+    if (nuova.enabled && !attuale.enabled) {
+      const parent = BrowserWindow.fromWebContents(e.sender) ?? win();
+      const opts = {
+        type: 'warning' as const,
+        buttons: ['Annulla', 'Attiva'],
+        defaultId: 0,
+        cancelId: 0,
+        title: 'Sincronizzazione automatica',
+        message:
+          `Attivare la sincronizzazione automatica fra ${nuova.softwares.join(', ')}?\n\n` +
+          'Quando chiudi un programma, CrateForge rilegge le librerie e aggiorna le altre sul ' +
+          'posto, con una copia di sicurezza prima di ogni scrittura. Servono le scritture ' +
+          'dirette attive; i programmi di sola lettura non ricevono modifiche.'
+      };
+      const r = parent ? await dialog.showMessageBox(parent, opts) : await dialog.showMessageBox(opts);
+      if (r.response !== 1) return { config: attuale, status: { ...autoWatcher.status(), lastReport: lastRunReport } };
+    }
     setSetting(db, AUTO_SYNC_SETTING_KEY, serializeAutoSyncConfig(nuova));
     logOperation(
       db,
@@ -1893,7 +2102,7 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
       'ok',
       serializeAutoSyncConfig(nuova)
     );
-    return { config: nuova, status: autoWatcher.status() };
+    return { config: nuova, status: { ...autoWatcher.status(), lastReport: lastRunReport } };
   });
 
   /** I campi che il motore sa sincronizzare, con il predefinito. */
@@ -1981,13 +2190,12 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
   // =====================================================================
 
   /** Esegue un comando sidecar con progressi throttlati; ritorna l'evento done. */
-  const runSidecarJob = (
+  /** Sidecar senza la coda dei lavori: solo per chi è già dentro la coda. */
+  const runSidecarRaw = (
     command: string,
     phase: string,
     args: string[]
-  ): Promise<{ ok: boolean; data?: Record<string, unknown>; message?: string }> =>
-    // Serializzato con ogni altro job che tocca l'UDM (§ coda job unica).
-    withJobLock(() => {
+  ): Promise<{ ok: boolean; data?: Record<string, unknown>; message?: string }> => {
       const progress = new ThrottledProgress(wc());
       const jobId = randomUUID();
       const isWrite = WRITE_COMMANDS.has(command);
@@ -2018,7 +2226,15 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
         }
         return { ok: true as const, data: doneData };
       });
-    });
+  };
+
+  const runSidecarJob = (
+    command: string,
+    phase: string,
+    args: string[]
+  ): Promise<{ ok: boolean; data?: Record<string, unknown>; message?: string }> =>
+    // Serializzato con ogni altro job che tocca l'UDM (§ coda job unica).
+    withJobLock(() => runSidecarRaw(command, phase, args));
 
   // ---- dedup per fingerprint (Fase 2.2) ----
   ipcMain.handle('dedup:run', async () => {
