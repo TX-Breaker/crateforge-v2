@@ -23,19 +23,28 @@ export function patchEngineTracks(
     (db.prepare(`PRAGMA table_info(Track)`).all() as { name: string }[]).map((c) => c.name)
   );
   if (!cols.has('id')) throw new Error('Libreria Engine non riconosciuta: manca Track.id.');
-  const exists = db.prepare(`SELECT 1 FROM Track WHERE id = ?`);
+  /* Si legge la riga per confrontare: Engine ha un trigger che aggiorna
+     `lastEditTime` a ogni UPDATE di queste colonne, ANCHE con lo stesso valore.
+     Scrivere solo ciò che cambia evita di far sembrare modificati brani che
+     nessuno ha toccato. */
+  const current = db.prepare(`SELECT * FROM Track WHERE id = ?`);
 
   let patched = 0;
   const missing: string[] = [];
   const run = db.transaction(() => {
     for (const [id, v] of updates) {
-      if (!exists.get(Number(id))) {
+      const row = current.get(Number(id)) as Record<string, unknown> | undefined;
+      if (!row) {
         missing.push(id);
         continue;
       }
       const set: [string, unknown][] = [];
       const put = (col: string, val: unknown) => {
-        if (cols.has(col)) set.push([col, val]);
+        if (!cols.has(col)) return;
+        const cur = row[col];
+        const same =
+          typeof val === 'number' && typeof cur === 'number' ? Math.abs(val - cur) < 0.001 : (cur ?? null) === (val ?? null);
+        if (!same) set.push([col, val]);
       };
       if ('title' in v) put('title', v.title ?? null);
       if ('artist' in v) put('artist', v.artist ?? null);
@@ -43,8 +52,15 @@ export function patchEngineTracks(
       if ('genre' in v) put('genre', v.genre ?? null);
       if ('year' in v) put('year', v.year ?? null);
       if ('bpm' in v && v.bpm != null && v.bpm > 0) {
-        put('bpmAnalyzed', v.bpm);
-        put('bpm', Math.round(v.bpm));
+        /* ⚠ Engine ha DUE tempi: `bpmAnalyzed` (quello che legge l'archivio) e
+           `bpm`, intero, dichiarato dal tag o dall'utente. Il dichiarato si
+           tocca solo se il tempo cambia davvero: riscriverlo ogni volta con
+           l'analizzato arrotondato cancellava ciò che l'utente aveva scritto. */
+        const curAnalyzed = typeof row.bpmAnalyzed === 'number' ? row.bpmAnalyzed : null;
+        if (curAnalyzed === null || Math.abs(curAnalyzed - v.bpm) >= 0.001) {
+          put('bpmAnalyzed', v.bpm);
+          put('bpm', Math.round(v.bpm));
+        }
       }
       if ('camelot' in v) {
         const k = engineKeyOf(v.camelot ?? null);

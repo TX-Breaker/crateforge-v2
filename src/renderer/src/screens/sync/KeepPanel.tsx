@@ -35,7 +35,7 @@ const LABEL: Record<string, string> = {
   engine: 'Engine DJ'
 };
 /** Specchio di LIVE_WRITABLE nel main: chi sa ricevere sul posto. */
-const RECEIVES = new Set(['traktor', 'virtualdj', 'engine', 'serato']);
+const RECEIVES = new Set(['traktor', 'virtualdj', 'engine', 'serato', 'rekordbox', 'serato4']);
 
 const fieldLabel = (f: string) => `f.${f}` as StrKey;
 

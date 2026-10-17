@@ -1,6 +1,6 @@
 import type BetterSqlite3 from 'better-sqlite3';
 import type { GuardedSoftware } from '@core/djVersions';
-import { SOURCES_OF_SOFTWARE, syncPairs, type AutoSyncConfig } from '@core/autoSync';
+import { SOURCES_OF_SOFTWARE, WRITE_FIELDS, pairFields, syncPairs, type AutoSyncConfig } from '@core/autoSync';
 import { applySync, planLibrarySync, type SyncOptions } from '@core/syncEngine';
 import type { SyncField } from '@core/syncDiff';
 import { toCamelot } from '@core/camelot';
@@ -165,11 +165,19 @@ export async function runLibrarySync(
         aSources: SOURCES_OF_SOFTWARE[pair.a],
         bSources: SOURCES_OF_SOFTWARE[pair.b],
         mode: pair.mode,
-        fields: cfg.fields as SyncField[]
+        fields: pairFields(cfg.fields, pair.a, pair.b) as SyncField[]
       };
+      if (!syncOpts.fields!.length) continue;
       const plan = planLibrarySync(deps.db, syncOpts);
-      if (!writable.get(pair.a)) {
-        for (const p of plan.pairs) p.plan.toA = {};
+      /* Verso un lato si tiene solo ciò che il suo scrittore sa scrivere, e
+         niente se il lato non si può scrivere affatto. */
+      const keep = (vals: Record<string, unknown>, s: GuardedSoftware) =>
+        writable.get(s)
+          ? Object.fromEntries(Object.entries(vals).filter(([f]) => WRITE_FIELDS[s].includes(f)))
+          : {};
+      for (const p of plan.pairs) {
+        p.plan.toA = keep(p.plan.toA, pair.a);
+        p.plan.toB = keep(p.plan.toB, pair.b);
       }
       const r = applySync(deps.db, plan, syncOpts);
       report.aligned += r.written;
@@ -197,7 +205,11 @@ export async function runLibrarySync(
   const fields = cfg.fields.filter((f): f is SyncField => LIVE_FIELDS.includes(f as SyncField));
   for (const [software, ids] of touched) {
     if (!writable.get(software)) continue; // per costruzione: un non scrivibile non riceve
-    const rows = loadRows(deps.db, [...ids], fields);
+    const rows = loadRows(
+      deps.db,
+      [...ids],
+      fields.filter((f) => WRITE_FIELDS[software].includes(f))
+    );
     if (rows.length === 0) continue;
     try {
       const w = await deps.write(software, rows);

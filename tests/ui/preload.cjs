@@ -220,6 +220,17 @@ const api = {
   siae: { readHistory: async () => ({ ok: true }), sessions: async () => [], export: async () => ({ rows: 0, outPath: '' }) },
   setbuilder: { build: async () => ({ tracks: [], requested: 0, exhausted: false, totalDurationS: 0 }), exportXml: async () => ({ written: 0 }) },
   masterdb: { createPlaylist: async () => ({ ok: true, added: 0, missing: 0, backupDir: '' }) },
+  playlists: {
+    list: async () => [{ id: 1, name: 'Peak time 130', isFolder: false, parentName: null, trackCount: 42, source: 'masterdb' }],
+    detail: async () => ({
+      name: 'Peak time 130',
+      tracks: [],
+      stats: { durationS: 0, bpmMin: null, bpmMax: null, keys: [] }
+    }),
+    dedupe: async () => ({ removed: 0 }),
+    exportM3u: async () => ({ ok: true, written: 0 }),
+    exportCsv: async () => ({ ok: true, written: 0 })
+  },
   detect: {
     djSoftware: async () => [
       { id: 'rekordbox', found: true, path: 'C:/Users/utente/AppData/Roaming/Pioneer/rekordbox/master.db', companionPath: 'C:/Users/utente/AppData/Roaming/Pioneer/rekordboxAgent/storage/options.json', checked: [], modifiedAt: '2026-07-28T14:02:00.000Z', kind: 'masterdb' },

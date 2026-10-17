@@ -49,6 +49,14 @@ import { crateNameFor, loadPlaylistTree } from '@adapters/serato/crateNames';
 import { serato4DatabasePath } from '@adapters/serato4';
 import { readSerato4Library } from '@adapters/serato4/reader';
 import { writeSerato4Crates } from '@adapters/serato4/writer';
+import { patchSerato4Tracks } from '@adapters/serato4/trackWriter';
+import {
+  buildCsv,
+  buildM3u,
+  dedupeConsecutive,
+  listPlaylistsFull,
+  playlistDetail
+} from '@services/playlist/playlistTools';
 import { DJAY_DB_FILENAME, djayDatabasePath } from '@adapters/djay';
 import { readDjayLibrary } from '@adapters/djay/reader';
 import { ENGINE_STATUS } from '@adapters/engine';
@@ -1888,8 +1896,21 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
     return { ok: false, message: `programma non gestito: ${String(software)}` };
   };
 
-  /** Programmi che CrateForge sa aggiornare sul posto. */
-  const LIVE_WRITABLE = new Set<GuardedSoftware>(['traktor', 'virtualdj', 'engine', 'serato']);
+  /** Programmi che CrateForge sa aggiornare sul posto.
+   *
+   *  Rekordbox e Serato 4 ci sono entrati dopo l'analisi delle librerie reali
+   *  (2026-10-17): rekordbox via sidecar/pyrekordbox con commit che aggiorna
+   *  l'USN (lo stesso percorso collaudato di `masterdb-create-playlist`),
+   *  Serato 4 via better-sqlite3 con le funzioni private replicate e verificate
+   *  dall'oracolo di `trackWriter.ts`. */
+  const LIVE_WRITABLE = new Set<GuardedSoftware>([
+    'traktor',
+    'virtualdj',
+    'engine',
+    'serato',
+    'rekordbox',
+    'serato4'
+  ]);
 
   const canWriteProgram = async (software: GuardedSoftware): Promise<string | null> => {
     if (!LIVE_WRITABLE.has(software)) {
@@ -1898,9 +1919,19 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
     if (getSetting(db, 'directWrites') !== '1') {
       return mt('ex.gateOff');
     }
+    /* Il database di Rekordbox ha il SUO gate, come per la creazione di
+       playlist: le scritture dirette sui file non bastano. */
+    if (software === 'rekordbox' && getSetting(db, 'masterDbWrites') !== '1') {
+      return mt('needMasterDb');
+    }
     const lib = libraryPathOf(software);
     if (!lib) return mt('ex.notFound');
-    if (software === 'serato' && !checkSidecar().available) return mt('ex.noEngine');
+    if (
+      (software === 'serato' || software === 'rekordbox') &&
+      !checkSidecar().available
+    ) {
+      return mt('ex.noEngine');
+    }
     try {
       assertWritable(software as DjSoftware, lib.path);
     } catch (err) {
@@ -1977,6 +2008,72 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
         return { written: d.updated ?? 0, missing: d.notInDatabase ?? 0, backup: backupDir };
       } finally {
         rmSync(tracksFile, { force: true });
+      }
+    }
+    if (software === 'rekordbox') {
+      /* Il master.db è cifrato: solo il sidecar (pyrekordbox) lo apre, e il
+         commit aggiorna l'USN — il segnale con cui Rekordbox accetta le
+         modifiche al prossimo avvio. Backup verificato PRIMA, come per la
+         creazione playlist: è l'unica rete di sicurezza dentro una libreria
+         che da fuori non è ispezionabile. */
+      const masterDb = lib.path;
+      const optionsJson = lib.companion ?? null;
+      mkdirSync(backupDir, { recursive: true });
+      const copied: { from: string; to: string; sha256: string; bytes: number }[] = [];
+      for (const src of [masterDb, ...(optionsJson ? [optionsJson] : [])]) {
+        const dest = join(backupDir, basename(src));
+        copyFileSync(src, dest);
+        const [a, b] = await Promise.all([hashFile(src), hashFile(dest)]);
+        if (a !== b) throw new Error(`rekordbox: la copia di ${basename(src)} non corrisponde all'originale`);
+        copied.push({ from: src, to: dest, sha256: a, bytes: statSync(dest).size });
+      }
+      writeFileSync(
+        join(backupDir, 'crateforge-backup.json'),
+        JSON.stringify({ kind: 'masterdb', at: new Date().toISOString(), files: copied }, null, 2),
+        'utf-8'
+      );
+      const jobs = rows.map((r) => ({
+        id: r.sourceId,
+        title: r.values.title ?? null,
+        artist: r.values.artist ?? null,
+        album: r.values.album ?? null,
+        genre: r.values.genre ?? null,
+        year: r.values.year ?? null,
+        bpm: r.values.bpm ?? null,
+        musicalKey: r.values.musicalKey ?? null,
+        camelot: r.values.camelot ?? null
+      }));
+      const tracksFile = writeTempJson('autosync-rekordbox', jobs);
+      try {
+        /* ⚠ `runSidecarRaw`, non `runSidecarJob`: siamo già dentro la coda dei
+           lavori (il giro intero la tiene). Rimettersi in coda qui faceva
+           aspettare il giro a sé stesso, per sempre. */
+        const r = await runSidecarRaw('masterdb-write-metadata', 'masterdb-metadata', [
+          '--master-db', masterDb,
+          '--tracks-file', tracksFile
+        ]);
+        if (!r.ok) throw new Error(`rekordbox: ${r.message ?? 'scrittura non riuscita'}`);
+        const d = r.data as { updated?: number; missing?: number };
+        return { written: d.updated ?? 0, missing: d.missing ?? 0, backup: backupDir };
+      } finally {
+        rmSync(tracksFile, { force: true });
+      }
+    }
+
+    if (software === 'serato4') {
+      /* Il patcher verifica l'oracolo (norm/key_value su tutte le righe) prima
+         di scrivere: se questo Serato normalizza diversamente da quanto visto
+         nell'analisi, si ferma da solo. Qui serve solo la copia di sicurezza. */
+      mkdirSync(backupDir, { recursive: true });
+      for (const suffix of ['', '-wal', '-shm']) {
+        if (existsSync(lib.path + suffix)) copyFileSync(lib.path + suffix, join(backupDir, basename(lib.path) + suffix));
+      }
+      const sdb = new Database(lib.path, { fileMustExist: true });
+      try {
+        const r = patchSerato4Tracks(sdb, byKey(rows));
+        return { written: r.patched, missing: r.missing.length, backup: backupDir };
+      } finally {
+        sdb.close();
       }
     }
     throw new Error(`${software}: nessuno scrittore sul posto`);
@@ -2780,6 +2877,41 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
     const r = parent ? await dialog.showSaveDialog(parent, opts) : await dialog.showSaveDialog(opts);
     return r.canceled ? null : r.filePath;
   });
+
+  // ---- Playlist: elenco, dettaglio e strumenti sulle liste dell'archivio ----
+  // Le liste sono quelle portate dagli import: qui non se ne creano di nuove.
+  // La scrittura verso i programmi passa dagli export già esistenti, con le
+  // loro guardie; la scrittura nell'archivio è solo la pulizia dei doppioni.
+  ipcMain.handle('playlists:list', () => listPlaylistsFull(db));
+  ipcMain.handle('playlists:detail', (_e, playlistId: number) => playlistDetail(db, playlistId));
+  ipcMain.handle(
+    'playlists:dedupe',
+    (_e, playlistId: number) => {
+      const removed = dedupeConsecutive(db, playlistId);
+      if (removed > 0) logOperation(db, 'playlist.dedupe', String(playlistId), 'ok', `-${removed}`);
+      return { removed };
+    }
+  );
+  ipcMain.handle(
+    'playlists:exportM3u',
+    (_e, playlistId: number, outPath: string) => {
+      const d = playlistDetail(db, playlistId);
+      if (!d) return { ok: false, message: 'Playlist non trovata nell\'archivio.' };
+      writeFileSync(outPath, buildM3u(d.tracks, d.name), 'utf-8');
+      logOperation(db, 'playlist.exportM3u', outPath, 'ok', `${d.tracks.length} righe`);
+      return { ok: true, written: d.tracks.filter((t) => t.path).length };
+    }
+  );
+  ipcMain.handle(
+    'playlists:exportCsv',
+    (_e, playlistId: number, outPath: string) => {
+      const d = playlistDetail(db, playlistId);
+      if (!d) return { ok: false, message: 'Playlist non trovata nell\'archivio.' };
+      writeFileSync(outPath, buildCsv(d.tracks), 'utf-8');
+      logOperation(db, 'playlist.exportCsv', outPath, 'ok', `${d.tracks.length} righe`);
+      return { ok: true, written: d.tracks.length };
+    }
+  );
 
   // Cleanup per la chiusura ordinata (index.ts, before-quit): ferma il daemon
   // di sorveglianza e annulla un eventuale job sidecar in corso.

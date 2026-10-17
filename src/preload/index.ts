@@ -566,6 +566,56 @@ const api = {
     ) =>
       ipcRenderer.invoke('masterdb:createPlaylist', trackIds, playlistName, masterDbPath, optionsJsonPath)
   },
+  playlists: {
+    list: () =>
+      ipcRenderer.invoke('playlists:list') as Promise<
+        {
+          id: number;
+          name: string;
+          isFolder: boolean;
+          parentName: string | null;
+          trackCount: number;
+          source: string;
+        }[]
+      >,
+    detail: (playlistId: number) =>
+      ipcRenderer.invoke('playlists:detail', playlistId) as Promise<{
+        name: string;
+        tracks: {
+          id: number;
+          position: number;
+          title: string | null;
+          artist: string | null;
+          album: string | null;
+          genre: string | null;
+          bpm: number | null;
+          camelot: string | null;
+          durationS: number | null;
+          path: string | null;
+          missing: boolean;
+        }[];
+        stats: {
+          durationS: number;
+          bpmMin: number | null;
+          bpmMax: number | null;
+          keys: { key: string; n: number }[];
+        };
+      }>,
+    dedupe: (playlistId: number) =>
+      ipcRenderer.invoke('playlists:dedupe', playlistId) as Promise<{ removed: number }>,
+    exportM3u: (playlistId: number, outPath: string) =>
+      ipcRenderer.invoke('playlists:exportM3u', playlistId, outPath) as Promise<{
+        ok: boolean;
+        written?: number;
+        message?: string;
+      }>,
+    exportCsv: (playlistId: number, outPath: string) =>
+      ipcRenderer.invoke('playlists:exportCsv', playlistId, outPath) as Promise<{
+        ok: boolean;
+        written?: number;
+        message?: string;
+      }>
+  },
   dialog: {
     // defaultPath (opzionale) pre-punta il dialog su un file/cartella: usato per
     // aprire di default il master.db di Rekordbox dell'utente.

@@ -20,6 +20,7 @@ import { LibraryScreen } from '@/screens/LibraryScreen';
 import { FixScreen } from '@/screens/FixScreen';
 import { SyncScreen } from '@/screens/SyncScreen';
 import { SetsScreen } from '@/screens/SetsScreen';
+import { PlaylistScreen } from '@/screens/PlaylistScreen';
 import { BackupScreen } from '@/screens/BackupScreen';
 import { ReportsScreen } from '@/screens/ReportsScreen';
 import { SettingsScreen } from '@/screens/SettingsScreen';
@@ -176,6 +177,8 @@ function Screen({ route }: { route: RouteId }) {
       return <SyncScreen />;
     case 'sets':
       return <SetsScreen />;
+    case 'playlists':
+      return <PlaylistScreen />;
     case 'backup':
       return <BackupScreen />;
     case 'reports':

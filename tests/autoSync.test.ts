@@ -13,6 +13,8 @@ import {
   SOURCES_OF_SOFTWARE,
   softwareOfSource,
   syncPairs,
+  pairFields,
+  WRITE_FIELDS,
   type AutoSyncSnapshot
 } from '../src/core/autoSync';
 import type { GuardedSoftware } from '../src/core/djVersions';
@@ -305,5 +307,20 @@ describe('autoSync — programmi e sorgenti', () => {
   it('simmetrica: due passate, così ciò che arriva da uno raggiunge anche gli altri', () => {
     const p = syncPairs('symmetric', 'traktor', ['traktor', 'engine', 'virtualdj']);
     expect(p.map((x) => x.b)).toEqual(['engine', 'virtualdj', 'engine', 'virtualdj']);
+  });
+});
+
+describe('autoSync — campi che ogni programma sa leggere e scrivere', () => {
+  it('⚠ Traktor non legge la valutazione: non si confronta, e l’anteprima non la mostra per sempre', () => {
+    expect(pairFields(['rating', 'bpm'], 'engine', 'traktor')).toEqual(['bpm']);
+  });
+
+  it('Serato 3 non conosce l’anno', () => {
+    expect(pairFields(['year', 'genre'], 'traktor', 'serato')).toEqual(['genre']);
+    expect(WRITE_FIELDS.serato).not.toContain('year');
+  });
+
+  it('djay non riceve niente: non ha uno scrittore', () => {
+    expect(WRITE_FIELDS.djay).toEqual([]);
   });
 });

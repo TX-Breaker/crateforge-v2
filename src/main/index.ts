@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, shell } from 'electron';
+import { app, BrowserWindow, dialog, screen, shell } from 'electron';
 import { appendFileSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { openUdm } from '@core/udm';
@@ -45,10 +45,18 @@ function logMain(line: string): void {
 let mainWindow: BrowserWindow | null = null;
 
 function createWindow(): void {
+  /* Dimensione iniziale dall'area utile dello schermo: grande dove c'è posto
+     (fino a 1600×1025), mai più grande dello schermo — 1600×1025 fissi su un
+     portatile 1366×768 aprivano una finestra con il fondo fuori dal bordo.
+     La ruota di Camelot non dipende più dalla larghezza: le griglie di Libreria
+     e Set usano minmax(0, 1fr). */
+  const work = screen.getPrimaryDisplay().workAreaSize;
+  const width = Math.min(1600, Math.round(work.width * 0.92));
+  const height = Math.min(1025, Math.round(work.height * 0.92));
   mainWindow = new BrowserWindow({
-    width: 1280,
-    height: 820,
-    minWidth: 980,
+    width,
+    height,
+    minWidth: Math.min(980, width),
     minHeight: 640,
     show: false,
     autoHideMenuBar: true,

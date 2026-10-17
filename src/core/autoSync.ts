@@ -396,3 +396,49 @@ export function syncPairs(
   const una = destinations.filter((d) => d !== source).map((b) => ({ a: source, b, mode }));
   return mode === 'masterSlave' ? una : [...una, ...una];
 }
+
+/* ---------------------------------------------------- capacità per programma */
+
+const CORE7 = ['title', 'artist', 'album', 'genre', 'year', 'bpm', 'musical_key'];
+
+/**
+ * Campi che il LETTORE di ciascun programma porta davvero nell'archivio.
+ *
+ * ⚠ Un campo che un programma non legge resta vuoto nell'archivio. Confrontato
+ * con un altro programma sembra «da riempire» a ogni giro: l'anteprima mostrava
+ * «Traktor: Valutazione 114» per sempre, perché il lettore di Traktor non legge
+ * la valutazione. Una coppia confronta solo i campi che ENTRAMBI leggono.
+ *
+ * Verificato sui lettori: Serato 3 non legge l'anno; Traktor e VirtualDJ non
+ * leggono valutazione e colore; la valutazione di djay non ha una scala
+ * nota, quindi resta fuori.
+ */
+export const READ_FIELDS: Record<GuardedSoftware, string[]> = {
+  rekordbox: [...CORE7, 'rating', 'track_color'],
+  traktor: CORE7,
+  virtualdj: CORE7,
+  serato: ['title', 'artist', 'album', 'genre', 'bpm', 'musical_key'],
+  serato4: [...CORE7, 'rating'],
+  engine: [...CORE7, 'rating'],
+  djay: CORE7
+};
+
+/**
+ * Campi che lo SCRITTORE sul posto sa portare nel programma. Un campo che non
+ * si può scrivere non si allinea nemmeno nell'archivio: altrimenti al giro dopo
+ * la rilettura riporterebbe il valore vecchio e sembrerebbe una modifica.
+ */
+export const WRITE_FIELDS: Record<GuardedSoftware, string[]> = {
+  rekordbox: CORE7,
+  traktor: CORE7,
+  virtualdj: CORE7,
+  serato: ['title', 'artist', 'album', 'genre', 'bpm', 'musical_key'],
+  serato4: CORE7,
+  engine: CORE7,
+  djay: []
+};
+
+/** Campi che una coppia confronta: scelti dall'utente E letti da entrambi. */
+export function pairFields(fields: string[], a: GuardedSoftware, b: GuardedSoftware): string[] {
+  return fields.filter((f) => READ_FIELDS[a].includes(f) && READ_FIELDS[b].includes(f));
+}

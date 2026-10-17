@@ -1,4 +1,4 @@
-import { CalendarRange, HardDriveDownload, ListMusic, RefreshCw, Settings2, Sheet, Wrench } from 'lucide-react';
+import { CalendarRange, HardDriveDownload, ListMusic, ListOrdered, RefreshCw, Settings2, Sheet, Wrench } from 'lucide-react';
 import type { StrKey } from '@/lib/strings';
 
 /**
@@ -21,7 +21,7 @@ import type { StrKey } from '@/lib/strings';
  * Impostazioni, non dalla visibilità di una voce.
  */
 
-export type RouteId = 'library' | 'fix' | 'sync' | 'sets' | 'backup' | 'reports' | 'settings';
+export type RouteId = 'library' | 'fix' | 'sync' | 'sets' | 'playlists' | 'backup' | 'reports' | 'settings';
 
 export interface RouteDef {
   id: RouteId;
@@ -38,6 +38,7 @@ export const ROUTES: RouteDef[] = [
   { id: 'fix', labelKey: 'nav.fix', icon: <Wrench />, counter: 'issues' },
   { id: 'sync', labelKey: 'nav.sync', icon: <RefreshCw /> },
   { id: 'sets', labelKey: 'nav.sets', icon: <CalendarRange /> },
+  { id: 'playlists', labelKey: 'nav.playlists', icon: <ListOrdered /> },
   { id: 'backup', labelKey: 'nav.backup', icon: <HardDriveDownload /> },
   { id: 'reports', labelKey: 'nav.reports', icon: <Sheet /> },
   { id: 'settings', labelKey: 'nav.settings', icon: <Settings2 />, bottom: true }

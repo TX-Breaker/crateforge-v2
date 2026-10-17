@@ -1,9 +1,11 @@
 import {
+  applyChanges,
   findTag,
   getAttr,
+  meaningful,
   replaceTag,
-  setAttr,
   textOf,
+  type AttrChange,
   type LiveValues,
   type PatchResult
 } from '../livePatch';
@@ -44,29 +46,50 @@ export function patchVirtualDjXml(xml: string, updates: Map<string, LiveValues>)
 }
 
 function patchSong(block: string, selfClosing: boolean, v: LiveValues): string {
-  const attrs: [string, string][] = [];
-  if ('title' in v) attrs.push(['Title', textOf(v.title)]);
-  if ('artist' in v) attrs.push(['Author', textOf(v.artist)]);
-  if ('album' in v) attrs.push(['Album', textOf(v.album)]);
-  if ('genre' in v) attrs.push(['Genre', textOf(v.genre)]);
-  if ('year' in v) attrs.push(['Year', v.year != null ? String(v.year) : '']);
-  if ('musicalKey' in v) attrs.push(['Key', textOf(v.musicalKey)]);
+  const changes: AttrChange[] = [];
+  if ('title' in v) changes.push(['Title', textOf(v.title)]);
+  if ('artist' in v) changes.push(['Author', textOf(v.artist)]);
+  if ('album' in v) changes.push(['Album', textOf(v.album)]);
+  if ('genre' in v) changes.push(['Genre', textOf(v.genre)]);
+  if ('year' in v) changes.push(['Year', v.year != null ? String(v.year) : '']);
+  if ('musicalKey' in v) changes.push(['Key', textOf(v.musicalKey)]);
 
   const tags = findTag(block, 'Tags');
   if ('bpm' in v && v.bpm != null && v.bpm > 0) {
     const current = tags ? Number(getAttr(tags.tag, 'Bpm')) : NaN;
     const inBpm = Number.isFinite(current) && current >= 10;
-    attrs.push(['Bpm', inBpm ? v.bpm.toFixed(6) : (60 / v.bpm).toFixed(6)]);
+    const bpm = v.bpm;
+    /* Stesso formato di quello presente, e confronto sul tempo, non sul testo. */
+    changes.push([
+      'Bpm',
+      inBpm ? bpm.toFixed(6) : (60 / bpm).toFixed(6),
+      (cur) => {
+        const n = Number(cur);
+        const asBpm = n >= 10 ? n : n > 0 ? 60 / n : NaN;
+        return Math.abs(asBpm - bpm) < 0.001;
+      }
+    ]);
   }
-  if (attrs.length === 0) return block;
+  if (changes.length === 0) return block;
 
-  if (tags) {
-    let t = tags.tag;
-    for (const [k, val] of attrs) t = setAttr(t, k, val);
-    return replaceTag(block, tags, t);
-  }
-  let t = '<Tags />';
-  for (const [k, val] of attrs) t = setAttr(t, k, val);
+  /* Tonalità e tempo che il lettore prende da `Scan` (perché mancano in Tags)
+     non sono una modifica: ricopiarli aggiungerebbe attributi che nessuno ha
+     chiesto. Si scrivono solo se il valore è davvero diverso. */
+  const scan = findTag(block, 'Scan');
+  const fromScan = (name: string, value: string, same?: (c: string) => boolean) => {
+    const cur = scan ? getAttr(scan.tag, name) : undefined;
+    return cur !== undefined && (same ? same(cur) : cur === value);
+  };
+  const derived = ([n, val, same]: AttrChange) =>
+    (n === 'Key' || n === 'Bpm') && (!tags || getAttr(tags.tag, n) === undefined) && fromScan(n, val, same);
+  const real = changes.filter((c) => !derived(c));
+
+  if (tags) return replaceTag(block, tags, applyChanges(tags.tag, real));
+
+  // Nessun Tags: lo si crea solo se c'è un valore vero da metterci.
+  const useful = meaningful(real);
+  if (useful.length === 0) return block;
+  const t = applyChanges('<Tags />', useful);
   if (selfClosing) {
     // <Song ... /> → <Song ...><Tags .../></Song>
     return block.replace(/\s*\/>$/, `>${t}</Song>`);

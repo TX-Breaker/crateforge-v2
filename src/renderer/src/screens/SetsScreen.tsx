@@ -148,7 +148,7 @@ function Build() {
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-6 lg:grid-cols-[1fr_auto]">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_auto]">
         <Section title={t('set.start')} tip={t('set.startTip')}>
           <div className="space-y-3">
             <div className="flex gap-2">

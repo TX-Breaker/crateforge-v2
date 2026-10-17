@@ -29,6 +29,7 @@ const ROUTES = [
   ['Libreria', []],
   ['Da sistemare', []],
   ['Sincronizza', ['Converti', 'Tieni allineati']],
+  ['Playlist', []],
   ['Set', ['Crea', 'Controlla']],
   ['Backup', []],
   ['Report', ['Excel', 'SIAE', 'Cronologia']],

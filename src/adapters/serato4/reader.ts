@@ -197,7 +197,12 @@ export function readFrom(db: BetterSqlite3.Database): Serato4ReadResult {
       path,
       filesize: num(r.fileSize),
       cues: [],
-      rating: num(r.rating),
+      /* Serato 4 conserva il rating come REALE 0-1 (CHECK sulla tabella); il
+         modello interno normalizza 0-100, come per le stelle 0-5 di Rekordbox. */
+      rating: (() => {
+        const r0 = num(r.rating);
+        return r0 === null ? null : Math.round(r0 * 100);
+      })(),
       /* Conservare l'identità nativa è ciò che permette di RISCRIVERE invece di
          reinserire: senza, un export tornerebbe indietro creando doppioni. */
       formatData: {

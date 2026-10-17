@@ -21,6 +21,8 @@ export interface LiveValues {
   musicalKey?: string | null;
   /** La stessa tonalità in notazione Camelot, per i formati che la vogliono numerica. */
   camelot?: string | null;
+  /** 0-100, la normalizzazione del modello interno (le stelle 0-5 vanno ×20). */
+  rating?: number | null;
 }
 
 export interface PatchResult {
@@ -90,3 +92,38 @@ export function replaceTag(block: string, at: { start: number; end: number }, ta
 
 /** Testo per un campo testuale: `null` diventa stringa vuota, come scrivono i programmi. */
 export const textOf = (v: string | null | undefined): string => v ?? '';
+
+/**
+ * Una modifica richiesta a un attributo: il nome, il valore nuovo e, se serve,
+ * come confrontarlo con quello presente (di serie: uguaglianza del testo).
+ */
+export type AttrChange = [name: string, value: string, same?: (current: string) => boolean];
+
+/**
+ * Applica a un tag solo le modifiche che CAMBIANO qualcosa.
+ *
+ * ⚠ Riscrivere un attributo con un valore equivalente non è innocuo: Traktor
+ * conserva la data completa («2001/6/15») dove noi conosciamo solo l'anno, e
+ * un valore vuoto aggiunto dove l'attributo non c'era è una modifica che
+ * nessuno ha chiesto. Si tocca solo ciò che è davvero diverso, e un valore
+ * vuoto non crea un attributo che manca.
+ */
+export function applyChanges(tag: string, changes: AttrChange[]): string {
+  let t = tag;
+  for (const [name, value, same] of changes) {
+    const current = getAttr(t, name);
+    if (current === undefined) {
+      if (value !== '') t = setAttr(t, name, value);
+      continue;
+    }
+    if (same ? same(current) : current === value) continue;
+    t = setAttr(t, name, value);
+  }
+  return t;
+}
+
+/** Le modifiche che creerebbero davvero qualcosa in un elemento che manca. */
+export const meaningful = (changes: AttrChange[]): AttrChange[] => changes.filter(([, v]) => v !== '');
+
+/** Due tempi uguali entro un millesimo di BPM. */
+export const sameBpm = (bpm: number) => (cur: string) => Math.abs(Number(cur) - bpm) < 0.001;

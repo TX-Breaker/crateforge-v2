@@ -192,7 +192,7 @@ export function LibraryScreen() {
       </div>
 
       {dist && (
-        <div className="grid gap-3 xl:grid-cols-[1fr_1fr_auto]">
+        <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
           <Section title={t('lib.bpm')} tip={t('lib.chartTip')}>
             <BpmHistogram
               data={dist.bpm}

@@ -1120,6 +1120,192 @@ def cmd_masterdb_create_playlist(args: argparse.Namespace) -> None:
 
 
 # ---------------------------------------------------------------------------
+# masterdb-write-metadata — scrittura DIRETTA dei metadati brano (opt-in massimo)
+# ---------------------------------------------------------------------------
+
+def cmd_masterdb_write_metadata(args: argparse.Namespace) -> None:
+    """Aggiorna sul posto i metadati di brani esistenti nel master.db.
+
+    Stesso patto di `masterdb-create-playlist`: pyrekordbox apre il database
+    cifrato in scrittura, le mutazioni passano dall'ORM e `commit()` (autoinc)
+    aggiorna l'USN, che è il meccanismo con cui Rekordbox rileva le modifiche
+    al prossimo avvio. Ogni campo è facoltativo: `None` significa «non toccare».
+
+    Campi supportati e dove vivono nel master.db (verificati su libreria reale
+    Rekordbox 7.2.18):
+      - title   → DjmdContent.Title
+      - artist  → DjmdContent.ArtistID (riga DjmdArtist, cercata per nome,
+                  creata se assente — come fa Rekordbox);
+      - album   → DjmdContent.AlbumID (come artist);
+      - genre   → DjmdContent.GenreID (riga DjmdGenre per nome);
+      - year    → DjmdContent.ReleaseYear (intero);
+      - bpm     → DjmdContent.BPM (intero, CENTESIMI di BPM: 12300 = 123.00);
+      - key     → DjmdContent.KeyID (ID della riga DjmdKey con ScaleName
+                  uguale, notazione «Am»/«Bbm»; il valore deve già esistere in
+                  tabella: Rekordbox non crea tasti nuovi da fuori);
+      - rating  → DjmdContent.Rating (stelle 0-5; Node normalizza da 0-100);
+      - color   → DjmdContent.ColorID (ID della riga DjmdColor il cui nome
+                  corrisponde al colore della palette rekordbox).
+
+    Precondizioni (verificate a monte da Node/UI, ribadite qui):
+      - Rekordbox DEVE essere chiuso;
+      - il backup di master.db+options.json è già stato fatto da Node (§3.2).
+    """
+    try:
+        from pyrekordbox import Rekordbox6Database
+    except ImportError:
+        fail("pyrekordbox non disponibile nel sidecar: rebuild richiesto.")
+        return
+
+    try:
+        rows = _load_json_payload(args.tracks_json, getattr(args, "tracks_file", None))
+        assert isinstance(rows, list)
+    except (json.JSONDecodeError, AssertionError, OSError):
+        fail("--tracks-file non valido: atteso un array di brani.")
+        return
+
+    try:
+        db = Rekordbox6Database(path=args.master_db, key=args.key or "")
+    except Exception as exc:
+        fail(
+            "Apertura del master.db in scrittura non riuscita: "
+            f"{str(exc)[:300]}. Se la chiave non è disponibile, prova prima "
+            "'Scarica chiave di lettura' nelle Impostazioni."
+        )
+        return
+
+    # Indici nome→ID letti UNA volta: 142 contenuti significano 142 lookup
+    # per tabella altrimenti. La notazione dei tasti è «Am»/«Bbm» (ScaleName),
+    # la stessa che gira nell'UDM e nei crate Serato: nessuna conversione.
+    try:
+        key_id_by_name = {k.ScaleName: k.ID for k in db.get_key().all()}
+        # Stessa tonalità, grafia diversa: si cerca per Camelot fra i tasti
+        # che Rekordbox ha GIÀ. Un tasto assente non si crea da fuori.
+        key_id_by_camelot = {}
+        for _name, _kid in key_id_by_name.items():
+            _cam = to_camelot(_name)
+            if _cam and _cam not in key_id_by_camelot:
+                key_id_by_camelot[_cam] = _kid
+        color_id_by_name = {c.Commnt: c.ID for c in db.get_color().all()}
+    except Exception as exc:
+        db.close()
+        fail(f"Lettura delle tabelle tasti/colori non riuscita: {str(exc)[:200]}")
+        return
+    color_name_by_hex = {v.upper(): k for k, v in _RB_TRACK_COLORS.items()}
+
+    progress = ThrottledProgress("masterdb-metadata")
+    updated, missing = 0, 0
+    skipped_fields: dict[str, int] = {}
+
+    def note_skip(field: str) -> None:
+        skipped_fields[field] = skipped_fields.get(field, 0) + 1
+
+    try:
+        for i, row in enumerate(rows):
+            cid = str(row.get("id") or "")
+            content = db.get_content(ID=cid)
+            record = content.first() if hasattr(content, "first") else content
+            if record is None:
+                missing += 1
+                progress.update(i + 1, len(rows))
+                continue
+
+            title = row.get("title")
+            if title is not None and title != record.Title:
+                record.Title = title
+
+            artist = row.get("artist")
+            if artist:
+                a = db.get_artist(Name=artist).first()
+                if a is None:
+                    try:
+                        a = db.add_artist(artist)
+                    except Exception:
+                        a = None
+                        note_skip("artist")
+                if a is not None and str(record.ArtistID) != str(a.ID):
+                    record.ArtistID = str(a.ID)
+
+            album = row.get("album")
+            if album:
+                al = db.get_album(Name=album).first()
+                if al is None:
+                    try:
+                        al = db.add_album(album)
+                    except Exception:
+                        al = None
+                        note_skip("album")
+                if al is not None and str(record.AlbumID) != str(al.ID):
+                    record.AlbumID = str(al.ID)
+
+            genre = row.get("genre")
+            if genre:
+                g = db.get_genre(Name=genre).first()
+                if g is None:
+                    try:
+                        g = db.add_genre(genre)
+                    except Exception:
+                        g = None
+                        note_skip("genre")
+                if g is not None and str(record.GenreID) != str(g.ID):
+                    record.GenreID = str(g.ID)
+
+            year = row.get("year")
+            if year is not None and record.ReleaseYear != int(year):
+                record.ReleaseYear = int(year)
+
+            bpm = row.get("bpm")
+            if bpm is not None:
+                # Il master.db conserva i BPM in centesimi (12300 = 123.00 BPM).
+                cents = int(round(float(bpm) * 100))
+                if record.BPM != cents:
+                    record.BPM = cents
+
+            key = row.get("musicalKey")
+            cam = row.get("camelot") or to_camelot(key)
+            if key or cam:
+                kid = key_id_by_name.get(key) if key else None
+                if kid is None and cam:
+                    kid = key_id_by_camelot.get(cam)
+                if kid is None:
+                    note_skip("musicalKey")
+                elif str(record.KeyID) != str(kid):
+                    record.KeyID = str(kid)
+
+            rating = row.get("rating")
+            if rating is not None:
+                # 0-100 normalizzato → stelle 0-5 del master.db.
+                record.Rating = max(0, min(5, int(round(int(rating) / 20))))
+
+            color = row.get("color")
+            if color:
+                name = color_name_by_hex.get(str(color).upper(), "")
+                col_id = color_id_by_name.get(name)
+                if col_id is None:
+                    note_skip("color")
+                else:
+                    record.ColorID = str(col_id)
+
+            updated += 1
+            progress.update(i + 1, len(rows))
+
+        db.commit()  # autoinc=True di default: aggiorna l'USN
+    except Exception as exc:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        db.close()
+        fail(f"Scrittura dei metadati non riuscita (nessuna modifica salvata): {str(exc)[:300]}")
+        return
+    progress.finish(len(rows), len(rows))
+    db.close()
+    emit({
+        "type": "done",
+        "data": {"updated": updated, "missing": missing, "skippedFields": skipped_fields},
+    })
+
+
 # download-key — fallback chiave Rekordbox (§4.3, Esperto, in-app)
 # ---------------------------------------------------------------------------
 
@@ -2868,6 +3054,13 @@ def main() -> None:
     p_mcp.add_argument("--content-ids-file", required=False)
     p_mcp.add_argument("--key", required=False, default="")
 
+    p_mwm = sub.add_parser("masterdb-write-metadata")
+    p_mwm.add_argument("--udm-path", required=True)
+    p_mwm.add_argument("--master-db", required=True)
+    p_mwm.add_argument("--tracks-json", required=False)
+    p_mwm.add_argument("--tracks-file", required=False)
+    p_mwm.add_argument("--key", required=False, default="")
+
     args = parser.parse_args()
 
     if args.command == "ping":
@@ -2904,6 +3097,8 @@ def main() -> None:
         cmd_read_history(args)
     elif args.command == "masterdb-create-playlist":
         cmd_masterdb_create_playlist(args)
+    elif args.command == "masterdb-write-metadata":
+        cmd_masterdb_write_metadata(args)
 
 
 if __name__ == "__main__":

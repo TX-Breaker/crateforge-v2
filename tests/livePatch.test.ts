@@ -162,3 +162,30 @@ describe('Engine — Track sul posto', () => {
     });
   });
 });
+
+describe('scrittura sul posto — si tocca solo ciò che cambia', () => {
+  it('Traktor: con lo stesso anno la data completa resta, e i vuoti non creano attributi', () => {
+    const nml = NML.replace('PLAYTIME="300"', 'PLAYTIME="300" RELEASE_DATE="2001/6/15"');
+    const k = 'C:/:Music/:a.mp3';
+    const r = patchTraktorNml(nml, new Map([[k, { year: 2001, genre: 'House' }]]));
+    expect(r.text).toBe(nml);
+    const k2 = 'C:/:Music/:b.mp3';
+    const r2 = patchTraktorNml(NML, new Map([[k2, { year: null, album: null }]]));
+    expect(r2.text).toBe(NML);
+  });
+
+  it('VirtualDJ: tonalità e tempo presi da Scan non vengono ricopiati in Tags', () => {
+    const xml = VDJ.replace(' Bpm="0.500000" Flag="1"', ' Flag="1"').replace('<Tags Author="Old" Title="T1" Genre="House"', '<Tags Author="Old" Title="T1" Genre="House"');
+    const r = patchVirtualDjXml(xml, new Map([['C:\Music\a.mp3', { bpm: 120, musicalKey: 'Am' }]]));
+    expect(r.text).toBe(xml);
+  });
+
+  it('Engine: il BPM dichiarato resta se il tempo non cambia', () => {
+    const db = new Database(':memory:');
+    db.exec(`CREATE TABLE Track (id INTEGER PRIMARY KEY, bpm INTEGER, bpmAnalyzed REAL, title TEXT)`);
+    db.prepare(`INSERT INTO Track VALUES (1, 128, 127.4, 'a')`).run();
+    const r = patchEngineTracks(db, new Map([['1', { bpm: 127.4, title: 'a' }]]));
+    expect(r.patched).toBe(0);
+    expect(db.prepare(`SELECT bpm FROM Track`).get()).toEqual({ bpm: 128 });
+  });
+});

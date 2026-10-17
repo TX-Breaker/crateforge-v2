@@ -1,10 +1,13 @@
 import { CAMELOT_TO_TRAKTOR } from './traktorKeys';
 import {
+  applyChanges,
   findTag,
   getAttr,
+  meaningful,
   replaceTag,
-  setAttr,
+  sameBpm,
   textOf,
+  type AttrChange,
   type LiveValues,
   type PatchResult
 } from '../livePatch';
@@ -53,41 +56,45 @@ export function patchTraktorNml(xml: string, updates: Map<string, LiveValues>): 
 function patchEntry(block: string, v: LiveValues, afterLocation: number): string {
   // Tag d'apertura di ENTRY: è sempre all'inizio del blocco.
   const entry = findTag(block, 'ENTRY')!;
-  let tag = entry.tag;
-  if ('title' in v) tag = setAttr(tag, 'TITLE', textOf(v.title));
-  if ('artist' in v) tag = setAttr(tag, 'ARTIST', textOf(v.artist));
+  const entryChanges: AttrChange[] = [];
+  if ('title' in v) entryChanges.push(['TITLE', textOf(v.title)]);
+  if ('artist' in v) entryChanges.push(['ARTIST', textOf(v.artist)]);
+  const tag = applyChanges(entry.tag, entryChanges);
   const shift = tag.length - entry.tag.length;
   block = replaceTag(block, entry, tag);
   let insertAt = afterLocation + shift;
 
   /* Elementi figli: si aggiornano dove sono, o si inseriscono subito dopo
-     LOCATION quando mancano e c'è qualcosa da scriverci. */
-  const child = (name: string, attrs: [string, string][]) => {
-    if (attrs.length === 0) return;
+     LOCATION quando mancano E c'è un valore vero da scriverci. */
+  const child = (name: string, changes: AttrChange[]) => {
+    if (changes.length === 0) return;
     const at = findTag(block, name);
     if (at) {
-      let t = at.tag;
-      for (const [k, val] of attrs) t = setAttr(t, k, val);
+      const t = applyChanges(at.tag, changes);
       block = replaceTag(block, at, t);
       if (at.start < insertAt) insertAt += t.length - at.tag.length;
-    } else {
-      let open = `<${name}>`;
-      for (const [k, val] of attrs) open = setAttr(open, k, val);
-      const t = `${open}</${name}>`;
-      block = block.slice(0, insertAt) + t + block.slice(insertAt);
-      insertAt += t.length;
+      return;
     }
+    const useful = meaningful(changes);
+    if (useful.length === 0) return;
+    const t = `${applyChanges(`<${name}>`, useful)}</${name}>`;
+    block = block.slice(0, insertAt) + t + block.slice(insertAt);
+    insertAt += t.length;
   };
 
   child('ALBUM', 'album' in v ? [['TITLE', textOf(v.album)]] : []);
 
-  const info: [string, string][] = [];
+  const info: AttrChange[] = [];
   if ('genre' in v) info.push(['GENRE', textOf(v.genre)]);
-  if ('year' in v) info.push(['RELEASE_DATE', v.year != null ? `${v.year}/1/1` : '']);
+  if ('year' in v) {
+    /* Traktor conserva la data intera: se l'anno è lo stesso, non si tocca. */
+    const y = v.year;
+    info.push(['RELEASE_DATE', y != null ? `${y}/1/1` : '', (cur) => Number(cur.slice(0, 4)) === (y ?? NaN) || (y == null && cur === '')]);
+  }
   if ('musicalKey' in v) info.push(['KEY', textOf(v.musicalKey)]);
   child('INFO', info);
 
-  if ('bpm' in v && v.bpm != null && v.bpm > 0) child('TEMPO', [['BPM', v.bpm.toFixed(6)]]);
+  if ('bpm' in v && v.bpm != null && v.bpm > 0) child('TEMPO', [['BPM', v.bpm.toFixed(6), sameBpm(v.bpm)]]);
 
   if ('camelot' in v && v.camelot) {
     const idx = CAMELOT_TO_TRAKTOR[v.camelot];
