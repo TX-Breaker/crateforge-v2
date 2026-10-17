@@ -71,6 +71,15 @@ export interface RunReport {
   }[];
   /** Campi scelti che nessun programma sa ricevere sul posto. */
   notPropagated: string[];
+  /**
+   * Che cosa cambia in ogni programma, campo per campo. In anteprima è ciò che
+   * CAMBIEREBBE; dopo una scrittura è ciò che è cambiato.
+   */
+  planned: { software: GuardedSoftware; tracks: number; fields: Record<string, number> }[];
+  /** Programmi in cui la scrittura non è riuscita: gli altri proseguono. */
+  failed: { software: GuardedSoftware; message: string }[];
+  /** true se era un'anteprima: niente è stato scritto, nemmeno nell'archivio. */
+  dryRun: boolean;
 }
 
 /** Campi che gli scrittori sul posto sanno portare nei programmi. */
@@ -80,8 +89,10 @@ export async function runLibrarySync(
   deps: RunnerDeps,
   cfg: Pick<AutoSyncConfig, 'mode' | 'fields'>,
   source: GuardedSoftware,
-  destinations: GuardedSoftware[]
+  destinations: GuardedSoftware[],
+  opts: { dryRun?: boolean } = {}
 ): Promise<RunReport> {
+  const dryRun = opts.dryRun === true;
   const report: RunReport = {
     source,
     mode: cfg.mode,
@@ -90,7 +101,10 @@ export async function runLibrarySync(
     aligned: 0,
     conflicts: 0,
     written: [],
-    notPropagated: cfg.fields.filter((f) => !LIVE_FIELDS.includes(f as SyncField))
+    notPropagated: cfg.fields.filter((f) => !LIVE_FIELDS.includes(f as SyncField)),
+    planned: [],
+    failed: [],
+    dryRun
   };
   const others = [...new Set(destinations.filter((d) => d !== source))];
 
@@ -122,44 +136,75 @@ export async function runLibrarySync(
   }
   writable.set(source, (await deps.canWrite(source)) === null);
 
-  /* 2. Riconciliazione. */
+  /* 2. Riconciliazione.
+
+     ⚠ Una libreria che non si può scrivere NON COMANDA MAI in modalità alla
+     pari. Prima la coppia diventava a senso unico «A → B» quando A non era
+     scrivibile: al primo allineamento, con Rekordbox primo della lista, i suoi
+     BPM e le sue tonalità hanno sostituito quelli degli altri programmi
+     ovunque fossero diversi — raddoppi e dimezzamenti di tempo compresi. Ora la
+     coppia resta simmetrica (le differenze senza una storia diventano conflitti
+     da decidere) e si toglie soltanto ciò che andrebbe verso A. */
   const touched = new Map<GuardedSoftware, Set<number>>();
-  const mark = (s: GuardedSoftware, id: number) => {
+  const counts = new Map<GuardedSoftware, Record<string, number>>();
+  const mark = (s: GuardedSoftware, id: number, fields: string[]) => {
     if (!touched.has(s)) touched.set(s, new Set());
     touched.get(s)!.add(id);
+    const c = counts.get(s) ?? {};
+    for (const f of fields) c[f] = (c[f] ?? 0) + 1;
+    counts.set(s, c);
   };
-  for (const pair of syncPairs(cfg.mode, source, live)) {
-    // A non scrivibile → la coppia va solo da A verso B.
-    const mode = pair.mode === 'symmetric' && writable.get(pair.a) ? 'symmetric' : 'masterSlave';
-    const opts: SyncOptions = {
-      aSources: SOURCES_OF_SOFTWARE[pair.a],
-      bSources: SOURCES_OF_SOFTWARE[pair.b],
-      mode,
-      fields: cfg.fields as SyncField[]
-    };
-    const plan = planLibrarySync(deps.db, opts);
-    const r = applySync(deps.db, plan, opts);
-    report.aligned += r.written;
-    report.conflicts += r.conflicts;
-    for (const p of plan.pairs) {
-      if (Object.keys(p.plan.toA).length) mark(pair.a, p.aId);
-      if (Object.keys(p.plan.toB).length) mark(pair.b, p.bId);
+
+  /* In anteprima tutto avviene dentro un punto di ripristino annullato alla
+     fine: i numeri sono quelli veri del giro, due passate comprese, ma
+     l'archivio resta com'era e nessun programma viene toccato. */
+  if (dryRun) deps.db.exec('SAVEPOINT cf_sync_preview');
+  try {
+    for (const pair of syncPairs(cfg.mode, source, live)) {
+      const syncOpts: SyncOptions = {
+        aSources: SOURCES_OF_SOFTWARE[pair.a],
+        bSources: SOURCES_OF_SOFTWARE[pair.b],
+        mode: pair.mode,
+        fields: cfg.fields as SyncField[]
+      };
+      const plan = planLibrarySync(deps.db, syncOpts);
+      if (!writable.get(pair.a)) {
+        for (const p of plan.pairs) p.plan.toA = {};
+      }
+      const r = applySync(deps.db, plan, syncOpts);
+      report.aligned += r.written;
+      report.conflicts += r.conflicts;
+      for (const p of plan.pairs) {
+        const toA = Object.keys(p.plan.toA);
+        const toB = Object.keys(p.plan.toB);
+        if (toA.length) mark(pair.a, p.aId, toA);
+        if (toB.length) mark(pair.b, p.bId, toB);
+      }
+    }
+  } finally {
+    if (dryRun) {
+      deps.db.exec('ROLLBACK TO cf_sync_preview');
+      deps.db.exec('RELEASE cf_sync_preview');
     }
   }
+  for (const [software, ids] of touched) {
+    report.planned.push({ software, tracks: ids.size, fields: counts.get(software) ?? {} });
+  }
+  if (dryRun) return report;
 
-  /* 3. Scrittura sul posto. */
+  /* 3. Scrittura sul posto. Un programma che fallisce non ferma gli altri:
+     il suo errore finisce nel resoconto. */
   const fields = cfg.fields.filter((f): f is SyncField => LIVE_FIELDS.includes(f as SyncField));
   for (const [software, ids] of touched) {
     if (!writable.get(software)) continue; // per costruzione: un non scrivibile non riceve
     const rows = loadRows(deps.db, [...ids], fields);
     if (rows.length === 0) continue;
-    const w = await deps.write(software, rows);
-    report.written.push({
-      software,
-      tracks: w.written,
-      missing: w.missing,
-      backup: w.backup
-    });
+    try {
+      const w = await deps.write(software, rows);
+      report.written.push({ software, tracks: w.written, missing: w.missing, backup: w.backup });
+    } catch (err) {
+      report.failed.push({ software, message: String((err as Error).message ?? err) });
+    }
   }
   return report;
 }

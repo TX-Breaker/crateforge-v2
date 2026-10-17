@@ -22,6 +22,8 @@ export interface AutoSyncConfigView {
  */
 export interface AutoSyncView {
   config: AutoSyncConfigView;
+  /** true se c'è stato un «Allinea ora» confermato con questa configurazione. */
+  confirmed?: boolean;
   status: {
     lastDecision:
       | { run: true; source: string; destinations: string[] }
@@ -45,6 +47,9 @@ export interface AutoSyncRunReport {
   conflicts: number;
   written: { software: string; tracks: number; missing: number; backup?: string | null }[];
   notPropagated: string[];
+  planned: { software: string; tracks: number; fields: Record<string, number> }[];
+  failed: { software: string; message: string }[];
+  dryRun: boolean;
 }
 
 const api = {
@@ -273,10 +278,12 @@ const api = {
     autoConfig: () =>
       ipcRenderer.invoke('sync:autoConfig') as Promise<AutoSyncView>,
     autoSetConfig: (patch: Partial<AutoSyncConfigView>) =>
-      ipcRenderer.invoke('sync:autoSetConfig', patch) as Promise<AutoSyncView>,
+      ipcRenderer.invoke('sync:autoSetConfig', patch) as Promise<AutoSyncView & { error?: string }>,
+    /** Dimentica lo storico degli allineamenti e i conflitti aperti. */
+    resetState: () => ipcRenderer.invoke('sync:resetState') as Promise<{ ok: boolean; message?: string }>,
     /** Il giro completo, subito: rilegge, allinea e scrive nei programmi scrivibili. */
-    autoRunNow: () =>
-      ipcRenderer.invoke('sync:autoRunNow') as Promise<{
+    autoRunNow: (opts?: { dryRun?: boolean }) =>
+      ipcRenderer.invoke('sync:autoRunNow', opts) as Promise<{
         ok: boolean;
         message?: string;
         report?: AutoSyncRunReport;

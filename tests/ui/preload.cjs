@@ -105,11 +105,17 @@ const api = {
     plan: async () => ({ ok: true, tracks: 0, cues: 0 }),
     /* Spenta, come nell'applicazione vera: il test deve vedere lo stato in cui
        si trova chi installa il programma, non uno che nessuno ha mai scelto. */
-    autoConfig: async () => ({ config: autoCfg, status: autoStatus }),
-    autoRunNow: async () => ({
+    autoConfig: async () => ({ config: autoCfg, status: autoStatus, confirmed: false }),
+    autoRunNow: async (opts) => ({
       ok: true,
-      report: { source: 'rekordbox', mode: 'masterSlave', reread: ['rekordbox', 'traktor'], excluded: [], aligned: 12, conflicts: 0, written: [{ software: 'traktor', tracks: 12, missing: 0 }], notPropagated: [] }
+      report: {
+        source: 'rekordbox', mode: 'masterSlave', reread: ['rekordbox', 'traktor'], excluded: [], aligned: 12, conflicts: 0,
+        written: opts && opts.dryRun ? [] : [{ software: 'traktor', tracks: 12, missing: 0 }],
+        planned: [{ software: 'traktor', tracks: 12, fields: { bpm: 7, musical_key: 9 } }],
+        failed: [], notPropagated: [], dryRun: !!(opts && opts.dryRun)
+      }
     }),
+    resetState: async () => ({ ok: true }),
     autoSetConfig: async (patch) => {
       autoCfg = { ...autoCfg, ...patch };
       return { config: autoCfg, status: autoStatus };

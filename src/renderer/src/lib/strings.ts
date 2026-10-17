@@ -530,6 +530,19 @@ const it = {
   'sync.reason.too-soon': 'Troppo vicino al giro precedente: riprova tra poco.',
   'sync.reason.nothing-to-do': 'Nessun altro programma da aggiornare.',
   'sync.reason.slave-closed': 'Hai chiuso uno slave: le sue modifiche non si propagano. Si sincronizza quando chiudi il master.',
+  'keep.preview.title': 'Anteprima — niente è ancora stato scritto',
+  'keep.preview.line': '{name}: {fields} · {n} brani',
+  'keep.preview.nothing': 'Niente da scrivere: i programmi sono già allineati sui campi scelti.',
+  'keep.preview.conflicts': '{n} differenze senza una storia comune: non verranno scritte, le decidi tu qui sotto.',
+  'keep.write': 'Scrivi nei programmi',
+  'keep.confirmTitle': 'Scrivere nelle librerie dei programmi?',
+  'keep.confirmBody': 'Le librerie elencate vengono modificate sul posto. Prima di ogni scrittura CrateForge fa una copia di sicurezza, che trovi nella cartella dei backup.',
+  'keep.confirmBtn': 'Scrivi',
+  'keep.r.failed': '{name}: non riuscito — {reason}',
+  'keep.autoNeedsRun': 'Si accende dopo un «Allinea ora» confermato con questa configurazione.',
+  'keep.reset': 'Ricomincia da zero',
+  'keep.resetTip': 'Dimentica lo storico degli allineamenti e le differenze aperte. Da usare dopo aver ripristinato una libreria da una copia.',
+  'keep.resetDone': 'Storico degli allineamenti azzerato',
 };
 
 export type StrKey = keyof typeof it;
@@ -1036,6 +1049,19 @@ const en: Dict = {
   'sync.reason.too-soon': 'Too close to the previous run: it will retry shortly.',
   'sync.reason.nothing-to-do': 'No other program to update.',
   'sync.reason.slave-closed': 'You closed a slave: its changes do not propagate. Sync happens when you close the master.',
+  'keep.preview.title': 'Preview — nothing has been written yet',
+  'keep.preview.line': '{name}: {fields} · {n} tracks',
+  'keep.preview.nothing': 'Nothing to write: the programs already match on the chosen fields.',
+  'keep.preview.conflicts': '{n} differences with no shared history: they will not be written, you decide them below.',
+  'keep.write': 'Write to the programs',
+  'keep.confirmTitle': 'Write into the programs’ libraries?',
+  'keep.confirmBody': 'The listed libraries are changed in place. Before each write CrateForge makes a safety copy, kept in the backups folder.',
+  'keep.confirmBtn': 'Write',
+  'keep.r.failed': '{name}: failed — {reason}',
+  'keep.autoNeedsRun': 'It can be turned on after a confirmed “Sync now” with this setup.',
+  'keep.reset': 'Start over',
+  'keep.resetTip': 'Forgets the sync history and open differences. Use it after restoring a library from a copy.',
+  'keep.resetDone': 'Sync history cleared',
 };
 
 const fr: Dict = {
@@ -1539,6 +1565,19 @@ const fr: Dict = {
   'sync.reason.too-soon': 'Trop proche du tour précédent : nouvel essai sous peu.',
   'sync.reason.nothing-to-do': 'Aucun autre logiciel à mettre à jour.',
   'sync.reason.slave-closed': 'Vous avez fermé un esclave : ses modifications ne se propagent pas. La synchro a lieu à la fermeture du maître.',
+  'keep.preview.title': 'Aperçu — rien n’a encore été écrit',
+  'keep.preview.line': '{name} : {fields} · {n} morceaux',
+  'keep.preview.nothing': 'Rien à écrire : les logiciels concordent déjà sur les champs choisis.',
+  'keep.preview.conflicts': '{n} différences sans historique commun : elles ne seront pas écrites, vous les décidez ci-dessous.',
+  'keep.write': 'Écrire dans les logiciels',
+  'keep.confirmTitle': 'Écrire dans les bibliothèques des logiciels ?',
+  'keep.confirmBody': 'Les bibliothèques listées sont modifiées sur place. Avant chaque écriture, CrateForge fait une copie de sécurité, dans le dossier des sauvegardes.',
+  'keep.confirmBtn': 'Écrire',
+  'keep.r.failed': '{name} : échec — {reason}',
+  'keep.autoNeedsRun': 'S’active après une « Synchronisation » confirmée avec cette configuration.',
+  'keep.reset': 'Recommencer à zéro',
+  'keep.resetTip': 'Oublie l’historique des synchronisations et les différences ouvertes. À utiliser après avoir restauré une bibliothèque depuis une copie.',
+  'keep.resetDone': 'Historique des synchronisations effacé',
 };
 
 const de: Dict = {
@@ -2042,6 +2081,19 @@ const de: Dict = {
   'sync.reason.too-soon': 'Zu kurz nach dem letzten Lauf: Es versucht es gleich wieder.',
   'sync.reason.nothing-to-do': 'Kein anderes Programm zu aktualisieren.',
   'sync.reason.slave-closed': 'Du hast einen Slave geschlossen: Seine Änderungen werden nicht übernommen. Synchronisiert wird beim Schließen des Masters.',
+  'keep.preview.title': 'Vorschau — noch nichts geschrieben',
+  'keep.preview.line': '{name}: {fields} · {n} Titel',
+  'keep.preview.nothing': 'Nichts zu schreiben: Die Programme stimmen bei den gewählten Feldern schon überein.',
+  'keep.preview.conflicts': '{n} Unterschiede ohne gemeinsame Vorgeschichte: Sie werden nicht geschrieben, du entscheidest sie unten.',
+  'keep.write': 'In die Programme schreiben',
+  'keep.confirmTitle': 'In die Bibliotheken der Programme schreiben?',
+  'keep.confirmBody': 'Die aufgeführten Bibliotheken werden direkt geändert. Vor jedem Schreiben legt CrateForge eine Sicherung im Backup-Ordner an.',
+  'keep.confirmBtn': 'Schreiben',
+  'keep.r.failed': '{name}: fehlgeschlagen — {reason}',
+  'keep.autoNeedsRun': 'Lässt sich nach einem bestätigten „Jetzt synchronisieren“ mit dieser Einstellung einschalten.',
+  'keep.reset': 'Neu beginnen',
+  'keep.resetTip': 'Vergisst den Synchronisierungsverlauf und offene Unterschiede. Nach dem Wiederherstellen einer Bibliothek aus einer Kopie verwenden.',
+  'keep.resetDone': 'Synchronisierungsverlauf gelöscht',
 };
 
 export const STRINGS: Record<Locale, Dict> = { it, en, fr, de };

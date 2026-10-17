@@ -72,11 +72,22 @@ export function CamelotWheel({
 
   const segments: React.ReactNode[] = [];
   const labels: React.ReactNode[] = [];
+  /* Zone di puntamento FISSE, sopra il disegno.
 
-  ([
-    ['A', 56, 96],
-    ['B', 100, 140]
-  ] as const).forEach(([ring, r0, r1]) => {
+     ⚠ La casella sotto il puntatore si sposta di qualche pixel verso
+     l'esterno. Se fosse lei a ricevere gli eventi, sul suo bordo il puntatore
+     ne uscirebbe, lei tornerebbe al suo posto, il puntatore ci rientrerebbe:
+     uno sfarfallio continuo fra «puntatore» e «selezionata». Le zone qui non
+     si muovono mai e sono contigue — anche sopra le fessure fra due caselle e
+     fra i due anelli — così il puntatore è sempre esattamente su una tonalità. */
+  const hits: React.ReactNode[] = [];
+
+  (
+    [
+      ['A', 56, 96, 56, 98],
+      ['B', 100, 140, 98, 144]
+    ] as const
+  ).forEach(([ring, r0, r1, h0, h1]) => {
     for (let n = 1; n <= 12; n++) {
       const id = `${n}${ring}`;
       const a0 = ((n * 30 - 105) * Math.PI) / 180;
@@ -102,12 +113,25 @@ export function CamelotWheel({
           fill={fill}
           stroke={self ? inks.light : inks.dark}
           strokeWidth={2}
+          pointerEvents="none"
+          style={{
+            transition: 'fill 150ms ease-out, transform 180ms cubic-bezier(.2,0,0,1)',
+            transform: `translate(${(off * Math.cos(am)).toFixed(2)}px, ${(off * Math.sin(am)).toFixed(2)}px)`
+          }}
+        />
+      );
+
+      hits.push(
+        <path
+          key={`h${id}`}
+          d={arc(h0, h1, a0, a1)}
+          fill="transparent"
           tabIndex={0}
           role="radio"
           aria-checked={self}
           aria-label={`${id} · ${KEYNAME[ring][n - 1]}`}
-          onMouseEnter={() => setHover(id)}
-          onMouseLeave={() => setHover((h) => (h === id ? null : h))}
+          onPointerEnter={() => setHover(id)}
+          onPointerLeave={() => setHover((h) => (h === id ? null : h))}
           onFocus={() => setHover(id)}
           onBlur={() => setHover((h) => (h === id ? null : h))}
           onClick={() => onChange?.(id)}
@@ -117,11 +141,7 @@ export function CamelotWheel({
               onChange?.(id);
             }
           }}
-          style={{
-            cursor: onChange ? 'pointer' : 'default',
-            transition: 'fill 150ms ease-out, transform 180ms cubic-bezier(.2,0,0,1)',
-            transform: `translate(${(off * Math.cos(am)).toFixed(2)}px, ${(off * Math.sin(am)).toFixed(2)}px)`
-          }}
+          style={{ cursor: onChange ? 'pointer' : 'default', outline: 'none' }}
         />
       );
 
@@ -155,16 +175,11 @@ export function CamelotWheel({
 
   return (
     <div className={cn('flex flex-col items-center', className)}>
-      <svg
-        width={size}
-        height={size}
-        viewBox="0 0 300 300"
-        role="radiogroup"
-        aria-label="Camelot"
-      >
+      <svg width={size} height={size} viewBox="0 0 300 300" role="radiogroup" aria-label="Camelot">
         <circle cx={cx} cy={cy} r={52} fill={inks.panel} stroke={inks.line} />
         {segments}
         {labels}
+        {hits}
         <text
           x={cx}
           y={cy - 14}
@@ -198,11 +213,8 @@ export function CamelotWheel({
         </text>
       </svg>
       <div className="mt-3 text-center">
-        <div className="font-mono text-eyebrow uppercase text-ink-lo">
-          {compatList}
-        </div>
+        <div className="font-mono text-eyebrow uppercase text-ink-lo">{compatList}</div>
       </div>
     </div>
   );
 }
-

@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { Check, Crown, Disc3, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Checkbox, Notice, Segmented, Select, Switch } from '@/components/ui/misc';
-import { ChoiceTile, InfoTip, Section } from '@/components/ui/page';
+import { ChoiceTile, InfoTip, InlineConfirm, Section } from '@/components/ui/page';
+import { DangerConfirmDialog } from '@/components/DangerConfirmDialog';
 import { useNotifications } from '@/lib/notifications';
 import { useRouter } from '@/lib/router';
 import { useLibrary } from '@/lib/library';
@@ -62,6 +63,9 @@ export function KeepPanel() {
   const [conflicts, setConflicts] = useState<Conflict[]>([]);
   const [wholeField, setWholeField] = useState(false);
   const [report, setReport] = useState<Report | null>(null);
+  /** Anteprima dell'ultimo «Allinea ora»: niente è scritto finché non si conferma. */
+  const [preview, setPreview] = useState<Report | null>(null);
+  const [confirmWrite, setConfirmWrite] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -95,8 +99,12 @@ export function KeepPanel() {
     if (next.mode === 'masterSlave' && (!next.master || !next.softwares.includes(next.master))) {
       next.master = next.softwares[0] ?? null;
     }
-    setAuto(await window.crateforge.sync.autoSetConfig(next));
+    const r = await window.crateforge.sync.autoSetConfig(next);
+    setAuto(r);
+    if (r.error) setError(r.error);
+    else setError(null);
     setReport(null);
+    setPreview(null);
   };
 
   const toggleProgram = (id: string) =>
@@ -104,15 +112,35 @@ export function KeepPanel() {
       softwares: cfg.softwares.includes(id) ? cfg.softwares.filter((s) => s !== id) : [...cfg.softwares, id]
     });
 
-  const runNow = async () => {
+  /* Passo 1: anteprima. Rilegge le librerie e dice che cosa cambierebbe in
+     ogni programma, campo per campo. Non scrive niente. */
+  const runPreview = async () => {
+    setBusy(true);
+    setError(null);
+    setReport(null);
+    try {
+      const r = await window.crateforge.sync.autoRunNow({ dryRun: true });
+      if (!r.ok || !r.report) setError(r.message ?? t('c.error'));
+      else {
+        setPreview(r.report);
+        await reload();
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /* Passo 2: la scrittura, solo dopo la conferma con la parola chiave. */
+  const runWrite = async () => {
     setBusy(true);
     setError(null);
     try {
       const r = await window.crateforge.sync.autoRunNow();
       if (!r.ok || !r.report) setError(r.message ?? t('c.error'));
       else {
+        setPreview(null);
         setReport(r.report);
-        push({ kind: 'success', title: t('keep.done') });
+        push({ kind: r.report.failed.length ? 'warning' : 'success', title: t('keep.done') });
         await refresh();
         await refreshCounts();
         await reload();
@@ -121,6 +149,22 @@ export function KeepPanel() {
       setBusy(false);
     }
   };
+
+  const resetHistory = async () => {
+    const r = await window.crateforge.sync.resetState();
+    if (!r.ok) setError(r.message ?? t('c.error'));
+    else {
+      push({ kind: 'info', title: t('keep.resetDone') });
+      setPreview(null);
+      setReport(null);
+      await reload();
+    }
+  };
+
+  const fieldsText = (f: Record<string, number>) =>
+    Object.entries(f)
+      .map(([k, n]) => `${t(fieldLabel(k))} ${n}`)
+      .join(', ');
 
   const resolve = async (id: number, choice: 'a' | 'b' | 'skip') => {
     await window.crateforge.sync.resolveConflict(id, choice, wholeField ? 'field' : 'one');
@@ -245,11 +289,59 @@ export function KeepPanel() {
           {error && <Notice variant="destructive">{error}</Notice>}
 
           <div className="flex flex-wrap items-center gap-3">
-            <Button size="lg" variant="primary" disabled={!ready} working={busy} onClick={runNow}>
+            <Button
+              size="lg"
+              variant={preview ? 'secondary' : 'primary'}
+              disabled={!ready}
+              working={busy && !preview}
+              onClick={runPreview}
+            >
               <RefreshCw /> {t('keep.runNow')}
             </Button>
             <span className="text-caption text-ink-lo">{t('keep.closeFirst')}</span>
+            <span className="ml-auto flex items-center gap-1">
+              <InlineConfirm size="sm" variant="ghost" onConfirm={() => void resetHistory()}>
+                {t('keep.reset')}
+              </InlineConfirm>
+              <InfoTip text={t('keep.resetTip')} />
+            </span>
           </div>
+
+          {preview && (
+            <div className="space-y-2 rounded-card border border-accent/40 bg-accent/5 px-4 py-3 text-caption">
+              <p className="text-body font-medium text-ink-hi">{t('keep.preview.title')}</p>
+              {preview.planned.length === 0 ? (
+                <p className="flex items-center gap-1.5 text-success">
+                  <Check className="size-3.5" /> {t('keep.preview.nothing')}
+                </p>
+              ) : (
+                preview.planned.map((p) => (
+                  <p key={p.software} className="text-ink-hi">
+                    {t('keep.preview.line', {
+                      name: LABEL[p.software] ?? p.software,
+                      fields: fieldsText(p.fields),
+                      n: p.tracks
+                    })}
+                  </p>
+                ))
+              )}
+              {preview.conflicts > 0 && (
+                <p className="text-warning">{t('keep.preview.conflicts', { n: preview.conflicts })}</p>
+              )}
+              {preview.excluded.map((e) => (
+                <p key={e.software} className="text-warning">
+                  {t('keep.r.excluded', { name: LABEL[e.software] ?? e.software, reason: e.reason })}
+                </p>
+              ))}
+              {preview.planned.length > 0 && (
+                <div className="pt-1">
+                  <Button variant="primary" working={busy} onClick={() => setConfirmWrite(true)}>
+                    {t('keep.write')}
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
 
           {report && <ReportView report={report} />}
 
@@ -257,12 +349,15 @@ export function KeepPanel() {
             <label className="flex items-center gap-2.5 text-body text-ink-hi">
               <Switch
                 checked={cfg.enabled}
-                disabled={!cfg.enabled && !ready}
+                disabled={!cfg.enabled && (!ready || !auto.confirmed)}
                 onCheckedChange={(enabled) => void save({ enabled })}
               />
               {t('keep.auto')}
             </label>
             <InfoTip text={t('keep.autoTip')} />
+            {!cfg.enabled && !auto.confirmed && ready && (
+              <span className="text-caption text-ink-lo">{t('keep.autoNeedsRun')}</span>
+            )}
             {cfg.enabled && (
               <Button size="sm" variant="ghost" onClick={() => void save({ paused: !cfg.paused })}>
                 {cfg.paused ? t('sync.resume') : t('sync.pause')}
@@ -276,11 +371,28 @@ export function KeepPanel() {
               </span>
             )}
             {cfg.enabled && auto.status.lastDecision && !auto.status.lastDecision.run && (
-              <span className="text-caption text-ink-lo">{t(`sync.reason.${auto.status.lastDecision.reason}` as StrKey)}</span>
+              <span className="text-caption text-ink-lo">
+                {t(`sync.reason.${auto.status.lastDecision.reason}` as StrKey)}
+              </span>
             )}
           </div>
         </div>
       </Section>
+
+      <DangerConfirmDialog
+        open={confirmWrite}
+        onOpenChange={setConfirmWrite}
+        title={t('keep.confirmTitle')}
+        description={t('keep.confirmBody')}
+        facts={(preview?.planned ?? []).map((p) => ({
+          label: LABEL[p.software] ?? p.software,
+          value: fieldsText(p.fields),
+          warn: true
+        }))}
+        confirmWord="SCRIVI"
+        confirmLabel={t('keep.confirmBtn')}
+        onConfirm={() => void runWrite()}
+      />
 
       {conflicts.length > 0 && (
         <Section
@@ -338,6 +450,11 @@ function ReportView({ report }: { report: Report }) {
           ))}
         </>
       )}
+      {report.failed.map((f) => (
+        <p key={`f${f.software}`} className="text-destructive">
+          {t('keep.r.failed', { name: name(f.software), reason: f.message })}
+        </p>
+      ))}
       {report.excluded.map((e) => (
         <p key={e.software} className="text-warning">
           {t('keep.r.excluded', { name: name(e.software), reason: e.reason })}

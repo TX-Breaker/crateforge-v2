@@ -191,6 +191,12 @@ const T = {
     fr: 'Relecture de {app} échouée : {msg}',
     de: 'Neulesen von {app} fehlgeschlagen: {msg}'
   },
+  'run.needManual': {
+    it: 'Prima fai un «Allinea ora» con questa configurazione: vedi l’anteprima, poi confermi. Solo dopo si può accendere l’automatico.',
+    en: 'First run “Sync now” with this setup: see the preview, then confirm. Only then can the automatic mode be turned on.',
+    fr: 'Faites d’abord « Synchroniser » avec cette configuration : voyez l’aperçu, puis confirmez. Ensuite seulement le mode automatique peut être activé.',
+    de: 'Führe zuerst „Jetzt synchronisieren“ mit dieser Einstellung aus: Vorschau ansehen, dann bestätigen. Erst danach lässt sich der Automatikmodus einschalten.'
+  },
   'run.closeFirst': { it: 'Chiudi prima: {list}.', en: 'Close first: {list}.', fr: 'Fermez d’abord : {list}.', de: 'Zuerst schließen: {list}.' }
 } satisfies Record<string, Entry>;
 

@@ -172,6 +172,23 @@ app.whenReady().then(async () => {
     }
   }
 
+  /* ---- Ruota di Camelot: zone di puntamento fisse ----
+     Le caselle disegnate si spostano sotto il puntatore: se ricevessero loro
+     gli eventi, sul bordo sfarfallerebbero fra «puntatore» e «selezionata». */
+  await click('nav button', 'Libreria');
+  await wait(700);
+  const wheel = await win.webContents.executeJavaScript(
+    `(() => {
+       const hits = document.querySelectorAll('main svg path[role="radio"][fill="transparent"]').length;
+       const drawn = [...document.querySelectorAll('main svg path')].filter(p => p.getAttribute('role') !== 'radio');
+       const moving = drawn.filter(p => p.style.transform && p.getAttribute('pointer-events') !== 'none').length;
+       return { hits, moving };
+     })()`
+  );
+  if (wheel.hits !== 24 || wheel.moving !== 0)
+    problems.push(`ruota di Camelot: zone di puntamento ${wheel.hits}/24, caselle mobili che ricevono eventi ${wheel.moving}`);
+  else console.log('OK  ruota di Camelot              24 zone fisse, caselle mobili senza eventi');
+
   /* ---- Tieni allineati: «Allinea ora» e il suo resoconto ---- */
   await click('nav button', 'Sincronizza');
   await wait(600);
@@ -183,10 +200,24 @@ app.whenReady().then(async () => {
     const rep = await win.webContents.executeJavaScript(
       `(() => { const m = [...document.querySelectorAll('main')].pop(); return m ? m.innerText : ''; })()`
     );
-    if (!/Traktor: 12 brani aggiornati/.test(rep)) problems.push('Tieni allineati: il resoconto del giro non compare');
-    else console.log('OK  Tieni allineati › Allinea ora  resoconto mostrato');
-    await check('Tieni allineati › resoconto', 'main');
-    await shot('keep-report');
+    /* «Allinea ora» mostra un'ANTEPRIMA: nessun resoconto di scrittura finché
+       non si conferma con la parola chiave. */
+    if (!/Anteprima/.test(rep) || !/Traktor: BPM 7, Tonalità 9/.test(rep))
+      problems.push('Tieni allineati: l’anteprima non compare');
+    if (/brani aggiornati/.test(rep)) problems.push('Tieni allineati: risulta scritto qualcosa senza conferma');
+    await check('Tieni allineati › anteprima', 'main');
+    await shot('keep-preview');
+    if (!(await click('button', 'Scrivi nei programmi', 'main'))) problems.push('Tieni allineati: «Scrivi nei programmi» non trovato');
+    else {
+      await wait(600);
+      const dlg = await win.webContents.executeJavaScript(
+        `(() => { const d = [...document.querySelectorAll('[role="dialog"][data-state="open"]')].pop(); return d ? d.innerText : ''; })()`
+      );
+      if (!/SCRIVI/.test(dlg)) problems.push('Tieni allineati: la scrittura non chiede la parola chiave');
+      else console.log('OK  Tieni allineati               anteprima → conferma con parola chiave');
+      win.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
+      await wait(500);
+    }
   }
   const autoOff = await win.webContents.executeJavaScript(
     `(() => { const s = [...document.querySelectorAll('main button[role="switch"]')]; return s.length ? s.every(x => x.getAttribute('data-state') === 'unchecked') : null; })()`

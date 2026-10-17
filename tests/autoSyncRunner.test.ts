@@ -138,3 +138,65 @@ describe('giro completo — errori', () => {
     expect(r.notPropagated).toEqual(['rating']);
   });
 });
+
+describe('giro completo — l’incidente del primo allineamento', () => {
+  it('⚠ al primo allineamento alla pari, una libreria di sola lettura NON sovrascrive le altre', async () => {
+    /* Caso reale: tutti alla pari, Rekordbox primo della lista e di sola
+       lettura, valori diversi senza nessuna storia comune. Prima Rekordbox
+       vinceva ovunque; ora le differenze diventano conflitti da decidere. */
+    const libs = { rekordbox: lib('House'), traktor: lib('Techno'), virtualdj: lib('Disco') };
+    const b = banco(libs, ['rekordbox']);
+    const r = await runLibrarySync(b.deps, { mode: 'symmetric', fields: ['genre'] }, 'rekordbox', ['traktor', 'virtualdj']);
+    expect(libs.traktor.get('x')!.genre).toBe('Techno');
+    expect(libs.virtualdj.get('x')!.genre).toBe('Disco');
+    expect(b.scritture).toEqual([]);
+    expect(r.conflicts).toBeGreaterThan(0);
+  });
+
+  it('una modifica vera della libreria di sola lettura arriva comunque agli altri', async () => {
+    const libs = { rekordbox: lib('House'), traktor: lib('House') };
+    const b = banco(libs, ['rekordbox']);
+    const cfg = { mode: 'symmetric' as const, fields: ['genre'] };
+    await runLibrarySync(b.deps, cfg, 'rekordbox', ['traktor']); // base comune
+    libs.rekordbox.get('x')!.genre = 'Techno';
+    await runLibrarySync(b.deps, cfg, 'rekordbox', ['traktor']);
+    expect(libs.traktor.get('x')!.genre).toBe('Techno');
+  });
+});
+
+describe('giro completo — anteprima e errori', () => {
+  it('l’anteprima dice cosa cambierebbe e non tocca niente, nemmeno l’archivio', async () => {
+    const libs = { rekordbox: lib(null), traktor: lib(null), engine: lib(null) };
+    const b = banco(libs);
+    const cfg = { mode: 'masterSlave' as const, fields: ['genre'] };
+    await runLibrarySync(b.deps, cfg, 'rekordbox', ['traktor', 'engine']);
+    libs.rekordbox.get('x')!.genre = 'Techno';
+    const stato = () => b.db.prepare('SELECT COUNT(*) c, MAX(last_synced_digest) d FROM sync_state').get();
+    const prima = stato();
+    const p = await runLibrarySync(b.deps, cfg, 'rekordbox', ['traktor', 'engine'], { dryRun: true });
+    expect(p.dryRun).toBe(true);
+    expect(p.planned.map((x) => [x.software, x.fields.genre]).sort()).toEqual([['engine', 1], ['traktor', 1]]);
+    expect(libs.traktor.get('x')!.genre).toBeNull();
+    expect(b.scritture.length).toBe(0);
+    expect(stato()).toEqual(prima);
+    // e il giro vero, dopo, fa esattamente quello che l'anteprima diceva
+    await runLibrarySync(b.deps, cfg, 'rekordbox', ['traktor', 'engine']);
+    expect(libs.traktor.get('x')!.genre).toBe('Techno');
+  });
+
+  it('un programma che non si riesce a scrivere non ferma gli altri', async () => {
+    const libs = { rekordbox: lib(null), traktor: lib(null), engine: lib(null) };
+    const b = banco(libs);
+    const cfg = { mode: 'masterSlave' as const, fields: ['genre'] };
+    await runLibrarySync(b.deps, cfg, 'rekordbox', ['traktor', 'engine']);
+    libs.rekordbox.get('x')!.genre = 'Techno';
+    const write = b.deps.write;
+    b.deps.write = async (software, rows) => {
+      if (software === 'traktor') throw new Error('sidecar vecchio');
+      return write(software, rows);
+    };
+    const r = await runLibrarySync(b.deps, cfg, 'rekordbox', ['traktor', 'engine']);
+    expect(r.failed).toEqual([{ software: 'traktor', message: 'sidecar vecchio' }]);
+    expect(libs.engine.get('x')!.genre).toBe('Techno');
+  });
+});

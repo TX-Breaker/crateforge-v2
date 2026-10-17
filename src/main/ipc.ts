@@ -1985,7 +1985,12 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
   let lastRunReport: RunReport | null = null;
 
   /** Il giro, dentro la coda dei lavori: lo usano l'automatico e «Allinea ora». */
-  const runFullSync = (source: GuardedSoftware, destinations: GuardedSoftware[]) =>
+  /** Firma della configurazione: partecipanti, modalità, master e campi. */
+  const configSignature = (cfg: AutoSyncConfig) =>
+    JSON.stringify([[...cfg.softwares].sort(), cfg.mode, cfg.master, [...cfg.fields].sort()]);
+  const CONFIRMED_KEY = 'sync.auto.confirmedFor';
+
+  const runFullSync = (source: GuardedSoftware, destinations: GuardedSoftware[], dryRun = false) =>
     withJobLock(async () => {
       const cfg = leggiAutoConfig();
       try {
@@ -1993,9 +1998,14 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
           { db, reimport: reimportProgram, canWrite: canWriteProgram, write: writeProgram },
           { mode: cfg.mode, fields: cfg.fields },
           source,
-          destinations
+          destinations,
+          { dryRun }
         );
+        if (dryRun) return report;
         lastRunReport = report;
+        /* Un giro scritto a mano, dopo averne visto l'anteprima, è ciò che
+           autorizza l'automatico per QUESTA configurazione. */
+        setSetting(db, CONFIRMED_KEY, configSignature(cfg));
         logOperation(db, 'sync.auto', `${source} → ${destinations.join(', ')}`, 'ok', JSON.stringify(report));
         return report;
       } catch (err) {
@@ -2034,7 +2044,12 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
    * partecipante (le due passate portano comunque le modifiche di ognuno a
    * tutti). Tutti i partecipanti devono essere chiusi, come per l'automatico.
    */
-  ipcMain.handle('sync:autoRunNow', async () => {
+  /**
+   * «Allinea ora». Con `dryRun` è l'anteprima: rilegge le librerie e calcola
+   * che cosa cambierebbe in ogni programma, senza scrivere niente. La scrittura
+   * vera parte solo dopo che l'utente ha visto quei numeri e confermato.
+   */
+  ipcMain.handle('sync:autoRunNow', async (_e, opts?: { dryRun?: boolean }) => {
     const cfg = leggiAutoConfig();
     if (cfg.softwares.length < 2) return { ok: false, message: mt('run.pickTwo') };
     if (cfg.mode === 'masterSlave' && !cfg.master) return { ok: false, message: mt('run.pickMaster') };
@@ -2045,20 +2060,49 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
     }
     const aperti = cfg.softwares.filter((s) => running.has(s));
     if (aperti.length) return { ok: false, message: mt('run.closeFirst', { list: aperti.join(', ') }) };
-    const source = cfg.mode === 'masterSlave' ? cfg.master! : cfg.softwares[0];
+    /* Alla pari si parte da un programma che si può scrivere, se c'è: chi
+       non si può scrivere non riceve, ed è meglio che non faccia da perno. */
+    const source =
+      cfg.mode === 'masterSlave'
+        ? cfg.master!
+        : (cfg.softwares.find((s) => LIVE_WRITABLE.has(s)) ?? cfg.softwares[0]);
     try {
-      const report = await runFullSync(source, cfg.softwares.filter((s) => s !== source));
+      const report = await runFullSync(source, cfg.softwares.filter((s) => s !== source), opts?.dryRun === true);
       return { ok: true, report };
     } catch (err) {
       return { ok: false, message: String((err as Error).message ?? err) };
     }
   });
 
+  /**
+   * «Ricomincia da zero»: dimentica lo storico degli allineamenti e i conflitti
+   * aperti. Serve dopo aver ripristinato una libreria da una copia: senza, il
+   * giro successivo vedrebbe il ripristino come una modifica da propagare.
+   */
+  ipcMain.handle('sync:resetState', () => {
+    if (anyJobRunning) return { ok: false, message: mt('busy') };
+    const run = db.transaction(() => {
+      db.prepare(`DELETE FROM sync_state`).run();
+      db.prepare(`DELETE FROM sync_conflicts WHERE resolved_at IS NULL`).run();
+    });
+    run();
+    setSetting(db, CONFIRMED_KEY, '');
+    const cfg = leggiAutoConfig();
+    if (cfg.enabled) setSetting(db, AUTO_SYNC_SETTING_KEY, serializeAutoSyncConfig({ ...cfg, enabled: false }));
+    lastRunReport = null;
+    logOperation(db, 'sync.reset', null, 'ok', 'storico degli allineamenti azzerato');
+    return { ok: true };
+  });
+
   /** Configurazione e stato dell'automatico, in una lettura sola. */
-  ipcMain.handle('sync:autoConfig', () => ({
-    config: leggiAutoConfig(),
-    status: { ...autoWatcher.status(), lastReport: lastRunReport }
-  }));
+  ipcMain.handle('sync:autoConfig', () => {
+    const config = leggiAutoConfig();
+    return {
+      config,
+      status: { ...autoWatcher.status(), lastReport: lastRunReport },
+      confirmed: getSetting(db, CONFIRMED_KEY) === configSignature(config)
+    };
+  });
 
   /**
    * Scrive la configurazione.
@@ -2075,6 +2119,18 @@ export function registerIpc(db: BetterSqlite3.Database, udmPath: string): () => 
     /* Accendere l'automatico significa autorizzare scritture future nelle
        librerie degli altri programmi, senza nessuno a guardare: la conferma è
        NATIVA, nel processo principale, come per i gate. */
+    if (nuova.enabled && getSetting(db, CONFIRMED_KEY) !== configSignature(nuova)) {
+      /* ⚠ Niente automatico alla cieca: prima un «Allinea ora» con anteprima e
+         conferma, con la stessa configurazione. Cambiare partecipanti, modalità
+         o campi richiede di rivedere l'anteprima. */
+      const spenta = { ...nuova, enabled: false };
+      setSetting(db, AUTO_SYNC_SETTING_KEY, serializeAutoSyncConfig(spenta));
+      return {
+        config: spenta,
+        status: { ...autoWatcher.status(), lastReport: lastRunReport },
+        error: mt('run.needManual')
+      };
+    }
     if (nuova.enabled && !attuale.enabled) {
       const parent = BrowserWindow.fromWebContents(e.sender) ?? win();
       const opts = {
