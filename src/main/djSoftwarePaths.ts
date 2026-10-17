@@ -43,6 +43,7 @@ export type {
   DjDetectionKind
 } from '@core/djDetection';
 import type { DjAppInstall, DjSoftwareDetection, DjSourceHint } from '@core/djDetection';
+import { macBundleVersion } from './versionProbe';
 
 function firstExisting(candidates: string[]): string | null {
   return candidates.find((c) => {
@@ -206,6 +207,12 @@ function findAppDir(pattern: RegExp): string | null {
 /** Versione dal NOME della cartella ("rekordbox 7.2.16", "Traktor Pro 3"). */
 function versionFromDirName(dir: string | null): string | null {
   if (!dir) return null;
+  /* macOS: la versione vera sta nell'Info.plist dell'app, il nome della
+     cartella ne porta al massimo il numero principale. */
+  if (process.platform === 'darwin') {
+    const v = macBundleVersion(dir);
+    if (v) return v;
+  }
   return dir.split(/[\\/]/).pop()?.match(/(\d+(?:\.\d+)+|\d+)$/)?.[1] ?? null;
 }
 

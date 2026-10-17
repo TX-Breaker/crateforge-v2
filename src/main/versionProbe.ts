@@ -125,6 +125,29 @@ export function probeRekordboxXml(xmlPath: string): { format: string | null; app
  * ("rekordbox 7.2.16"). È un'approssimazione dichiarata: se il master.db arriva
  * da un altro computer, questo dato non lo descrive.
  */
+/**
+ * Versione di un'app macOS dal suo Info.plist (`CFBundleShortVersionString`).
+ * Accetta la cartella che contiene l'app (`/Applications/rekordbox 7`) o
+ * l'app stessa (`…/rekordbox.app`).
+ */
+export function macBundleVersion(dir: string): string | null {
+  const { readdirSync, readFileSync } = require('fs') as typeof import('fs');
+  try {
+    const apps = dir.endsWith('.app') ? [dir] : readdirSync(dir).filter((n) => n.endsWith('.app')).map((n) => join(dir, n));
+    for (const appDir of apps) {
+      const plist = join(appDir, 'Contents', 'Info.plist');
+      if (!existsSync(plist)) continue;
+      const m = readFileSync(plist, 'utf-8').match(
+        /<key>CFBundleShortVersionString<\/key>\s*<string>\s*(\d+(?:\.\d+)*)\s*<\/string>/
+      );
+      if (m) return m[1];
+    }
+  } catch {
+    /* app illeggibile o plist binario: nessuna informazione */
+  }
+  return null;
+}
+
 export function probeRekordboxApp(): string | null {
   const roots =
     process.platform === 'win32'
@@ -135,7 +158,16 @@ export function probeRekordboxApp(): string | null {
     try {
       const { readdirSync } = require('fs') as typeof import('fs');
       const versions = readdirSync(root)
-        .map((name) => ({ name, v: name.match(/rekordbox\s+(\d+(?:\.\d+)*)/i)?.[1] ?? null }))
+        .map((name) => ({
+          name,
+          /* Su macOS la cartella si chiama «rekordbox 7»: la versione completa
+             sta nel Info.plist dell'app. Senza, il controllo di versione
+             vedeva «7» e non poteva confrontarlo con la versione collaudata. */
+          v:
+            (process.platform === 'darwin' && /^rekordbox/i.test(name) ? macBundleVersion(join(root, name)) : null) ??
+            name.match(/rekordbox\s+(\d+(?:\.\d+)*)/i)?.[1] ??
+            null
+        }))
         .filter((x): x is { name: string; v: string } => x.v !== null)
         // Ordinamento NUMERICO: quello lessicale metterebbe 7.2.9 dopo 7.2.16.
         .sort((a, b) => {
